@@ -29,12 +29,13 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 5. [Capability Negotiation](#5-capability-negotiation)
 6. [Feature Sets](#6-feature-sets)
 7. [Scoped Access](#7-scoped-access)
-8. [Push Events](#8-push-events)
-9. [Context Hooks](#9-context-hooks)
-10. [Server-Initiated Inference](#10-server-initiated-inference)
-11. [Model Information](#11-model-information)
-12. [Security Considerations](#12-security-considerations)
-13. [Examples](#13-examples)
+8. [State Management](#8-state-management)
+9. [Push Events](#9-push-events)
+10. [Context Hooks](#10-context-hooks)
+11. [Server-Initiated Inference](#11-server-initiated-inference)
+12. [Model Information](#12-model-information)
+13. [Security Considerations](#13-security-considerations)
+14. [Examples](#14-examples)
 
 ---
 
@@ -137,6 +138,7 @@ MCPL extends the MCP message flow:
 │                                   featureSets/update                │
 │                                   featureSets/changed               │
 │                                   scope/elevate                     │
+│                                   state/rollback                    │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -161,6 +163,7 @@ Per JSON-RPC 2.0:
 | `featureSets/update` | Notification | Host → Server |
 | `featureSets/changed` | Notification | Server → Host |
 | `scope/elevate` | Request | Server → Host |
+| `state/rollback` | Request | Host → Server |
 
 ---
 
@@ -512,11 +515,218 @@ Hosts validate the scope against whitelist/blacklist before executing.
 
 ---
 
-## 8. Push Events
+## 8. State Management
+
+MCPL supports stateful tools with branching state and optional host-managed persistence.
+
+### 8.1 Capability Declaration
+
+Feature sets declare state management capabilities:
+
+```jsonc
+{
+  "featureSets": {
+    "notes.edit": {
+      "description": "Manage notes",
+      "uses": ["tools"],
+      "rollback": true,
+      "hostState": true
+    },
+    "git.commit": {
+      "description": "Git operations",
+      "uses": ["tools"],
+      "rollback": true,
+      "hostState": false
+    }
+  }
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `rollback` | `boolean` | Server supports rollback to previous checkpoints |
+| `hostState` | `boolean` | Host manages state persistence for this feature set |
+
+### 8.2 Checkpoints and Lineage
+
+Responses from stateful operations include checkpoint information:
+
+```jsonc
+{
+  "result": {
+    "content": [...],
+    "state": {
+      "checkpoint": "chk_def",
+      "parent": "chk_abc"
+    }
+  }
+}
+```
+
+Checkpoints form a tree. Rolling back and performing new operations creates branches:
+
+```
+chk_abc
+├── chk_def (original branch)
+└── chk_xyz (branch after rollback to abc)
+```
+
+### 8.3 Host-Managed State
+
+When `hostState: true`, the host manages state persistence. Server sends state data or patches, host stores and provides state with requests.
+
+**Full state:**
+
+```jsonc
+{
+  "state": {
+    "checkpoint": "chk_abc",
+    "parent": null,
+    "data": { "notes": [] }
+  }
+}
+```
+
+**Delta (JSON Patch, RFC 6902):**
+
+```jsonc
+{
+  "state": {
+    "checkpoint": "chk_def",
+    "parent": "chk_abc",
+    "patch": [
+      { "op": "add", "path": "/notes/-", "value": { "id": 1, "text": "Remember to..." } }
+    ]
+  }
+}
+```
+
+Host applies patches to reconstruct current state. Server may send `data` (full state) or `patch` (delta) as appropriate.
+
+### 8.4 State in Requests
+
+For `hostState: true` feature sets, host includes current state with requests:
+
+```jsonc
+{
+  "method": "tools/call",
+  "params": {
+    "name": "add_note",
+    "state": { "notes": [{ "id": 1, "text": "Remember to..." }] },
+    "arguments": { "text": "Buy groceries" }
+  }
+}
+```
+
+Server processes the request and returns new state:
+
+```jsonc
+{
+  "result": {
+    "content": [{ "type": "text", "text": "Note added" }],
+    "state": {
+      "checkpoint": "chk_ghi",
+      "parent": "chk_def",
+      "patch": [
+        { "op": "add", "path": "/notes/-", "value": { "id": 2, "text": "Buy groceries" } }
+      ]
+    }
+  }
+}
+```
+
+### 8.5 state/rollback (Host → Server, Request)
+
+Host requests rollback to a previous checkpoint:
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "state/rollback",
+  "id": 1,
+  "params": {
+    "featureSet": "notes.edit",
+    "checkpoint": "chk_abc"
+  }
+}
+```
+
+### 8.6 Rollback Response
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "checkpoint": "chk_abc",
+    "success": true
+  }
+}
+```
+
+If rollback fails (e.g., irreversible external effects):
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "checkpoint": "chk_abc",
+    "success": false,
+    "reason": "External API call cannot be undone"
+  }
+}
+```
+
+Rollback is best-effort. Servers may not be able to undo all operations.
+
+### 8.7 Server-Managed State
+
+When `hostState: false`, server manages its own state persistence. Checkpoints are opaque references. Host tracks lineage but doesn't store state data.
+
+```jsonc
+{
+  "state": {
+    "checkpoint": "chk_def",
+    "parent": "chk_abc"
+  }
+}
+```
+
+Host sends only the checkpoint reference, not state data:
+
+```jsonc
+{
+  "method": "tools/call",
+  "params": {
+    "name": "git_commit",
+    "checkpoint": "chk_def",
+    "arguments": { "message": "Fix bug" }
+  }
+}
+```
+
+### 8.8 Checkpoint Retention
+
+Servers decide checkpoint retention policy. Hosts SHOULD NOT assume checkpoints are retained indefinitely. If a rollback targets a pruned checkpoint, server returns an error:
+
+```jsonc
+{
+  "error": {
+    "code": -32005,
+    "message": "Checkpoint not found",
+    "data": { "checkpoint": "chk_old" }
+  }
+}
+```
+
+---
+
+## 9. Push Events
 
 Push events allow servers to notify the host of external occurrences that may warrant model inference. This is a separate proactive lane from MCP's passive resource subscriptions.
 
-### 8.1 push/event (Server → Host, Request)
+### 9.1 push/event (Server → Host, Request)
 
 ```jsonc
 {
@@ -541,7 +751,7 @@ Push events allow servers to notify the host of external occurrences that may wa
 }
 ```
 
-### 8.2 Parameters
+### 9.2 Parameters
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -552,7 +762,7 @@ Push events allow servers to notify the host of external occurrences that may wa
 | `payload` | `object` | Yes | Event payload |
 | `payload.content` | `ContentBlock[]` | Yes | Content for the model to interpret |
 
-### 8.3 Response
+### 9.3 Response
 
 ```jsonc
 {
@@ -571,17 +781,17 @@ Push events allow servers to notify the host of external occurrences that may wa
 | `inferenceId` | `string` | Present if inference was triggered |
 | `reason` | `string` | Present if `accepted: false` |
 
-### 8.4 Idempotency
+### 9.4 Idempotency
 
 Hosts SHOULD deduplicate events by `eventId`. Servers SHOULD use stable `eventId` values for retries.
 
 ---
 
-## 9. Context Hooks
+## 10. Context Hooks
 
 Context hooks allow servers to inject or modify context at inference boundaries. Injections support multimodal content.
 
-### 9.1 context/beforeInference (Host → Server, Request)
+### 10.1 context/beforeInference (Host → Server, Request)
 
 ```jsonc
 {
@@ -611,7 +821,7 @@ Context hooks allow servers to inject or modify context at inference boundaries.
 | `userMessage` | `string \| null` | User input (null for continued generation) |
 | `model` | `ModelInfo` | Current model metadata |
 
-### 9.2 beforeInference Response
+### 10.2 beforeInference Response
 
 ```jsonc
 {
@@ -636,7 +846,7 @@ Context hooks allow servers to inject or modify context at inference boundaries.
 }
 ```
 
-### 9.3 Content Blocks
+### 10.3 Content Blocks
 
 Injections use MCP-style content blocks for multimodal support:
 
@@ -675,7 +885,7 @@ For convenience, `content` MAY be a plain string (equivalent to a single text bl
 "content": [{ "type": "text", "text": "Simple text injection" }]
 ```
 
-### 9.4 Injection Properties
+### 10.4 Injection Properties
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -684,7 +894,7 @@ For convenience, `content` MAY be a plain string (equivalent to a single text bl
 | `content` | `string \| ContentBlock[]` | Yes | Content to inject |
 | `metadata` | `object` | No | Arbitrary metadata |
 
-### 9.5 context/afterInference
+### 10.5 context/afterInference
 
 Sent after inference completes.
 
@@ -727,7 +937,7 @@ Same structure but includes `id`. Host waits for response.
 }
 ```
 
-### 9.6 Hook Timeouts
+### 10.6 Hook Timeouts
 
 Hosts SHOULD enforce timeouts on context hooks:
 
@@ -736,23 +946,23 @@ Hosts SHOULD enforce timeouts on context hooks:
 
 On timeout, hosts SHOULD proceed without the hook's contribution and MAY log the timeout.
 
-### 9.7 Loop Prevention
+### 10.7 Loop Prevention
 
 Context hooks MUST NOT trigger `inference/request` calls. Servers needing inference for hook processing should do so asynchronously outside the hook response path.
 
 Hosts MAY track hook depth and reject nested hook invocations.
 
-### 9.8 Ordering
+### 10.8 Ordering
 
 When multiple servers provide injections, hosts group by `position` and determine order within each position.
 
 ---
 
-## 10. Server-Initiated Inference
+## 11. Server-Initiated Inference
 
 Servers may request autonomous inference from the host. Unlike MCP's `sampling/createMessage`, this is designed for background/autonomous use without human-in-the-loop approval.
 
-### 10.1 inference/request (Server → Host, Request)
+### 11.1 inference/request (Server → Host, Request)
 
 ```jsonc
 {
@@ -774,7 +984,7 @@ Servers may request autonomous inference from the host. Unlike MCP's `sampling/c
 }
 ```
 
-### 10.2 Parameters
+### 11.2 Parameters
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -785,7 +995,7 @@ Servers may request autonomous inference from the host. Unlike MCP's `sampling/c
 | `preferences.maxTokens` | `integer` | No | Max output tokens |
 | `preferences.temperature` | `number` | No | Sampling temperature |
 
-### 10.3 Response
+### 11.3 Response
 
 ```jsonc
 {
@@ -810,7 +1020,7 @@ Servers may request autonomous inference from the host. Unlike MCP's `sampling/c
 | `finishReason` | `"end_turn" \| "max_tokens" \| "stop_sequence"` | Why generation stopped |
 | `usage` | `object` | Token usage |
 
-### 10.4 Streaming
+### 11.4 Streaming
 
 When `stream: true`, host sends chunks before the final response:
 
@@ -832,9 +1042,9 @@ Chunks are followed by the full response.
 
 ---
 
-## 11. Model Information
+## 12. Model Information
 
-### 11.1 model/info (Server → Host, Request)
+### 12.1 model/info (Server → Host, Request)
 
 ```jsonc
 {
@@ -845,7 +1055,7 @@ Chunks are followed by the full response.
 }
 ```
 
-### 11.2 Response
+### 12.2 Response
 
 ```jsonc
 {
@@ -862,9 +1072,9 @@ Chunks are followed by the full response.
 
 ---
 
-## 12. Security Considerations
+## 13. Security Considerations
 
-### 12.1 Trust Model
+### 13.1 Trust Model
 
 MCPL expands server capabilities significantly. Feature sets and scoped access provide granular control:
 
@@ -876,7 +1086,7 @@ MCPL expands server capabilities significantly. Feature sets and scoped access p
 | `inferenceRequest` | Consume inference budget | Disable high-cost features |
 | Scoped actions | Access beyond intended scope | Whitelist/blacklist patterns |
 
-### 12.2 Audit Logging
+### 13.2 Audit Logging
 
 Hosts SHOULD log MCPL operations with:
 
@@ -888,7 +1098,7 @@ Hosts SHOULD log MCPL operations with:
 
 This enables debugging, cost attribution, and security review.
 
-### 12.3 Blocking Hook Policy
+### 13.3 Blocking Hook Policy
 
 For blocking `afterInference` hooks, hosts should decide:
 
@@ -897,15 +1107,15 @@ For blocking `afterInference` hooks, hosts should decide:
 
 Fail-open is recommended for most use cases.
 
-### 12.4 Context Injection Safety
+### 13.4 Context Injection Safety
 
 Hosts MAY validate injected content. Servers MUST NOT inject content that attempts to override system instructions or impersonate other entities.
 
 ---
 
-## 13. Examples
+## 14. Examples
 
-### 13.1 Memory Server
+### 14.1 Memory Server
 
 **Capabilities:**
 
@@ -1004,7 +1214,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 }
 ```
 
-### 13.2 Compliance Server (Blocking Hook)
+### 14.2 Compliance Server (Blocking Hook)
 
 **Capabilities:**
 
@@ -1068,6 +1278,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 |------|---------|-------------|
 | `-32001` | Feature set not enabled | Message used a disabled feature set |
 | `-32003` | Unknown feature set | Message used undeclared feature set |
+| `-32005` | Checkpoint not found | Rollback targeted a pruned or unknown checkpoint |
 
 ---
 
@@ -1181,6 +1392,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 - Removed `positionHint` from context injections (ordering is host policy)
 - Removed `purpose` and semantic model hints from inference requests
 - Added scoped access (Section 7) for fine-grained permission control within feature sets
+- Added state management (Section 8) with checkpoints, branching, rollback, and optional host-managed persistence
 
 ### 0.1.0-draft (January 2026)
 

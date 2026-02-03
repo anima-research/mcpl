@@ -16,7 +16,7 @@ See [SPEC.md](./SPEC.md) for the full protocol specification.
 
 ## Status
 
-Draft specification (v0.2.0-draft). Subject to change.
+Draft specification (v0.3.0-draft). Subject to change.
 
 ## License
 

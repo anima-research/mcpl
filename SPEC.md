@@ -1,9 +1,9 @@
 # MCP Live (MCPL) Protocol Specification
 
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft  
 **Status:** Draft  
 **Authors:** Antra  
-**Date:** January 2026
+**Date:** February 2026
 
 ---
 
@@ -90,7 +90,7 @@ MCPL is advertised as an experimental capability extension, not a protocol versi
     "resources": {},
     "experimental": {
       "mcpl": {
-        "version": "0.2",
+        "version": "0.3",
         "pushEvents": true,
         "contextHooks": { ... },
         "inferenceRequest": { ... },
@@ -184,7 +184,7 @@ Servers advertise MCPL support under `experimental.mcpl`:
     // MCPL extension
     "experimental": {
       "mcpl": {
-        "version": "0.2",
+        "version": "0.3",
         "pushEvents": true,
         "contextHooks": {
           "beforeInference": true,
@@ -199,20 +199,47 @@ Servers advertise MCPL support under `experimental.mcpl`:
 }
 ```
 
-### 5.2 Host Response
+### 5.2 Host Support
 
-The host responds with its MCPL support and enabled feature sets:
+The host advertises its MCPL support under `capabilities.experimental.mcpl` (mirroring the server shape). Initial feature configuration is performed via `featureSets/update` after initialization.
 
 ```jsonc
 {
   "protocolVersion": "2024-11-05",  // MCP version unchanged
-  "capabilities": { ... },
-  "experimental": {
-    "mcpl": {
-      "version": "0.2",
-      "featureSets": {
-        "enabled": ["memory.retrieval", "memory.extraction"],
-        "disabled": ["memory.consolidation"]
+  "capabilities": {
+    // Standard MCP capabilities here ...
+
+    "experimental": {
+      "mcpl": {
+        "version": "0.3",
+        "pushEvents": true,
+        "contextHooks": {
+          "beforeInference": true,
+          "afterInference": { "blocking": true }
+        },
+        "inferenceRequest": { "streaming": true },
+        "featureSets": true
+      }
+    }
+  }
+}
+```
+
+### 5.3 Initial Configuration
+
+After initialization, hosts SHOULD send `featureSets/update` (Host → Server) to declare initially enabled/disabled feature sets and any scope configuration.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "featureSets/update",
+  "params": {
+    "enabled": ["memory.retrieval", "memory.extraction"],
+    "disabled": ["memory.consolidation"],
+    "scopes": {
+      "files.edit": {
+        "whitelist": ["/project/**", "/tmp/**"],
+        "blacklist": ["**/.env", "**/secrets/**"]
       }
     }
   }
@@ -268,6 +295,7 @@ Servers declare feature sets in their capabilities:
 - `"contextHooks.beforeInference"`
 - `"contextHooks.afterInference"`
 - `"inferenceRequest"`
+- `"tools"`
 
 ### 6.3 Hierarchical Naming
 
@@ -354,7 +382,13 @@ For unknown feature sets, hosts SHOULD reject with `-32003`.
   "method": "featureSets/update",
   "params": {
     "enabled": ["memory.proactive"],
-    "disabled": ["memory.consolidation"]
+    "disabled": ["memory.consolidation"],
+    "scopes": {
+      "discord.post": {
+        "whitelist": ["#general", "#dev-*"],
+        "blacklist": ["#admin-*"]
+      }
+    }
   }
 }
 ```
@@ -408,24 +442,22 @@ Servers declare that a feature set uses scopes:
 
 ### 7.2 Host Configuration
 
-Hosts configure whitelist and blacklist patterns for scoped feature sets:
+Hosts configure whitelist and blacklist patterns for scoped feature sets via `featureSets/update`:
 
 ```jsonc
 {
-  "experimental": {
-    "mcpl": {
-      "featureSets": {
-        "enabled": ["files.edit", "discord.post"]
+  "jsonrpc": "2.0",
+  "method": "featureSets/update",
+  "params": {
+    "enabled": ["files.edit", "discord.post"],
+    "scopes": {
+      "files.edit": {
+        "whitelist": ["/project/**", "/tmp/**"],
+        "blacklist": ["**/.env", "**/secrets/**"]
       },
-      "scopes": {
-        "files.edit": {
-          "whitelist": ["/project/**", "/tmp/**"],
-          "blacklist": ["**/.env", "**/secrets/**"]
-        },
-        "discord.post": {
-          "whitelist": ["#general", "#dev-*"],
-          "blacklist": ["#admin-*"]
-        }
+      "discord.post": {
+        "whitelist": ["#general", "#dev-*"],
+        "blacklist": ["#admin-*"]
       }
     }
   }
@@ -483,6 +515,8 @@ When a server needs to act in a scope that isn't whitelisted (or is blacklisted)
 | `payload` | `object` | The payload from the request, returned on approval |
 | `reason` | `string` | Present if `approved: false` |
 
+Hosts MAY enrich the `payload` with additional resolved or host-specific fields (for example, resolving `#general` to a channel ID). When enrichment occurs, hosts SHOULD return the enriched payload in this response.
+
 ### 7.6 Host Evaluation
 
 When a server requests elevation:
@@ -495,9 +529,10 @@ Hosts MAY cache approvals for the session or persist them.
 
 ### 7.7 Tagging Actions with Scope
 
-When performing scoped actions, servers SHOULD include the scope:
+When invoking scoped tools, hosts SHOULD include the scope.
 
 ```jsonc
+// Host → Server
 {
   "method": "tools/call",
   "params": {
@@ -506,7 +541,7 @@ When performing scoped actions, servers SHOULD include the scope:
       "label": "/project/src/main.ts",
       "payload": { "path": "/project/src/main.ts" }
     },
-    "arguments": { ... }
+    "arguments": { /* ... */ }
   }
 }
 ```
@@ -518,6 +553,8 @@ Hosts validate the scope against whitelist/blacklist before executing.
 ## 8. State Management
 
 MCPL supports stateful tools with branching state and optional host-managed persistence.
+
+Compatibility note: MCPL extends MCP `tools/call` with optional parameters such as `state`, `checkpoint`, and `scope`. Servers MUST tolerate and ignore unknown request fields, and hosts MUST tolerate unknown response fields, to preserve backward compatibility.
 
 ### 8.1 Capability Declaration
 
@@ -848,34 +885,33 @@ Context hooks allow servers to inject or modify context at inference boundaries.
 
 ### 10.3 Content Blocks
 
-Injections use MCP-style content blocks for multimodal support:
+Injections use MCP content blocks for multimodal support. The canonical shapes below adopt `mimeType` and support either inline `data` (base64) or `uri` forms where applicable.
 
 ```jsonc
 "content": [
   { "type": "text", "text": "Relevant context..." },
-  { 
-    "type": "image", 
-    "source": { 
-      "type": "base64", 
-      "media_type": "image/png", 
-      "data": "iVBORw0KGgo..." 
-    }
+  {
+    "type": "image",
+    "data": "iVBORw0KGgo...",
+    "mimeType": "image/png"
   },
   {
-    "type": "resource_link",
+    "type": "resource",
     "uri": "memory://facts/12345"
   }
 ]
 ```
+
+Either `data`+`mimeType` or `uri` MAY be used for media types (hosts MAY choose which to support).
 
 **Supported content types:**
 
 | Type | Description |
 |------|-------------|
 | `text` | Plain text content |
-| `image` | Base64-encoded image with `media_type` |
-| `audio` | Base64-encoded audio with `media_type` |
-| `resource_link` | URI reference to a resource |
+| `image` | Image via `{ data, mimeType }` or `{ uri }` |
+| `audio` | Audio via `{ data, mimeType }` or `{ uri }` |
+| `resource` | URI reference to a resource |
 
 For convenience, `content` MAY be a plain string (equivalent to a single text block):
 
@@ -995,6 +1031,8 @@ Servers may request autonomous inference from the host. Unlike MCP's `sampling/c
 | `preferences.maxTokens` | `integer` | No | Max output tokens |
 | `preferences.temperature` | `number` | No | Sampling temperature |
 
+Hosts MAY accept additional advisory keys in `preferences` (e.g., `model`, `modelTier`, `costTier`). Such hints are host-defined and not guaranteed to be honored. Servers SHOULD NOT rely on them for correctness.
+
 ### 11.3 Response
 
 ```jsonc
@@ -1039,6 +1077,36 @@ When `stream: true`, host sends chunks before the final response:
 ```
 
 Chunks are followed by the full response.
+
+### 11.5 Host Routing Guidance (Non-normative)
+
+Hosts typically route `inference/request` by feature set and policy:
+
+- Key: Use `(serverId, featureSet)` as the stable routing key; optionally include `conversationId` for pinning.
+- Scope: Only route feature sets whose `uses` includes `inferenceRequest`.
+- Patterns: Support wildcards like `memory.*` for bulk policies; default conservatively for unknown feature sets.
+- Inputs: Optionally estimate tokens from `messages` to up-tier models when context is large.
+- Pinning: Allow per-`conversationId` overrides to keep model consistency across a task.
+- Hints: If supported, accept advisory `preferences` keys (e.g., `model`, `modelTier`); treat as non-binding.
+- Audit: Include `result.model` in logs for verification and cost attribution.
+
+Example policy (illustrative):
+
+```jsonc
+{
+  "routing": {
+    "default": "claude-haiku-4-5",
+    "byFeature": {
+      "memory.consolidation": "claude-haiku-4-5",
+      "compliance.redaction": "claude-opus-4-5",
+      "summarization.light": "gpt-4o-mini",
+      "summarization.high": "gpt-4.1"
+    },
+    "wildcards": { "memory.*": "claude-haiku-4-5" },
+    "overrides": { "conversation:conv_123": "claude-opus-4-5" }
+  }
+}
+```
 
 ---
 
@@ -1124,7 +1192,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
   "capabilities": {
     "experimental": {
       "mcpl": {
-        "version": "0.2",
+        "version": "0.3",
         "contextHooks": {
           "beforeInference": true,
           "afterInference": { "blocking": false }
@@ -1223,7 +1291,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
   "capabilities": {
     "experimental": {
       "mcpl": {
-        "version": "0.2",
+        "version": "0.3",
         "contextHooks": {
           "afterInference": { "blocking": true }
         },
@@ -1299,41 +1367,35 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
     },
     {
       "type": "object",
-      "required": ["type", "source"],
       "properties": {
         "type": { "const": "image" },
-        "source": {
-          "type": "object",
-          "required": ["type", "media_type", "data"],
-          "properties": {
-            "type": { "const": "base64" },
-            "media_type": { "type": "string" },
-            "data": { "type": "string" }
-          }
-        }
-      }
+        "data": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "uri": { "type": "string" }
+      },
+      "oneOf": [
+        { "required": ["type", "data", "mimeType"] },
+        { "required": ["type", "uri"] }
+      ]
     },
     {
       "type": "object",
-      "required": ["type", "source"],
       "properties": {
         "type": { "const": "audio" },
-        "source": {
-          "type": "object",
-          "required": ["type", "media_type", "data"],
-          "properties": {
-            "type": { "const": "base64" },
-            "media_type": { "type": "string" },
-            "data": { "type": "string" }
-          }
-        }
-      }
+        "data": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "uri": { "type": "string" }
+      },
+      "oneOf": [
+        { "required": ["type", "data", "mimeType"] },
+        { "required": ["type", "uri"] }
+      ]
     },
     {
       "type": "object",
       "required": ["type", "uri"],
       "properties": {
-        "type": { "const": "resource_link" },
+        "type": { "const": "resource" },
         "uri": { "type": "string" }
       }
     }
@@ -1357,7 +1419,8 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
           "pushEvents",
           "contextHooks.beforeInference",
           "contextHooks.afterInference",
-          "inferenceRequest"
+          "inferenceRequest",
+          "tools"
         ]
       }
     }
@@ -1374,6 +1437,15 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 ---
 
 ## Changelog
+
+### 0.3.0-draft (February 2026)
+
+- Adopted MCP content block shapes with `mimeType`; replaced `resource_link` with `resource`
+- Moved initial feature configuration to `featureSets/update` (post-initialize) and allowed `featureSets/update` to carry `scopes`
+- Added `tools` to `FeatureSet.uses` and corrected scope direction (Host → Server) for `tools/call`
+- Added scope payload enrichment guidance in `scope/elevate` responses
+- Clarified compatibility: hosts/servers MUST tolerate unknown fields (e.g., `state`, `checkpoint`, `scope` on `tools/call`)
+- Added non-normative Host Routing Guidance (Section 11.5)
 
 ### 0.2.0-draft (January 2026)
 

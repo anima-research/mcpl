@@ -1,9 +1,9 @@
 # MCP Live (MCPL) Protocol Specification
 
-**Version:** 0.3.0-draft  
+**Version:** 0.4.0-draft  
 **Status:** Draft  
 **Authors:** Antra  
-**Date:** February 2026
+**Date:** March 2026
 
 ---
 
@@ -35,7 +35,8 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 11. [Server-Initiated Inference](#11-server-initiated-inference)
 12. [Model Information](#12-model-information)
 13. [Security Considerations](#13-security-considerations)
-14. [Examples](#14-examples)
+14. [Channels of Communication](#14-channels-of-communication)
+15. [Examples](#15-examples)
 
 ---
 
@@ -90,7 +91,7 @@ MCPL is advertised as an experimental capability extension, not a protocol versi
     "resources": {},
     "experimental": {
       "mcpl": {
-        "version": "0.3",
+        "version": "0.4",
         "pushEvents": true,
         "contextHooks": { ... },
         "inferenceRequest": { ... },
@@ -139,6 +140,15 @@ MCPL extends the MCP message flow:
 │                                   featureSets/changed               │
 │                                   scope/elevate                     │
 │                                   state/rollback                    │
+│                                   channels/register                 │
+│                                   channels/changed                  │
+│                                   channels/list                     │
+│                                   channels/open                     │
+│                                   channels/close                    │
+│                                   channels/outgoing/chunk           │
+│                                   channels/outgoing/complete        │
+│                                   channels/publish                  │
+│                                   channels/incoming                 │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -164,6 +174,15 @@ Per JSON-RPC 2.0:
 | `featureSets/changed` | Notification | Server → Host |
 | `scope/elevate` | Request | Server → Host |
 | `state/rollback` | Request | Host → Server |
+| `channels/register` | Request | Server → Host |
+| `channels/changed` | Notification | Server → Host |
+| `channels/list` | Request | Either |
+| `channels/open` | Request | Host → Server |
+| `channels/close` | Request | Host → Server |
+| `channels/outgoing/chunk` | Notification | Host → Server |
+| `channels/outgoing/complete` | Notification | Host → Server |
+| `channels/publish` | Notification or Request | Host → Server |
+| `channels/incoming` | Request | Server → Host |
 
 ---
 
@@ -184,7 +203,7 @@ Servers advertise MCPL support under `experimental.mcpl`:
     // MCPL extension
     "experimental": {
       "mcpl": {
-        "version": "0.3",
+        "version": "0.4",
         "pushEvents": true,
         "contextHooks": {
           "beforeInference": true,
@@ -211,7 +230,7 @@ The host advertises its MCPL support under `capabilities.experimental.mcpl` (mir
 
     "experimental": {
       "mcpl": {
-        "version": "0.3",
+        "version": "0.4",
         "pushEvents": true,
         "contextHooks": {
           "beforeInference": true,
@@ -296,6 +315,8 @@ Servers declare feature sets in their capabilities:
 - `"contextHooks.afterInference"`
 - `"inferenceRequest"`
 - `"tools"`
+- `"channels.publish"`
+- `"channels.observe"`
 
 ### 6.3 Hierarchical Naming
 
@@ -1181,9 +1202,299 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 
 ---
 
-## 14. Examples
+## 14. Channels of Communication
 
-### 14.1 Memory Server
+Channels represent named destinations for messages (e.g., `ui`, `discord:#general`, `telegram:123456`, `signal:+15551234`). Channels are runtime‑extensible and host‑controlled. Channels are independent of moderation; hosts may run moderation on content before routing/publishing.
+
+### 14.1 Capabilities
+
+Servers and hosts advertise channel support under `experimental.mcpl.channels`.
+
+```jsonc
+{
+  "capabilities": {
+    "experimental": {
+      "mcpl": {
+        "version": "0.4",
+        "channels": {
+          "register": true,
+          "publish": true,
+          "observe": true,
+          "lifecycle": true,
+          "streaming": true
+        }
+      }
+    }
+  }
+}
+```
+
+Feature sets may gate channel behavior:
+
+```jsonc
+{
+  "experimental": {
+    "mcpl": {
+      "featureSets": {
+        "channels.publish": {
+          "description": "Publish to registered channels",
+          "uses": ["channels.publish"],
+          "scoped": true
+        },
+        "channels.observe": {
+          "description": "Observe outgoing/incoming messages",
+          "uses": ["channels.observe"],
+          "scoped": true
+        },
+        "channels.thinking": {
+          "description": "Observe private thinking channel (read-only)",
+          "uses": ["channels.observe"],
+          "scoped": true
+        }
+      }
+    }
+  }
+}
+```
+
+### 14.2 Channel Descriptors
+
+```jsonc
+// ChannelDescriptor
+{
+  "id": "discord:#general",          // unique within this connection
+  "type": "discord",                  // platform/provider
+  "label": "#general (Acme Discord)", // human label
+  "direction": "outbound",            // "outbound" | "inbound" | "bidirectional"
+  "address": { "guild": "acme", "channel": "#general" },
+  "metadata": { "serverId": "discord-connector" }
+}
+```
+
+### 14.3 Methods
+
+- `channels/register` (Server → Host, Request): Register channels handled by the server.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/register",
+  "id": 1,
+  "params": { "channels": [ /* ChannelDescriptor[] */ ] }
+}
+```
+
+- `channels/changed` (Server → Host, Notification): Notify added/removed/updated channels.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/changed",
+  "params": {
+    "added": [ /* ChannelDescriptor[] */ ],
+    "removed": ["discord:#random"],
+    "updated": [ /* ChannelDescriptor[] */ ]
+  }
+}
+```
+
+- `channels/list` (Request): List known channels for this connection.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/list",
+  "id": 2,
+  "params": {}
+}
+```
+
+- `channels/open` (Host → Server, Request): Request server to open/connect a channel.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/open",
+  "id": 3,
+  "params": {
+    "type": "discord",
+    "address": { "guild": "acme", "channel": "#general" },
+    "metadata": {}
+  }
+}
+```
+
+Response:
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "channel": {
+      "id": "discord:#general",
+      "type": "discord",
+      "label": "#general (Acme Discord)",
+      "direction": "bidirectional",
+      "address": { "guild": "acme", "channel": "#general" }
+    }
+  }
+}
+```
+
+- `channels/close` (Host → Server, Request): Request server to close/disconnect a channel.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/close",
+  "id": 4,
+  "params": {
+    "channelId": "discord:#general"
+  }
+}
+```
+
+Response:
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": { "closed": true }
+}
+```
+
+- `channels/outgoing/chunk` (Host → Server, Notification): Observers receive moderated deltas for a channel.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/outgoing/chunk",
+  "params": {
+    "inferenceId": "inf_abc",
+    "conversationId": "conv_123",
+    "channelId": "discord:#general",
+    "index": 0,
+    "delta": "Hello team,"
+  }
+}
+```
+
+- `channels/outgoing/complete` (Host → Server, Notification): Observers receive final moderated content blocks.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/outgoing/complete",
+  "params": {
+    "inferenceId": "inf_abc",
+    "conversationId": "conv_123",
+    "channelId": "discord:#general",
+    "content": [ { "type": "text", "text": "…" } ]
+  }
+}
+```
+
+- `channels/publish` (Host → Server, Notification or Request): Ask connector to deliver content to a channel.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/publish",
+  "params": {
+    "conversationId": "conv_123",
+    "channelId": "discord:#general",
+    "stream": false,
+    "content": [ { "type": "text", "text": "Hello team" } ]
+  }
+}
+```
+
+If an ACK is desired, send as a Request and return `{ delivered: true, messageId: "..." }`.
+
+- `channels/incoming` (Server → Host, Request): Deliver inbound messages from a channel. Supports batching for busy channels. The host decides how to map messages to conversations and user turns and whether to trigger inference.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "channels/incoming",
+  "id": 5,
+  "params": {
+    "messages": [
+      {
+        "channelId": "discord:#general",
+        "messageId": "dmsg_123",
+        "threadId": "t_42",
+        "author": { "id": "u_777", "name": "Alice" },
+        "timestamp": "2026-03-05T10:30:00Z",
+        "content": [ { "type": "text", "text": "What's the status?" } ],
+        "metadata": { "mentions": ["@bob"] }
+      },
+      {
+        "channelId": "discord:#general",
+        "messageId": "dmsg_124",
+        "threadId": "t_42",
+        "author": { "id": "u_888", "name": "Bob" },
+        "timestamp": "2026-03-05T10:30:05Z",
+        "content": [ { "type": "text", "text": "I was wondering the same" } ],
+        "metadata": {}
+      }
+    ]
+  }
+}
+```
+
+Response (per-message results for partial acceptance):
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "results": [
+      { "messageId": "dmsg_123", "accepted": true, "conversationId": "conv_123" },
+      { "messageId": "dmsg_124", "accepted": true, "conversationId": "conv_123" }
+    ]
+  }
+}
+```
+
+### 14.4 beforeInference Channel Context
+
+Hosts MAY include channel context in `context/beforeInference` params so servers can adapt:
+
+```jsonc
+"channels": {
+  "incoming": { "channelId": "discord:#general", "messageId": "dmsg_123", "threadId": "t_42" },
+  "defaultOutgoing": { "channelId": "discord:#general" },
+  "candidates": ["ui", "discord:#general", "telegram:123456"]
+}
+```
+
+Servers MAY supply channel-related `contextInjections` (e.g., thread context). The host controls ordering and whether to include this field.
+
+### 14.5 Security and Scoping
+
+- Use `featureSets.update.scopes` to whitelist/blacklist channel patterns (e.g., `discord:acme/*`).
+- The `channels.thinking` feature set only allows read-only observation of a private thinking pseudo-channel; publishing to thinking is invalid.
+- Hosts SHOULD moderate content before routing/publishing and may provide raw vs moderated views to observers per policy.
+
+### 14.6 Error Codes
+
+Add to Appendix A:
+
+| Code | Message | Description |
+|------|---------|-------------|
+| `-32017` | Channel not permitted | Lacking scope to publish or observe channel |
+| `-32023` | Unknown channel | Channel id doesn’t exist or not registered |
+| `-32024` | Channel open failed | Server could not open/connect the requested channel |
+
+---
+
+## 15. Examples
+
+### 15.1 Memory Server
 
 **Capabilities:**
 
@@ -1192,7 +1503,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
   "capabilities": {
     "experimental": {
       "mcpl": {
-        "version": "0.3",
+        "version": "0.4",
         "contextHooks": {
           "beforeInference": true,
           "afterInference": { "blocking": false }
@@ -1282,7 +1593,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 }
 ```
 
-### 14.2 Compliance Server (Blocking Hook)
+### 15.2 Compliance Server (Blocking Hook)
 
 **Capabilities:**
 
@@ -1291,7 +1602,7 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
   "capabilities": {
     "experimental": {
       "mcpl": {
-        "version": "0.3",
+        "version": "0.4",
         "contextHooks": {
           "afterInference": { "blocking": true }
         },
@@ -1347,6 +1658,9 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 | `-32001` | Feature set not enabled | Message used a disabled feature set |
 | `-32003` | Unknown feature set | Message used undeclared feature set |
 | `-32005` | Checkpoint not found | Rollback targeted a pruned or unknown checkpoint |
+| `-32017` | Channel not permitted | Lacking scope to publish or observe channel |
+| `-32023` | Unknown channel | Channel id doesn’t exist or not registered |
+| `-32024` | Channel open failed | Server could not open/connect the requested channel |
 
 ---
 
@@ -1420,7 +1734,9 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
           "contextHooks.beforeInference",
           "contextHooks.afterInference",
           "inferenceRequest",
-          "tools"
+          "tools",
+          "channels.publish",
+          "channels.observe"
         ]
       }
     }
@@ -1437,6 +1753,17 @@ Hosts MAY validate injected content. Servers MUST NOT inject content that attemp
 ---
 
 ## Changelog
+
+### 0.4.0-draft (March 2026)
+
+- Added Channels of Communication (Section 14) with runtime channel registration, observation, publishing, and lifecycle control
+- Added `channels/*` methods: `register`, `changed`, `list`, `open`, `close`, `outgoing/chunk`, `outgoing/complete`, `publish`, `incoming`
+- `channels/incoming` supports batching for busy channels with per-message results
+- `channels/open` and `channels/close` for host-controlled channel lifecycle (restart recovery, user control)
+- Default channel routing is host-internal (no server-facing methods)
+- Extended `FeatureSet.uses` with `channels.publish`, `channels.observe`
+- Added channel-related error codes in Appendix A
+- Clarified that hosts decide how inbound channel messages map to conversations and user turns
 
 ### 0.3.0-draft (February 2026)
 

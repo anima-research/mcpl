@@ -1,6 +1,6 @@
 # MCP Live (MCPL) Protocol Specification
 
-**Version:** 0.4.0-draft  
+**Version:** 0.4.1-draft  
 **Status:** Draft  
 **Authors:** Antra  
 **Date:** March 2026
@@ -573,13 +573,15 @@ Hosts validate the scope against whitelist/blacklist before executing.
 
 ## 8. State Management
 
-MCPL supports stateful tools with branching state and optional host-managed persistence.
+MCPL supports stateful tools with branching state. Servers choose per-response whether to include state data for host persistence or manage state internally.
+
+Hosts are not required to implement the full checkpoint tree or branching. A minimal host may track only the latest checkpoint, or ignore state entirely. Branching and rollback are opt-in capabilities that hosts advertise and implement to the extent they choose.
 
 Compatibility note: MCPL extends MCP `tools/call` with optional parameters such as `state`, `checkpoint`, and `scope`. Servers MUST tolerate and ignore unknown request fields, and hosts MUST tolerate unknown response fields, to preserve backward compatibility.
 
 ### 8.1 Capability Declaration
 
-Feature sets declare state management capabilities:
+Feature sets declare rollback support:
 
 ```jsonc
 {
@@ -587,23 +589,16 @@ Feature sets declare state management capabilities:
     "notes.edit": {
       "description": "Manage notes",
       "uses": ["tools"],
-      "rollback": true,
-      "hostState": true
+      "rollback": true
     },
     "git.commit": {
       "description": "Git operations",
       "uses": ["tools"],
-      "rollback": true,
-      "hostState": false
+      "rollback": true
     }
   }
 }
 ```
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `rollback` | `boolean` | Server supports rollback to previous checkpoints |
-| `hostState` | `boolean` | Host manages state persistence for this feature set |
 
 ### 8.2 Checkpoints and Lineage
 
@@ -629,9 +624,9 @@ chk_abc
 └── chk_xyz (branch after rollback to abc)
 ```
 
-### 8.3 Host-Managed State
+### 8.3 State Data
 
-When `hostState: true`, the host manages state persistence. Server sends state data or patches, host stores and provides state with requests.
+Servers may include `data` or `patch` in state responses. When present, host stores it and provides it back with subsequent requests.
 
 **Full state:**
 
@@ -661,17 +656,30 @@ When `hostState: true`, the host manages state persistence. Server sends state d
 
 Host applies patches to reconstruct current state. Server may send `data` (full state) or `patch` (delta) as appropriate.
 
+When no `data` or `patch` is included, the checkpoint is an opaque reference and the server manages state internally.
+
 ### 8.4 State in Requests
 
-For `hostState: true` feature sets, host includes current state with requests:
+Host includes whatever state it has with requests:
 
 ```jsonc
+// Host has state data (server previously included data/patch)
 {
   "method": "tools/call",
   "params": {
     "name": "add_note",
     "state": { "notes": [{ "id": 1, "text": "Remember to..." }] },
     "arguments": { "text": "Buy groceries" }
+  }
+}
+
+// Host has only checkpoint reference (server manages state internally)
+{
+  "method": "tools/call",
+  "params": {
+    "name": "git_commit",
+    "checkpoint": "chk_def",
+    "arguments": { "message": "Fix bug" }
   }
 }
 ```
@@ -738,33 +746,7 @@ If rollback fails (e.g., irreversible external effects):
 
 Rollback is best-effort. Servers may not be able to undo all operations.
 
-### 8.7 Server-Managed State
-
-When `hostState: false`, server manages its own state persistence. Checkpoints are opaque references. Host tracks lineage but doesn't store state data.
-
-```jsonc
-{
-  "state": {
-    "checkpoint": "chk_def",
-    "parent": "chk_abc"
-  }
-}
-```
-
-Host sends only the checkpoint reference, not state data:
-
-```jsonc
-{
-  "method": "tools/call",
-  "params": {
-    "name": "git_commit",
-    "checkpoint": "chk_def",
-    "arguments": { "message": "Fix bug" }
-  }
-}
-```
-
-### 8.8 Checkpoint Retention
+### 8.7 Checkpoint Retention
 
 Servers decide checkpoint retention policy. Hosts SHOULD NOT assume checkpoints are retained indefinitely. If a rollback targets a pruned checkpoint, server returns an error:
 

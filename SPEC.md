@@ -26,6 +26,8 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 2. [Design Goals](#2-design-goals)
 3. [Compatibility](#3-compatibility)
 4. [Protocol Overview](#4-protocol-overview)
+   - 4.1 [Request vs Notification](#41-request-vs-notification)
+   - 4.2 [Transport](#42-transport)
 5. [Capability Negotiation](#5-capability-negotiation)
 6. [Feature Sets](#6-feature-sets)
 7. [Scoped Access](#7-scoped-access)
@@ -193,6 +195,97 @@ Per JSON-RPC 2.0:
 | `branches/switch` | Request | Server → Host |
 | `branches/delete` | Request | Server → Host |
 | `branches/changed` | Notification | Host → Server |
+
+### 4.2 Transport
+
+MCP defines two standard transports: **stdio** (local child process) and **Streamable HTTP** (remote, stateless). MCPL adds **WebSocket** as a third transport optimized for its bidirectional, stateful patterns.
+
+#### 4.2.1 Transport Selection
+
+| Transport | Use Case |
+|---|---|
+| **stdio** | Local development — host spawns server as child process, communicates via newline-delimited JSON on stdin/stdout |
+| **Streamable HTTP** | Remote servers in environments where WebSocket is unavailable (corporate proxies, serverless, stateless deployments) |
+| **WebSocket** | Remote servers with persistent bidirectional communication — MCPL's primary use case |
+
+MCPL's message patterns — push events, context hooks, state updates, branch requests, and channel messages — require both sides to send messages at any time. Streamable HTTP achieves this by splitting traffic across two channels (POST for outbound, SSE for inbound), which adds complexity: server-initiated requests arrive on the SSE stream but responses go back via POST, session management requires `Mcp-Session-Id`, and SSE reconnection needs `Last-Event-ID` tracking. WebSocket provides a single persistent bidirectional channel that maps naturally to these patterns.
+
+Servers MAY support multiple transports simultaneously (e.g., WebSocket at `/mcpl` and stdio for local development).
+
+#### 4.2.2 WebSocket Framing
+
+Each WebSocket **text frame** contains exactly one JSON-RPC 2.0 message (request, response, or notification). No newline delimiter is needed — WebSocket already frames messages.
+
+```
+Client sends: {"jsonrpc":"2.0","method":"initialize","id":1,"params":{...}}
+Server sends: {"jsonrpc":"2.0","id":1,"result":{...}}
+Server sends: {"jsonrpc":"2.0","method":"notifications/initialized"}
+```
+
+Binary WebSocket frames are reserved for future use and MUST be ignored by implementations that do not understand them.
+
+#### 4.2.3 WebSocket Lifecycle
+
+1. Client opens a WebSocket connection to the server's MCPL endpoint (e.g., `wss://example.com/mcpl`)
+2. Client sends `initialize` request (same as stdio/HTTP)
+3. Server responds with capabilities (including `experimental.mcpl`)
+4. Client sends `notifications/initialized`
+5. Normal MCPL message exchange proceeds
+6. Either side may close the WebSocket to terminate the session
+
+#### 4.2.4 Session Management
+
+The WebSocket connection IS the session. No separate session ID is needed. If the connection drops, the client reconnects and performs a new `initialize` handshake.
+
+Servers MAY support reconnection with session continuity by:
+
+1. Including a `sessionId` in the `InitializeResult`
+2. Accepting a `sessionId` in subsequent `initialize` requests
+3. Resuming the session state (enabled feature sets, checkpoint state, open channels)
+
+This is OPTIONAL. The default behavior is that each connection is a fresh session.
+
+#### 4.2.5 Heartbeat
+
+Implementations SHOULD use WebSocket ping/pong frames for connection keepalive:
+
+- Clients SHOULD send ping frames at least every **30 seconds**
+- Servers MUST respond with pong frames
+- Either side MAY close the connection if no ping/pong is received within **60 seconds**
+
+#### 4.2.6 Authentication
+
+WebSocket connections support authentication via:
+
+1. **URL query parameters:** `wss://example.com/mcpl?token=<bearer-token>`
+2. **Sec-WebSocket-Protocol header:** Client sends token as a subprotocol; server selects it to confirm
+3. **First-message auth:** Client sends an authentication message before `initialize`
+
+The spec does not prescribe a specific mechanism. Servers SHOULD document their authentication requirements. Note that the standard `Authorization` header is not reliably supported by browser WebSocket APIs.
+
+#### 4.2.7 Host Configuration
+
+Servers advertise their WebSocket endpoint in deployment configuration or service discovery. This is an operational concern, not a protocol concern.
+
+Example host configuration:
+
+```jsonc
+{
+  "mcplServers": {
+    "editor": {
+      "url": "wss://mcpl-editor.example.com/mcpl",
+      "transport": "websocket",
+      "token": "...",
+      "enabledFeatureSets": ["editor.*"]
+    },
+    "local-memory": {
+      "command": "node",
+      "args": ["memory-server.js"],
+      "enabledFeatureSets": ["memory.*"]
+    }
+  }
+}
+```
 
 ---
 
@@ -2139,6 +2232,7 @@ The host notifies servers when branches change, whether initiated by the server,
 
 ### 0.5.0-draft (March 2026)
 
+- Added WebSocket as a first-class transport (Section 4.2) — single bidirectional channel, connection = session, ping/pong heartbeat, optional session continuity via `sessionId`
 - Added `state/update` (Server → Host, Request) for server-initiated state synchronization outside the tool call lifecycle (Section 8.8)
 - Clarified relationship between `state/update` and `push/event` — state sync and inference triggers are intentionally separate concerns (Section 8.9)
 - Added `state/get` (Server → Host, Request) for servers to pull current host-managed state on startup, reconnection, or sync recovery (Section 8.10)

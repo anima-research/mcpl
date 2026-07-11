@@ -1,6 +1,6 @@
 # MCP Live (MCPL) Protocol Specification
 
-**Version:** 0.4.1-draft  
+**Version:** 0.5.0-draft  
 **Status:** Draft  
 **Authors:** Antra  
 **Date:** March 2026
@@ -26,6 +26,8 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 2. [Design Goals](#2-design-goals)
 3. [Compatibility](#3-compatibility)
 4. [Protocol Overview](#4-protocol-overview)
+   - 4.1 [Request vs Notification](#41-request-vs-notification)
+   - 4.2 [Transport](#42-transport)
 5. [Capability Negotiation](#5-capability-negotiation)
 6. [Feature Sets](#6-feature-sets)
 7. [Scoped Access](#7-scoped-access)
@@ -36,7 +38,8 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 12. [Model Information](#12-model-information)
 13. [Security Considerations](#13-security-considerations)
 14. [Channels of Communication](#14-channels-of-communication)
-15. [Examples](#15-examples)
+15. [Branches](#15-branches)
+16. [Examples](#16-examples)
 
 ---
 
@@ -91,10 +94,11 @@ MCPL is advertised as an experimental capability extension, not a protocol versi
     "resources": {},
     "experimental": {
       "mcpl": {
-        "version": "0.4",
+        "version": "0.5",
         "pushEvents": true,
         "contextHooks": { ... },
         "inferenceRequest": { ... },
+        "stateUpdate": true,
         "featureSets": { ... }
       }
     }
@@ -173,6 +177,8 @@ Per JSON-RPC 2.0:
 | `featureSets/update` | Notification | Host → Server |
 | `featureSets/changed` | Notification | Server → Host |
 | `scope/elevate` | Request | Server → Host |
+| `state/update` | Request | Server → Host |
+| `state/get` | Request | Server → Host |
 | `state/rollback` | Request | Host → Server |
 | `channels/register` | Request | Server → Host |
 | `channels/changed` | Notification | Server → Host |
@@ -183,6 +189,103 @@ Per JSON-RPC 2.0:
 | `channels/outgoing/complete` | Notification | Host → Server |
 | `channels/publish` | Notification or Request | Host → Server |
 | `channels/incoming` | Request | Server → Host |
+| `branches/list` | Request | Server → Host |
+| `branches/current` | Request | Server → Host |
+| `branches/create` | Request | Server → Host |
+| `branches/switch` | Request | Server → Host |
+| `branches/delete` | Request | Server → Host |
+| `branches/changed` | Notification | Host → Server |
+
+### 4.2 Transport
+
+MCP defines two standard transports: **stdio** (local child process) and **Streamable HTTP** (remote, stateless). MCPL adds **WebSocket** as a third transport optimized for its bidirectional, stateful patterns.
+
+#### 4.2.1 Transport Selection
+
+| Transport | Use Case |
+|---|---|
+| **stdio** | Local development — host spawns server as child process, communicates via newline-delimited JSON on stdin/stdout |
+| **Streamable HTTP** | Remote servers in environments where WebSocket is unavailable (corporate proxies, serverless, stateless deployments) |
+| **WebSocket** | Remote servers with persistent bidirectional communication — MCPL's primary use case |
+
+MCPL's message patterns — push events, context hooks, state updates, branch requests, and channel messages — require both sides to send messages at any time. Streamable HTTP achieves this by splitting traffic across two channels (POST for outbound, SSE for inbound), which adds complexity: server-initiated requests arrive on the SSE stream but responses go back via POST, session management requires `Mcp-Session-Id`, and SSE reconnection needs `Last-Event-ID` tracking. WebSocket provides a single persistent bidirectional channel that maps naturally to these patterns.
+
+Servers MAY support multiple transports simultaneously (e.g., WebSocket at `/mcpl` and stdio for local development).
+
+#### 4.2.2 WebSocket Framing
+
+Each WebSocket **text frame** contains exactly one JSON-RPC 2.0 message (request, response, or notification). No newline delimiter is needed — WebSocket already frames messages.
+
+```
+Client sends: {"jsonrpc":"2.0","method":"initialize","id":1,"params":{...}}
+Server sends: {"jsonrpc":"2.0","id":1,"result":{...}}
+Server sends: {"jsonrpc":"2.0","method":"notifications/initialized"}
+```
+
+Binary WebSocket frames are reserved for future use and MUST be ignored by implementations that do not understand them.
+
+#### 4.2.3 WebSocket Lifecycle
+
+1. Client opens a WebSocket connection to the server's MCPL endpoint (e.g., `wss://example.com/mcpl`)
+2. Client sends `initialize` request (same as stdio/HTTP)
+3. Server responds with capabilities (including `experimental.mcpl`)
+4. Client sends `notifications/initialized`
+5. Normal MCPL message exchange proceeds
+6. Either side may close the WebSocket to terminate the session
+
+#### 4.2.4 Session Management
+
+The WebSocket connection IS the session. No separate session ID is needed. If the connection drops, the client reconnects and performs a new `initialize` handshake.
+
+Servers MAY support reconnection with session continuity by:
+
+1. Including a `sessionId` in the `InitializeResult`
+2. Accepting a `sessionId` in subsequent `initialize` requests
+3. Resuming the session state (enabled feature sets, checkpoint state, open channels)
+
+This is OPTIONAL. The default behavior is that each connection is a fresh session.
+
+#### 4.2.5 Heartbeat
+
+Implementations SHOULD use WebSocket ping/pong frames for connection keepalive:
+
+- Clients SHOULD send ping frames at least every **30 seconds**
+- Servers MUST respond with pong frames
+- Either side MAY close the connection if no ping/pong is received within **60 seconds**
+
+#### 4.2.6 Authentication
+
+WebSocket connections support authentication via:
+
+1. **URL query parameters:** `wss://example.com/mcpl?token=<bearer-token>`
+2. **Sec-WebSocket-Protocol header:** Client sends token as a subprotocol; server selects it to confirm
+3. **First-message auth:** Client sends an authentication message before `initialize`
+
+The spec does not prescribe a specific mechanism. Servers SHOULD document their authentication requirements. Note that the standard `Authorization` header is not reliably supported by browser WebSocket APIs.
+
+#### 4.2.7 Host Configuration
+
+Servers advertise their WebSocket endpoint in deployment configuration or service discovery. This is an operational concern, not a protocol concern.
+
+Example host configuration:
+
+```jsonc
+{
+  "mcplServers": {
+    "editor": {
+      "url": "wss://mcpl-editor.example.com/mcpl",
+      "transport": "websocket",
+      "token": "...",
+      "enabledFeatureSets": ["editor.*"]
+    },
+    "local-memory": {
+      "command": "node",
+      "args": ["memory-server.js"],
+      "enabledFeatureSets": ["memory.*"]
+    }
+  }
+}
+```
 
 ---
 
@@ -203,13 +306,14 @@ Servers advertise MCPL support under `experimental.mcpl`:
     // MCPL extension
     "experimental": {
       "mcpl": {
-        "version": "0.4",
+        "version": "0.5",
         "pushEvents": true,
         "contextHooks": {
           "beforeInference": true,
           "afterInference": { "blocking": false }
         },
         "inferenceRequest": { "streaming": true },
+        "stateUpdate": true,
         "modelInfo": true,
         "featureSets": { ... }  // See Section 6
       }
@@ -230,13 +334,14 @@ The host advertises its MCPL support under `capabilities.experimental.mcpl` (mir
 
     "experimental": {
       "mcpl": {
-        "version": "0.4",
+        "version": "0.5",
         "pushEvents": true,
         "contextHooks": {
           "beforeInference": true,
           "afterInference": { "blocking": true }
         },
         "inferenceRequest": { "streaming": true },
+        "stateUpdate": true,
         "featureSets": true
       }
     }
@@ -314,9 +419,11 @@ Servers declare feature sets in their capabilities:
 - `"contextHooks.beforeInference"`
 - `"contextHooks.afterInference"`
 - `"inferenceRequest"`
+- `"stateUpdate"`
 - `"tools"`
 - `"channels.publish"`
 - `"channels.observe"`
+- `"branches"`
 
 ### 6.3 Hierarchical Naming
 
@@ -725,10 +832,18 @@ Host requests rollback to a previous checkpoint:
   "id": 1,
   "result": {
     "checkpoint": "chk_abc",
-    "success": true
+    "success": true,
+    "data": { "notes": [] }
   }
 }
 ```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `checkpoint` | `string` | Yes | Checkpoint that was rolled back to |
+| `success` | `boolean` | Yes | Whether rollback succeeded |
+| `reason` | `string` | No | Present if `success: false` |
+| `data` | `any` | No | Full state at the rolled-back checkpoint (for host-managed state). Allows servers with local state (e.g., editors) to update their view without an extra `state/get` round-trip. |
 
 If rollback fails (e.g., irreversible external effects):
 
@@ -756,6 +871,138 @@ Servers decide checkpoint retention policy. Hosts SHOULD NOT assume checkpoints 
     "code": -32005,
     "message": "Checkpoint not found",
     "data": { "checkpoint": "chk_old" }
+  }
+}
+```
+
+### 8.8 state/update (Server → Host, Request)
+
+Servers with external state sources (e.g., a user-facing editor, sensor feed, or collaborative workspace) use `state/update` to push state mutations to the host **outside the tool call lifecycle**.
+
+This complements the existing flow where state travels in `tools/call` responses. Without `state/update`, host-managed state can only be updated when the agent acts. With it, external actors (humans, other systems) can mutate state and keep the host current.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "state/update",
+  "id": 1,
+  "params": {
+    "featureSet": "editor.observe",
+    "checkpoint": "chk_new",
+    "parent": "chk_old",
+    "patch": [
+      { "op": "replace", "path": "/blocks/3/text", "value": "Revised paragraph." }
+    ]
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `featureSet` | `string` | Yes | Declaring feature set |
+| `checkpoint` | `string` | Yes | New checkpoint identifier |
+| `parent` | `string \| null` | Yes | Parent checkpoint (null for initial state) |
+| `data` | `any` | No | Full state (mutually exclusive with `patch`) |
+| `patch` | `array` | No | JSON Patch (RFC 6902) delta from parent (mutually exclusive with `data`) |
+
+When both `data` and `patch` are absent, the checkpoint is an **opaque reference** — the server manages state internally (e.g., in its own Chronicle store) and the host tracks only checkpoint lineage. This mirrors the behavior described in Section 8.3 for tool call responses.
+
+When present, `data` and `patch` are mutually exclusive.
+
+**Response:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "accepted": true
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `accepted` | `boolean` | Whether the host accepted the state update |
+| `reason` | `string` | Present if `accepted: false` (e.g., unknown parent checkpoint, feature set disabled) |
+
+**Semantics:**
+
+- When `data` or `patch` is present (host-managed state), the host applies the update the same way it would apply state from a `tools/call` response.
+- When neither `data` nor `patch` is present (server-managed state), the host records the checkpoint as an opaque reference in the checkpoint tree. This is useful for servers that maintain their own persistence (e.g., an editor with its own Chronicle store) and only need the host to track checkpoint lineage for branching and rollback coordination.
+- The host MAY reject updates if the `parent` doesn't match its current checkpoint (optimistic concurrency). The server should re-fetch state and retry.
+- `state/update` does NOT trigger inference. Use `push/event` alongside it if the state change warrants the model's attention.
+- Hosts SHOULD support receiving `state/update` and `push/event` for the same external mutation as separate messages, allowing servers to decouple "state changed" from "model should react."
+
+### 8.9 Relationship Between state/update and push/event
+
+A server-side state change (e.g., user edits a document) often involves two concerns:
+
+1. **State synchronization** — the host's copy must be updated (`state/update`)
+2. **Inference trigger** — the model may need to react (`push/event`)
+
+These are intentionally separate. A server MAY send both for the same mutation, only `state/update` (silent sync), or only `push/event` (stateless notification). This lets the server control whether the model is notified of every keystroke vs. only meaningful edits.
+
+```
+User types in editor
+  → state/update (every keystroke, keeps host state current)
+  → push/event  (debounced, only on paragraph completion)
+```
+
+### 8.10 state/get (Server → Host, Request)
+
+Servers use `state/get` to retrieve the current host-managed state for a feature set. This is essential for:
+
+- **Startup hydration** — a server (e.g., an editor) that renders state needs the current document after connecting
+- **Reconnection** — after a disconnect/reconnect cycle, the server's local state may be stale or lost
+- **Sync recovery** — after a parent mismatch rejection on `state/update`, the server can fetch fresh state and retry
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "state/get",
+  "id": 1,
+  "params": {
+    "featureSet": "editor.observe"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `featureSet` | `string` | Yes | Feature set to retrieve state for |
+
+**Response:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "checkpoint": "chk_abc",
+    "data": {
+      "blocks": [
+        { "type": "heading", "text": "Chapter 1" },
+        { "type": "paragraph", "text": "It was a dark and stormy night." }
+      ]
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `checkpoint` | `string \| null` | Current checkpoint ID (null if no state has been recorded yet) |
+| `data` | `any` | Current reconstructed state (null if no state exists) |
+
+If the feature set is not registered as stateful or not host-managed, the host responds with an error:
+
+```jsonc
+{
+  "error": {
+    "code": -32006,
+    "message": "No host-managed state for feature set",
+    "data": { "featureSet": "editor.observe" }
   }
 }
 ```
@@ -1474,9 +1721,251 @@ Add to Appendix A:
 
 ---
 
-## 15. Examples
+## 15. Branches
 
-### 15.1 Memory Server
+Branches allow servers to request that the host create, switch, list, or delete branches in the host's state. This enables collaborative workflows where a server (e.g., an editor) can suggest branching the conversation to explore alternatives, and the host decides whether to accept.
+
+All branch operations are requests from the server that the host MAY reject. The host is the authority over its own branch state.
+
+### 15.1 Capabilities
+
+Servers and hosts advertise branch support under `experimental.mcpl.branches`.
+
+```jsonc
+{
+  "experimental": {
+    "mcpl": {
+      "branches": {
+        "list": true,
+        "create": true,
+        "switch": true,
+        "delete": true
+      }
+    }
+  }
+}
+```
+
+### 15.2 branches/list (Server → Host, Request)
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "branches/list",
+  "id": 1,
+  "params": {
+    "featureSet": "editor.observe"
+  }
+}
+```
+
+**Response:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "branches": [
+      {
+        "name": "main",
+        "head": 42,
+        "isCurrent": true,
+        "parent": null,
+        "branchPoint": null
+      },
+      {
+        "name": "try-alternative-intro",
+        "head": 48,
+        "isCurrent": false,
+        "parent": "main",
+        "branchPoint": 35
+      }
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Branch name |
+| `head` | `number` | Head sequence number |
+| `isCurrent` | `boolean` | Whether this is the active branch |
+| `parent` | `string \| null` | Parent branch name (null for root) |
+| `branchPoint` | `number \| null` | Sequence at which this branch diverged from parent |
+
+### 15.3 branches/current (Server → Host, Request)
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "branches/current",
+  "id": 1,
+  "params": {
+    "featureSet": "editor.observe"
+  }
+}
+```
+
+**Response:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "name": "main",
+    "head": 42
+  }
+}
+```
+
+### 15.4 branches/create (Server → Host, Request)
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "branches/create",
+  "id": 1,
+  "params": {
+    "featureSet": "editor.observe",
+    "name": "try-alternative-intro",
+    "from": "main",
+    "atCheckpoint": "seq_35"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `featureSet` | `string` | Yes | Declaring feature set |
+| `name` | `string` | Yes | Name for the new branch |
+| `from` | `string` | No | Source branch (default: current branch) |
+| `atCheckpoint` | `string` | No | Checkpoint to branch from (default: head of source branch) |
+
+**Response:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "accepted": true,
+    "name": "try-alternative-intro",
+    "head": 35
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `accepted` | `boolean` | Whether the host created the branch |
+| `name` | `string` | Branch name (may differ from requested if host renames) |
+| `head` | `number` | Head sequence of the new branch |
+| `reason` | `string` | Present if `accepted: false` |
+
+### 15.5 branches/switch (Server → Host, Request)
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "branches/switch",
+  "id": 1,
+  "params": {
+    "featureSet": "editor.observe",
+    "name": "try-alternative-intro"
+  }
+}
+```
+
+**Response:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "accepted": true,
+    "name": "try-alternative-intro",
+    "head": 48,
+    "previous": "main"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `accepted` | `boolean` | Whether the host switched |
+| `name` | `string` | Branch switched to |
+| `head` | `number` | Head sequence of the branch |
+| `previous` | `string` | Branch that was active before the switch |
+| `reason` | `string` | Present if `accepted: false` |
+
+### 15.6 branches/delete (Server → Host, Request)
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "branches/delete",
+  "id": 1,
+  "params": {
+    "featureSet": "editor.observe",
+    "name": "try-alternative-intro"
+  }
+}
+```
+
+**Response:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "accepted": true,
+    "name": "try-alternative-intro"
+  }
+}
+```
+
+The host MUST reject deletion of the current branch. The host MAY reject deletion for any other reason (e.g., policy, branch is pinned).
+
+### 15.7 branches/changed (Host → Server, Notification)
+
+The host notifies servers when branches change, whether initiated by the server, another server, or the host itself.
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "branches/changed",
+  "params": {
+    "event": "switched",
+    "branch": "try-alternative-intro",
+    "previous": "main"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `event` | `string` | Yes | `"created"`, `"switched"`, or `"deleted"` |
+| `branch` | `string` | Yes | Branch that was created, switched to, or deleted |
+| `previous` | `string` | No | Previous branch (only for `"switched"` events) |
+| `head` | `number` | No | Head sequence (present for `"created"` and `"switched"`) |
+| `parent` | `string` | No | Parent branch (present for `"created"`) |
+
+### 15.8 Error Codes
+
+| Code | Message | Description |
+|------|---------|-------------|
+| `-32025` | Branch not found | Target branch does not exist |
+| `-32026` | Branch operation rejected | Host declined the operation (policy, mid-inference, etc.) |
+
+---
+
+## 16. Examples
+
+### 16.1 Memory Server
 
 **Capabilities:**
 
@@ -1575,7 +2064,7 @@ Add to Appendix A:
 }
 ```
 
-### 15.2 Compliance Server (Blocking Hook)
+### 16.2 Compliance Server (Blocking Hook)
 
 **Capabilities:**
 
@@ -1640,6 +2129,9 @@ Add to Appendix A:
 | `-32001` | Feature set not enabled | Message used a disabled feature set |
 | `-32003` | Unknown feature set | Message used undeclared feature set |
 | `-32005` | Checkpoint not found | Rollback targeted a pruned or unknown checkpoint |
+| `-32006` | No host-managed state | `state/get` for a feature set that is not host-managed or not stateful |
+| `-32025` | Branch not found | Target branch does not exist |
+| `-32026` | Branch operation rejected | Host declined the operation (policy, mid-inference, etc.) |
 | `-32017` | Channel not permitted | Lacking scope to publish or observe channel |
 | `-32023` | Unknown channel | Channel id doesn’t exist or not registered |
 | `-32024` | Channel open failed | Server could not open/connect the requested channel |
@@ -1716,9 +2208,11 @@ Add to Appendix A:
           "contextHooks.beforeInference",
           "contextHooks.afterInference",
           "inferenceRequest",
+          "stateUpdate",
           "tools",
           "channels.publish",
-          "channels.observe"
+          "channels.observe",
+          "branches"
         ]
       }
     }
@@ -1735,6 +2229,23 @@ Add to Appendix A:
 ---
 
 ## Changelog
+
+### 0.5.0-draft (March 2026)
+
+- Added WebSocket as a first-class transport (Section 4.2) — single bidirectional channel, connection = session, ping/pong heartbeat, optional session continuity via `sessionId`
+- Added `state/update` (Server → Host, Request) for server-initiated state synchronization outside the tool call lifecycle (Section 8.8)
+- Clarified relationship between `state/update` and `push/event` — state sync and inference triggers are intentionally separate concerns (Section 8.9)
+- Added `state/get` (Server → Host, Request) for servers to pull current host-managed state on startup, reconnection, or sync recovery (Section 8.10)
+- Extended `state/rollback` response with optional `data` field so servers can update their local view without an extra round-trip (Section 8.6)
+- Extended `FeatureSet.uses` with `stateUpdate`
+- Added `stateUpdate` to capability negotiation (Sections 5.1, 5.2)
+- Added error code `-32006` (No host-managed state) for `state/get` failures
+- `state/update` now supports opaque checkpoints (both `data` and `patch` absent) for servers that manage their own persistence (Section 8.8)
+- Added Branches (Section 15) — server-initiated branch management with `branches/list`, `branches/current`, `branches/create`, `branches/switch`, `branches/delete`, and `branches/changed`
+- Extended `FeatureSet.uses` with `branches`
+- Added branch-related error codes `-32025`, `-32026` in Appendix A
+- Renumbered Examples to Section 16
+- Bumped version to 0.5
 
 ### 0.4.0-draft (March 2026)
 

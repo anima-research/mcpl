@@ -1,10 +1,20 @@
 # MCPL RFC-003: Server Manifest Changes
 
-**Status:** Draft
+**Status:** Accepted — not yet applied to SPEC.md
 **Targets:** MCPL Protocol Specification ≥ 0.6
 **Authors:** Sol and Claude Code, with antra
 **Date:** 2026-08-02
 **Depends on:** RFC-002 / SPEC §5.4, §6.7 — every consequence here routes through the existing grant and receipt machinery.
+
+**Review history.** Reviewed by Sol across three passes. Objections raised and resolved:
+an uninteroperable "canonical content digest" (no normalization, algorithm, encoding, or
+self-exclusion defined); a malformed replacement leaving stale broader authority standing;
+an overclaiming ontology impact name; and an inexact manifest object — §3 named the
+`experimental.mcpl` block while §5 returned an invented `capabilities` wrapper, which would
+have let two conforming implementations produce different revisions. One reported defect (a
+duplicated line in §6) was a false positive and was retracted. antra rejected the proposed
+malformed-update remedy as too much friction; §6 resolves the same hole through RFC-002's
+existing removals-eager/additions-negotiated asymmetry instead.
 
 ---
 
@@ -135,6 +145,36 @@ Additionally, **capability paths and tag identifiers MUST be ASCII** — `[A-Za-
 For ASCII strings UTF-8 byte order, UTF-16 code-unit order, and code-point order coincide,
 so the ordering question cannot arise for the values this actually applies to. The UTF-8
 rule governs anything else.
+
+#### Test vector
+
+Implementations MUST reproduce this exactly. It is the interoperability check: two
+implementations that agree here agree on canonicalization, set ordering, hashing, and
+encoding.
+
+Manifest (`revision` absent):
+
+```json
+{"version":"0.5","pushEvents":true,"contextHooks":{"beforeInference":true},
+ "inferenceLifecycle":true,"channels":{"register":true,"publish":true,"incoming":true},
+ "featureSets":{"demo.messaging":{"description":"Demo",
+   "uses":["channels.publish","channels.incoming","pushEvents","tools"]}}}
+```
+
+Canonical bytes after set-sorting `uses` and applying JCS:
+
+```
+{"channels":{"incoming":true,"publish":true,"register":true},"contextHooks":{"beforeInference":true},"featureSets":{"demo.messaging":{"description":"Demo","uses":["channels.incoming","channels.publish","pushEvents","tools"]}},"inferenceLifecycle":true,"pushEvents":true,"version":"0.5"}
+```
+
+Expected:
+
+```
+revision = sha256:_YZTS0h1tqTAMZI6eElCszSQE2WNx3xhAhmgUvNI9H4
+```
+
+Note `uses` is reordered (set semantics) while object members are reordered by JCS — both
+must happen, and neither alone yields this value.
 
 A host MAY recompute the digest from a fetched manifest and compare. A mismatch is a
 **conformance defect**, not grounds to reject the manifest — the manifest's *content* is

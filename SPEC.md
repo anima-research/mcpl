@@ -1347,7 +1347,27 @@ Response:
 }
 ```
 
-- `channels/outgoing/chunk` (Host → Server, Notification): Observers receive moderated deltas for a channel.
+- `channels/outgoing/chunk` (Host → Server, Notification): Moderated outgoing
+  text deltas, streamed while the model is still generating. Semantics:
+
+  - **Opt-in**: sent only to servers that declared `channels.streaming: true`
+    in their initialize capabilities. Servers that did not declare it MUST NOT
+    receive these notifications.
+  - **Recipient**: the server that registered the target channel (the one
+    whose `channels/publish` will eventually deliver the same content). This
+    enables live consumers — streamed message rendering, voice synthesis —
+    on the owning surface.
+  - **Moderated, fail-closed**: a chunk stream MUST NOT contain text the
+    host's delivery path would refuse to deliver (e.g. text with no resolved
+    destination, private/skip segments). When routing is undecided, the host
+    withholds; it never streams speculatively.
+  - **Ordering**: `index` is monotonically increasing per `inferenceId`
+    (a single counter across all channels of that inference). Per-channel
+    deltas concatenated in `index` order reconstruct that channel's streamed
+    text.
+  - **Advisory only**: chunks are an observer surface. The authoritative
+    delivery remains `channels/publish`; servers MUST NOT treat a chunk
+    stream as delivered content.
 
 ```jsonc
 {
@@ -1363,7 +1383,13 @@ Response:
 }
 ```
 
-- `channels/outgoing/complete` (Host → Server, Notification): Observers receive final moderated content blocks.
+- `channels/outgoing/complete` (Host → Server, Notification): Closes an
+  outgoing stream. Sent once per (inferenceId, channelId) that received
+  chunks, on every inference exit path (complete, abort, error), carrying the
+  full moderated text for that channel. Consumers use it to finalize (settle
+  a rendered message, end a synthesized utterance) and to reconcile any
+  dropped chunks. Same opt-in and advisory semantics as
+  `channels/outgoing/chunk`.
 
 ```jsonc
 {

@@ -1,6 +1,6 @@
 # MCPL RFC-004: The `mcpl://` URI Scheme
 
-**Status:** Draft
+**Status:** Draft rev 2 — Sol's two blockers addressed
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by Sol, with antra
 **Date:** 2026-08-02
@@ -49,21 +49,32 @@ mcpl-URI = "mcpl://" authority path-abempty [ "?" query ]
   of reaching for the shorter one.
 - **`mcpl://` never resolves to `ws://`.** Plaintext is reachable only by writing `ws://`
   explicitly, which is deliberately more effort than writing `mcpl://`.
-- **`mcpl://localhost` is not special.** It resolves to `wss://localhost:443` like any other
-  authority. Local development uses an explicit `ws://localhost:PORT`. A scheme that silently
+- **`mcpl://localhost` is not special.** It resolves to `wss://localhost/` like any other
+  authority (port 443 implied and elided, §8 vector 9). Local development uses an explicit
+  `ws://localhost:PORT`. A scheme that silently
   weakens for one hostname is a scheme whose security property cannot be stated in one
   sentence.
 
-**Fragments MUST NOT appear.** A host **MUST** reject an `mcpl://` URI containing `#`. There
-is no defined meaning for a fragment here, and silently ignoring one would discard something
-the author believed was significant. Reserved for a future RFC.
+### 2.1 Rejected forms
 
-**Userinfo (`user:pass@host`) MUST NOT appear.** A host **MUST** reject it. This is a syntax
-decision, not a policy one: RFC 3986 §3.2.1 deprecates the production, and URI parsers and
-loggers handle it inconsistently enough that its behaviour cannot be specified portably. It
-is **not** a statement about credentials — see §4.
+A host **MUST** reject each of the following, before any parsing or substitution (§3). Each
+is a string-level check on the input, and each exists because the alternative is a silent
+change of meaning rather than an error.
 
-### 2.1 Compatibility
+| Form | Example | Why rejected |
+|---|---|---|
+| Fragment | `mcpl://h/x#frag` | No defined meaning. Ignoring one discards something the author believed significant. Reserved for a future RFC. |
+| Userinfo | `mcpl://u:p@h/x` | RFC 3986 §3.2.1 deprecates the production; parsers and loggers handle it inconsistently enough that behaviour cannot be specified portably. A **syntax** rule, not a credential one — see §4. |
+| Empty authority | `mcpl:///x` | **Silently retargets.** See below. |
+| Dot segments | `mcpl://h/a/../b`, `mcpl://h/a/%2e%2e/b` | Cannot survive resolution intact; preserving them is unimplementable and unenforceable. See §3.2. |
+
+**Empty authority is the dangerous one.** `mcpl:///evil` looks like a path-only URI, but
+under §3 the scheme is substituted and the result is parsed as `wss:///evil` — and a WHATWG
+URL parser reinterprets the first path segment as the **host**, yielding `wss://evil/`. A URI
+that names no host would dial one. Reject at the string level, before substitution; the
+parser will not raise it for you.
+
+### 2.2 Compatibility
 
 `ws://` and `wss://` remain fully accepted wherever a URL is accepted today. This RFC adds a
 spelling; it deprecates nothing and breaks no existing configuration.
@@ -73,40 +84,76 @@ agent wrote (§5).
 
 ---
 
-## 3. Resolution
+## 3. Resolution and canonicalization
 
 Resolution is a **pure syntactic rewrite**. No lookup, no negotiation, no probing.
 
-| Component | Rule |
-|---|---|
-| scheme | `mcpl` → `wss` |
-| authority | preserved verbatim after canonicalization (§3.1) |
-| port | absent ⇒ 443; present ⇒ preserved |
-| path | preserved verbatim, including empty |
-| query | **preserved verbatim, in the order written** |
-| fragment | rejected (§2) |
+```
+1. Reject the forms in §2.1 — string-level checks on the input, before anything else.
+2. Substitute the scheme: mcpl: → wss:
+3. Parse the result with a WHATWG-URL-conformant parser.
+   That parsed value IS the resolved transport target.
+4. The canonical mcpl:// form is that same value with the scheme mapped back to mcpl:.
+```
 
-The query is preserved *as written* — not sorted, not deduplicated, not reordered. Query
+**Resolve first, then canonicalize.** This ordering is the whole design, and it is not
+arbitrary — see §3.1.
+
+Step 3 delivers, for free and identically in every conformant implementation: host
+lowercasing, IDNA/punycode conversion, elision of the default port 443, empty-path
+normalization to `/`, IPv6 literal lowercasing, and dot-segment removal (which cannot occur,
+having been rejected in step 1).
+
+The **query is preserved verbatim** — order kept, duplicates kept, nothing sorted. Query
 parameters are server-defined (`?world=abc` means something to the server and nothing to
-MCPL), so canonicalizing them would change their meaning. This differs deliberately from the
-manifest digest of SPEC §17.2, where ordering is normalized because the host is hashing the
-value rather than transmitting it.
+MCPL), so normalizing them would change their meaning. This is deliberately unlike the
+manifest digest of SPEC §17.2, which normalizes because it *hashes* the value rather than
+transmitting it. A WHATWG parser preserves query order and duplicates, so this needs no
+special handling — but an implementation that round-trips through `URLSearchParams` and
+re-serializes will break it.
 
-### 3.1 Canonicalization
+### 3.1 Why not canonicalize the `mcpl://` form directly
 
-Two URIs that differ only as below are **the same endpoint**, and a host comparing endpoints
-(for deduplication, for a "you are already connected" check) **MUST** compare canonical forms:
+**`mcpl:` is a non-special scheme.** WHATWG URL applies host and path normalization only to
+its special schemes (`http`, `https`, `ws`, `wss`, `ftp`, `file`). Parsing an `mcpl://` URI
+directly therefore performs **almost none** of the normalization this section requires:
 
-1. **Scheme** lowercased.
-2. **Host** lowercased, then IDNA-normalized to A-label form (RFC 5891). `mcpl://Eidoverse.Animalabs.AI` and `mcpl://eidoverse.animalabs.ai` are one endpoint.
-3. **Default port elided.** `mcpl://h:443/x` canonicalizes to `mcpl://h/x`. A non-default port is retained.
-4. **Empty path** normalized to `/`. `mcpl://h` and `mcpl://h/` are one endpoint.
-5. **Percent-encoding** normalized per RFC 3986 §6.2.2: hex digits uppercased, and unreserved characters decoded.
-6. **Query and fragment** are *not* canonicalized. (Fragments cannot appear at all.)
+| Input | Parsed as `mcpl:` (non-special) | Parsed as `wss:` (special) |
+|---|---|---|
+| `…//EIDOVERSE.Animalabs.AI:443/x` | host `EIDOVERSE.Animalabs.AI:443` — case kept, port kept | host `eidoverse.animalabs.ai` — lowercased, port elided |
+| `…//ünicode.example/x` | `%C3%BCnicode.example` — percent-encoded UTF-8 | `xn--nicode-2ya.example` — IDNA A-label |
+| `…///x` | host `""` — accepted | host `x` — first path segment promoted |
 
-Path segments are **not** normalized beyond percent-encoding — `.` and `..` are left alone,
-because a server is entitled to treat them as literal path components and collapsing them
-would silently retarget the connection.
+The middle row is the one that forces the design: the same input yields **two different
+hosts** depending on which form an implementation normalizes. Not a formatting difference —
+a different endpoint. An implementation that canonicalizes `mcpl://` directly and one that
+resolves first would disagree about identity, deduplication, and what "already connected"
+means.
+
+So: **a host MUST NOT rely on a URL library's normalization of the `mcpl://` form.** Canonical
+identity is defined by the resolved `wss:` value, which every conformant parser computes the
+same way.
+
+### 3.2 Dot segments are rejected, not preserved
+
+An earlier draft required `.` and `..` path segments to be preserved literally, on the ground
+that a server may treat them as real path components and collapsing them silently retargets
+the connection. The concern is right; the remedy was unimplementable.
+
+WHATWG URL removes dot segments even for non-special schemes: `mcpl://h/a/../b` parses to
+`mcpl://h/b`, and `%2e%2e` collapses identically. Preservation would require every
+implementation to hand-roll a parser, and would still not hold — HTTP and WebSocket
+infrastructure between the host and the server may normalize again in transit. The spec would
+be promising something it cannot deliver past the first proxy.
+
+Rejecting instead gives the same security property — no silent retargeting — without
+depending on a guarantee nothing downstream honours. `.`, `..`, and their percent-encoded
+forms (`%2e`, `%2E`, in either position) **MUST** be rejected as complete path segments.
+Percent-encoded separators are *not* affected: `a%2fb` is one literal segment containing a
+slash and remains valid.
+
+*(Blocker raised by Sol; the empty-authority and non-special-scheme findings above came out
+of verifying it.)*
 
 ---
 
@@ -137,26 +184,39 @@ does not constrain it.
 
 ---
 
-## 5. The canonical URI is retained
+## 5. Three values, not one
 
-A host **MUST** retain the URI as written, and **MUST** record the resolved transport target
-**separately**. It **MUST NOT** overwrite the configured value with the resolved one.
+An endpoint has **three** distinct values. A host **MUST** retain all three and **MUST NOT**
+derive one by overwriting another:
+
+| Value | What it is | Used for |
+|---|---|---|
+| `configuredUri` | Exactly what the operator or agent wrote, byte for byte | Provenance — what was *intended* |
+| `canonicalUri` | The §3 normalized `mcpl://` form | Equality, deduplication, "already connected" |
+| `resolvedTransport` | The `wss://` target actually dialled | Debugging, logs, what the socket did |
 
 ```jsonc
 {
   "id": "eidoverse",
-  "uri": "mcpl://eidoverse.animalabs.ai?world=abc",   // as configured — canonical
-  "resolved": "wss://eidoverse.animalabs.ai:443/?world=abc"  // derived, informational
+  "configuredUri":    "mcpl://EIDOVERSE.Animalabs.AI?world=abc",
+  "canonicalUri":     "mcpl://eidoverse.animalabs.ai/?world=abc",
+  "resolvedTransport": "wss://eidoverse.animalabs.ai/?world=abc"
 }
 ```
 
-Collapsing these loses the operator's intent. A config that says `mcpl://` is asserting "this
-is an MCPL endpoint, reached securely"; rewriting it to `wss://` silently converts that
-assertion into an implementation detail, and the next reader cannot tell which was meant.
+Collapsing any pair loses something that cannot be recovered. Overwriting `configuredUri`
+with the canonical form destroys **intent** — a config that says `mcpl://` asserts "this is
+an MCPL endpoint, reached securely", and rewriting it makes that assertion look like an
+implementation detail to the next reader. Overwriting `canonicalUri` with the configured
+form destroys **identity** — two spellings of one endpoint stop comparing equal, and
+deduplication silently fails.
 
-`mcpl_list` **SHOULD** surface the canonical URI and the resolved target as distinct fields —
-alongside advertised capabilities, effective grant (§5.4), and negotiation freshness (§17),
-which are also distinct facts that have been conflated.
+`mcpl_list` **SHOULD** expose all three as separate fields, alongside advertised
+capabilities, the effective grant (§5.4), and manifest freshness (§17) — which are likewise
+distinct facts that have historically been shown as one.
+
+*(Blocker raised by Sol: the earlier draft called the configured value "canonical", which is
+exactly the conflation that makes implementations overwrite one or the other.)*
 
 ---
 
@@ -205,28 +265,53 @@ destination is safe to reach.
 
 ## 8. Test vectors
 
-Implementations **MUST** reproduce these. `→` is resolution; `≡` is canonical equality.
+Implementations **MUST** reproduce these exactly. Every value below was produced by running
+the §3 algorithm, not written by hand.
 
-| # | Input | Result |
+### 8.1 Resolution
+
+| # | Input | `canonicalUri` | `resolvedTransport` |
+|---|---|---|---|
+| 1 | `mcpl://example.com` | `mcpl://example.com/` | `wss://example.com/` |
+| 2 | `mcpl://example.com/path` | `mcpl://example.com/path` | `wss://example.com/path` |
+| 3 | `mcpl://example.com:8443/x` | `mcpl://example.com:8443/x` | `wss://example.com:8443/x` |
+| 4 | `mcpl://eidoverse.animalabs.ai?world=abc` | `mcpl://eidoverse.animalabs.ai/?world=abc` | `wss://eidoverse.animalabs.ai/?world=abc` |
+| 5 | `MCPL://Example.COM/x` | `mcpl://example.com/x` | `wss://example.com/x` |
+| 6 | `mcpl://EIDOVERSE.Animalabs.AI:443/x` | `mcpl://eidoverse.animalabs.ai/x` | `wss://eidoverse.animalabs.ai/x` |
+| 7 | `mcpl://ünicode.example/x` | `mcpl://xn--nicode-2ya.example/x` | `wss://xn--nicode-2ya.example/x` |
+| 8 | `mcpl://[2001:DB8::1]:8443/x` | `mcpl://[2001:db8::1]:8443/x` | `wss://[2001:db8::1]:8443/x` |
+| 9 | `mcpl://localhost/x` | `mcpl://localhost/x` | `wss://localhost/x` |
+| 10 | `mcpl://h/p?b=2&a=1` | `mcpl://h/p?b=2&a=1` | `wss://h/p?b=2&a=1` |
+| 11 | `mcpl://h/x?a=1&a=2` | `mcpl://h/x?a=1&a=2` | `wss://h/x?a=1&a=2` |
+| 12 | `mcpl://h/a%2fb` | `mcpl://h/a%2fb` | `wss://h/a%2fb` |
+| 13 | `mcpl://h/%7Euser` | `mcpl://h/%7Euser` | `wss://h/%7Euser` |
+
+Note vector 13: percent-encoding is **not** normalized. `%7Euser` and `~user` are different
+paths, and an implementation that decodes unreserved characters is non-conforming. (An
+earlier draft of this RFC claimed the opposite; it was wrong.)
+
+Vectors 10 and 11 exist because an implementation that round-trips the query through
+`URLSearchParams` and re-serializes will sort or deduplicate, and fail both silently.
+
+Vectors 6 and 7 are the ones that fail if canonicalization is applied to the `mcpl://` form
+directly rather than to the resolved form (§3.1): the port survives, the case survives, and
+`ünicode.example` becomes `%C3%BCnicode.example` instead of `xn--nicode-2ya.example`.
+
+### 8.2 Rejection
+
+| # | Input | Rejected because |
 |---|---|---|
-| 1 | `mcpl://example.com` | → `wss://example.com:443/` |
-| 2 | `mcpl://example.com/path` | → `wss://example.com:443/path` |
-| 3 | `mcpl://example.com:8443/x` | → `wss://example.com:8443/x` |
-| 4 | `mcpl://eidoverse.animalabs.ai?world=abc` | → `wss://eidoverse.animalabs.ai:443/?world=abc` |
-| 5 | `mcpl://h/p?b=2&a=1` | → `wss://h:443/p?b=2&a=1` (order preserved) |
-| 6 | `mcpl://Example.COM/x` | ≡ `mcpl://example.com/x` |
-| 7 | `mcpl://example.com:443/x` | ≡ `mcpl://example.com/x` |
-| 8 | `mcpl://example.com` | ≡ `mcpl://example.com/` |
-| 9 | `mcpl://h/%7Euser` | ≡ `mcpl://h/~user` (unreserved decoded) |
-| 10 | `mcpl://h/a%2fb` | **≢** `mcpl://h/a/b` (reserved stays encoded) |
-| 11 | `mcpl://h/a/../b` | **≢** `mcpl://h/b` (dot segments not collapsed) |
-| 12 | `mcpl://localhost/x` | → `wss://localhost:443/x` (no local exception) |
-| 13 | `mcpl://h/x#frag` | **reject** — fragment |
-| 14 | `mcpl://u:p@h/x` | **reject** — userinfo |
-| 15 | `mcpl://h/x?a=1&a=2` | → `wss://h:443/x?a=1&a=2` (duplicates preserved) |
+| 14 | `mcpl:///x` | empty authority — would otherwise dial host `x` |
+| 15 | `mcpl://u:p@h/x` | userinfo |
+| 16 | `mcpl://h/x#frag` | fragment |
+| 17 | `mcpl://h/a/../b` | dot segment |
+| 18 | `mcpl://h/a/%2e%2e/b` | dot segment, percent-encoded |
+| 19 | `mcpl://h/a/./b` | dot segment (single) |
+| 20 | `mcpl://h:99999/x` | port out of range |
 
-Vector 5 and 15 exist because the obvious implementation — round-tripping through a URL
-object that sorts or dedupes query parameters — fails them silently.
+Vectors 14 and 18 are the two that a string-level pre-check catches and a parser does not:
+`mcpl:///x` parses happily as a non-special URI with an empty host, and `%2e%2e` collapses
+silently into a shorter path.
 
 ---
 

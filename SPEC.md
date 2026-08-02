@@ -17,6 +17,7 @@ MCP Live (MCPL) is a backward-compatible extension to the Model Context Protocol
 4. **Capability Grants** — Host-computed, hierarchical authorization separating observation from authority to alter
 5. **Feature Sets** — Named behavior bundles, derived from the grant
 6. **Event Tags** — Namespaced semantic labels letting hosts route attention portably
+7. **Manifest Changes** — Servers announce that their surface changed; hosts re-fetch and diff rather than trusting a payload
 
 MCPL enables servers to be active participants in the inference lifecycle rather than passive tool providers.
 
@@ -40,6 +41,7 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 14. [Channels of Communication](#14-channels-of-communication)
 15. [Examples](#15-examples)
 16. [Event Tags](#16-event-tags)
+17. [Server Manifest Changes](#17-server-manifest-changes)
 
 ---
 
@@ -203,6 +205,7 @@ Servers advertise MCPL support under `experimental.mcpl`:
     "experimental": {
       "mcpl": {
         "version": "0.5",
+        "revision": "sha256:QLXa7BigUFzNlw_IWPSqpYbDzdvBX7PVQIPS5lgnkaw",  // §17.2, optional
         "pushEvents": true,
         "contextHooks": {
           "beforeInference": {
@@ -227,6 +230,10 @@ advertised as a nested object whose members are the leaves of §6.2's vocabulary
 none. `"beforeInference": true` therefore remains valid and means observe plus all three
 injection positions — but a server that only injects should say so, and the host computes the
 grant against leaves either way (§5.4).
+
+This object is the server's **manifest**. A server that supports manifest changes (§17)
+includes a `revision` member carrying its canonical content digest (§17.2); servers that do
+not may omit it, and their manifest is fixed for the life of the connection.
 
 ### 5.2 Host Support
 
@@ -556,7 +563,7 @@ had changed, which is the self-attestation defect §5.4 exists to remove.
 > reconnection was sufficient. That rationale is **wrong**. This specification made the
 > manifest consequential (capabilities determine the grant, `uses` determines degradation,
 > ontology acceptance is bound to a snapshot), so a stale manifest is no longer cosmetic.
-> The method stays removed; the need is real and is met by RFC-003's manifest mechanism
+> The method stays removed; the need is real and is met by the manifest mechanism of §17
 > (`mcpl/manifestChanged` + `mcpl/manifest`), where the host re-fetches and diffs rather
 > than trusting a payload.
 
@@ -1909,11 +1916,333 @@ the closure-expanded tag set.
 
 ---
 
+## 17. Server Manifest Changes
+
+A server's manifest became **consequential** in 0.5.0: capabilities determine the grant
+(§5.4), `uses` determines degradation (§6.4), and ontology acceptance is bound to a snapshot
+(§16.5). A stale manifest is therefore no longer cosmetic, and discovery at `initialize`
+alone is insufficient.
+
+This section adds two optional methods:
+
+- **`mcpl/manifestChanged`** (Server → Host, Notification) — an opaque revision plus the set
+  of changed domains. A hint, nothing more.
+- **`mcpl/manifest`** (Host → Server, Request) — fetch the canonical current manifest.
+
+The host validates and **diffs** the fetched manifest, applies §6.7's existing consequences,
+and emits one normalized change receipt using a closed, host-derived vocabulary. This
+section adds a **trigger** for existing machinery; it adds no new policy.
+
+### 17.1 The manifest and its revision
+
+The **manifest** is the complete `experimental.mcpl` object a server presents at
+`initialize` (§5.1), exactly as initialized — capability members at the top level, with
+`featureSets` as one member among them. There is no nested `capabilities` wrapper.
+
+A server that supports this section includes a `revision: string` member in that object.
+
+Three change **domains** partition it:
+
+| Domain | Members |
+|---|---|
+| `capabilities` | every member other than `version`, `revision`, and `featureSets` |
+| `featureSets` | the `featureSets` member, excluding any `tagOntology` within it |
+| `tagOntology` | the `tagOntology` of any feature set |
+
+`version` and `revision` are not a domain: `version` is protocol identity, not surface, and
+`revision` is derived (§17.2).
+
+- The revision **MUST** be the canonical content digest of §17.2. It **MUST NOT** be
+  hand-maintained or tied to a package version, and **MUST** be stable across process
+  restarts.
+- The revision is nonetheless **server-authored and untrusted**. A host **MUST NOT** treat an
+  unchanged revision as proof that nothing changed.
+- Hosts **MUST NOT** parse or order revisions. Equality is the only defined operation.
+- The host's **diff of the fetched manifest is authoritative** for every decision. The
+  revision exists to make the common case cheap, not to be believed.
+
+> **Why content-derived is normative rather than advice.** A hand-maintained revision fails
+> the way every hand-maintained invariant fails — silently, and precisely when someone is
+> busy shipping something else. A content digest moves on its own, so a cooperative server
+> **cannot accidentally** change without announcing. That does not make this a security
+> mechanism (§17.9); it moves silent change from *likely-by-accident* to *only-by-intent*.
+> Stating it as an invariant rather than as a library API also makes it portable: any
+> implementation in any language can satisfy it, and a host can check it by fetching twice.
+
+**Package version is not surface identity.** A protocol- or package-version field is useful
+for validation and migration, and **MUST NOT** substitute for comparing the manifest.
+
+### 17.2 Canonical digest
+
+The digest **MUST** be computed as:
+
+```
+revision = "sha256:" + base64url_unpadded( SHA-256( JCS( manifest_without_revision ) ) )
+```
+
+- **`JCS`** is JSON Canonicalization Scheme (RFC 8785).
+- **`manifest_without_revision`** is the complete `experimental.mcpl` object with the
+  `revision` member removed, so the digest never covers itself. Nothing else is stripped —
+  `version` is included.
+- **`base64url_unpadded`** is RFC 4648 §5 without `=` padding.
+
+**Array semantics.** Canonicalization fixes object member order but not array order, so each
+array is declared set-like or list-like:
+
+| Field | Semantics |
+|---|---|
+| `uses` | **Set** — sorted (see below), duplicates removed |
+| `coreTags`, `tagOntology.tags.*.implies` | **Set** — same treatment |
+| `keyed.*.values` | **List** — order is meaningful and preserved |
+
+Any array not listed is a list; its order is part of the manifest and **MUST** be
+deterministic across restarts.
+
+**Set ordering.** Sort by **UTF-8 byte sequence**, ascending. Not "code point order" and not
+a language's default string comparison: JavaScript compares UTF-16 code units and Rust
+compares UTF-8 bytes, and the two disagree above U+FFFF, so an unqualified "sort" is not
+interoperable.
+
+Additionally, **capability paths and tag identifiers MUST be ASCII** — `[A-Za-z0-9._:*-]`.
+For ASCII strings UTF-8 byte order, UTF-16 code-unit order, and code-point order coincide,
+so the ordering question cannot arise for the values this actually applies to. The UTF-8
+rule governs anything else.
+
+#### Test vector
+
+Implementations **MUST** reproduce this exactly. It is the interoperability check: two
+implementations that agree here agree on canonicalization, set ordering, hashing, and
+encoding.
+
+Manifest (`revision` absent):
+
+```json
+{"version":"0.5","pushEvents":true,"contextHooks":{"beforeInference":true},
+ "inferenceLifecycle":true,"channels":{"register":true,"publish":true,"incoming":true},
+ "featureSets":{"demo.messaging":{"description":"Demo",
+   "uses":["channels.publish","channels.incoming","pushEvents","tools"]}}}
+```
+
+Canonical bytes after set-sorting `uses` and applying JCS:
+
+```
+{"channels":{"incoming":true,"publish":true,"register":true},"contextHooks":{"beforeInference":true},"featureSets":{"demo.messaging":{"description":"Demo","uses":["channels.incoming","channels.publish","pushEvents","tools"]}},"inferenceLifecycle":true,"pushEvents":true,"version":"0.5"}
+```
+
+Expected:
+
+```
+revision = sha256:_YZTS0h1tqTAMZI6eElCszSQE2WNx3xhAhmgUvNI9H4
+```
+
+Note `uses` is reordered (set semantics) while object members are reordered by JCS — both
+must happen, and neither alone yields this value.
+
+A host **MAY** recompute the digest from a fetched manifest and compare. A mismatch is a
+**conformance defect**, not grounds to reject the manifest — the manifest's *content* is
+what the host acts on, and the digest is only the cheap path (§17.1).
+
+### 17.3 `mcpl/manifestChanged` (Server → Host, Notification)
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "mcpl/manifestChanged",
+  "params": {
+    "revision": "sha256:QLXa7BigUFzNlw_IWPSqpYbDzdvBX7PVQIPS5lgnkaw",
+    "domains": ["capabilities", "featureSets"]
+  }
+}
+```
+
+`domains` is a subset of `capabilities | featureSets | tagOntology`. It carries **no
+payload** — no diff, no list of what was added or removed, no policy conclusion. Everything
+a server might assert about the change is something the host would have to re-derive anyway,
+and asserting it invites the self-attestation defect this specification removes in §5.4 and
+§7.
+
+A host **MAY** ignore the notification entirely. A host that acts on it **MUST** fetch
+(§17.4) before changing anything.
+
+**No capability path gates this.** That is deliberate and is an exception worth stating:
+announcing conveys no authority, and gating it would perversely silence exactly the servers
+whose grants had just been narrowed. The cost of the announcement is the host's re-fetch,
+which §17.8 bounds.
+
+### 17.4 `mcpl/manifest` (Host → Server, Request)
+
+```jsonc
+{ "jsonrpc": "2.0", "id": 21, "method": "mcpl/manifest", "params": {} }
+```
+
+Returns the server's **current, complete** manifest in the same shape it would present at
+`initialize`:
+
+```jsonc
+{
+  "jsonrpc": "2.0", "id": 21,
+  "result": {
+    "revision": "sha256:QLXa7BigUFzNlw_IWPSqpYbDzdvBX7PVQIPS5lgnkaw",
+    "version": "0.5",
+    "pushEvents": true,
+    "contextHooks": { "beforeInference": true },
+    "channels": { "register": true, "publish": true, "incoming": true },
+    "featureSets": { "…": "…" }
+  }
+}
+```
+
+The result is the `experimental.mcpl` object itself — the same shape `initialize` carries,
+not a re-wrapped one.
+
+- Complete, never a delta. Deltas would require the host to trust the server's account of
+  its own previous state.
+- A server that does not implement it **MUST** return an error, not silence (§6.6).
+- Hosts **MAY** call it at any time, not only after a notification — for example on a
+  schedule, or before a security-sensitive operation.
+
+### 17.5 Host processing
+
+On a fetched manifest the host **MUST**:
+
+1. **Validate** it exactly as at `initialize`, including `uses` (§6.4). Invalid declarations
+   fail closed with `invalid_uses`.
+
+   **A partially invalid manifest MUST NOT leave broader authority standing.** If the
+   manifest parses but some declarations are invalid, the host **MUST** still apply every
+   **removal** it can determine — a capability or feature set absent from the new manifest
+   is revoked, regardless of whether some other declaration failed validation. Invalid
+   *additions* are simply ignored; they could not have been granted without negotiation
+   anyway (§6.7).
+
+   This follows from §6.7's existing asymmetry rather than adding policy: removals are safe
+   to apply eagerly, additions are not. Applying removals eagerly costs a cooperative server
+   nothing, and closes the case where a server narrows one capability while malforming
+   another and the host keeps sending under the old, broader grant.
+
+   If the manifest **does not parse at all**, the host has learned nothing — no narrowing can
+   be inferred — so the previous manifest stands. Repeated unparseable responses are a
+   conformance defect; a host **MAY** then suspend MCPL privileges and fall back to MCP-only
+   (§3.2), but **MUST NOT** do so on a single failure.
+2. **Diff** it against the manifest currently in force.
+3. **Apply §6.7 consequences**, unchanged:
+   - **Removals and narrowing** revoke **host-first**, then the Request and receipt.
+   - **Additions never auto-grant.** A newly advertised capability is an input to the host's
+     grant computation, nothing more. If policy widens the grant, that follows
+     tell → receipt → activate.
+   - **Changed or now-invalid `uses`** revalidates fail-closed.
+   - **A changed `tagOntology` invalidates prior acceptance** (§16.5) rather than inheriting
+     standing. Accepted suggestions and `implies` edges do not carry over a revision they
+     were not accepted against.
+4. **Emit one receipt** (§17.6). One per manifest change, not one per affected item.
+
+In-flight requests need no new rule: §5.4 already authorizes response contributions against
+the grant **current at response-receipt**, so a hook dispatched before a narrowing returns
+into the narrowed grant.
+
+### 17.6 The change receipt
+
+The host emits a single normalized, privacy-minimal receipt to the resident or operator.
+Impacts use a **closed, host-derived vocabulary** — never a server-authored flag such as
+`requiresReview`:
+
+| Impact | Meaning |
+|---|---|
+| `capability-revoked` | A capability in force is no longer granted |
+| `capability-expansion-pending` | Newly advertised; awaiting a policy decision |
+| `feature-degraded` | A feature set was disabled by derivation |
+| `feature-restored` | A previously degraded feature set is available again |
+| `ontology-acceptance-invalidated` | Accepted tag ontology no longer applies (§16.5) |
+| `ontology-reference-undeclared` | A consumer gate rule references a tag the server no longer declares |
+| `surface-changed` | Tools, resources, prompts or channels changed (§17.7) |
+
+Each impact carries a disposition: `applied` | `decision-needed` | `informational`.
+
+Whether a receipt **wakes** the resident is ordinary §16 policy evaluated against tags the
+host attaches — not a property of the change and not the server's to decide.
+
+`ontology-reference-undeclared` is **informational by default**, and the name is deliberate.
+Tag ontologies are open-world, so a tag absent from the new declaration may still be emitted
+when `open: true`, and a consumer rule matches raw event tags regardless of what is declared.
+The certain fact is narrower — the accepted *description* disappeared, not that the rule
+stopped matching. A resident may well want to know, because it often *precedes* a rule going
+dead, but the host cannot assert that it has.
+
+### 17.7 Relationship to existing change notifications
+
+MCP's `notifications/tools/list_changed` (and the resources/prompts equivalents) and MCPL's
+`channels/changed` (§14.5) **remain unchanged**. They are specialized, they carry no manifest
+authority, and they already work.
+
+The host **SHOULD** coalesce them into the same resident-facing changelog surface, so a
+resident sees one account of "what changed about this server" rather than four unrelated
+ones.
+
+### 17.8 Rate limiting
+
+`mcpl/manifestChanged` is cheap to send and causes a fetch. Unbounded, that is an
+amplification vector.
+
+**The limiter is the host's.** A server **SHOULD** coalesce rapid changes into one
+notification, but a host **MUST NOT** depend on it. Hosts **MUST** bound the fetch rate per
+connection, and **MAY** coalesce multiple notifications into a single fetch. Exceeding the
+host's limit is a **conformance defect**, not a negotiation: the host drops the excess and
+**SHOULD** surface the defect, rather than fetching or renegotiating anything.
+
+### 17.9 What this is not
+
+**This is cooperative-only. It is not a security mechanism.**
+
+A server that changes silently and never announces is undetectable between fetches. §17 buys
+*freshness* from well-behaved servers. What protects against the others is the grant (§5.4),
+which is enforced continuously and does not depend on any announcement. Stated plainly so
+that a stale revision is never later mistaken for a safety property — the same posture as
+feature sets: ergonomics, not a boundary.
+
+Hosts that want assurance rather than freshness should re-fetch on their own schedule
+(§17.4), which needs no cooperation at all.
+
+**Out of scope.** Mid-run capability *elevation* — a server asking for a capability it lacks
+— is a different mechanism with a coercion profile of its own; `manifestChanged` announces
+what a server *is*, not what it *wants*. Signed or attested manifests would move this from
+freshness to assurance and need an identity story MCPL does not have.
+
+### 17.10 Backward compatibility
+
+- Both methods are optional. A server that implements neither behaves exactly as before: its
+  manifest is fixed at `initialize`.
+- A server **MAY** implement `mcpl/manifest` without `mcpl/manifestChanged`, which lets a
+  host poll. The reverse is useless and hosts **SHOULD** warn on it.
+- `revision` is an added field; hosts that ignore it lose only the cheap-path optimization.
+- No change to the grant, the receipt, or any §6.7 ordering rule.
+
+**Implementation note (non-normative).** Conformance requires only §17.1–§17.6, but the two
+sides track **different facts**, and implementations that conflate them tend to reintroduce
+self-attestation. A *server* library should canonicalize the complete manifest, compute the
+digest, diff old against new to derive changed domains, install atomically, coalesce rapid
+edits (a batch API, so six related edits produce one announcement rather than six
+intermediate manifests), emit `mcpl/manifestChanged` per connection where the last-announced
+revision differs, and answer `mcpl/manifest` from the same canonical snapshot — servers
+should call something like `setManifest(next)` and never hand-author an announcement. Seed
+each connection's last-announced revision from the `initialize` handshake, or a fresh
+connection starts empty and fires a redundant announcement immediately after initialize,
+which already carried the manifest. A *host* should retain, per connection: last fetched and
+validated manifest digest; last negotiated effective grant with timestamp and provenance;
+accepted ontology digest; current feature degradation; last receipt delivered. The server
+tracks what it announced; the host tracks what it fetched, validated, negotiated, and
+delivered. A server's announcement log is not evidence the host acted on it. The server
+library **MUST NOT** generate resident-facing prose or policy conclusions — the impact
+vocabulary of §17.6 is host-derived precisely so that what a resident is told about a change
+is not authored by the party that made it.
+
+---
+
 ## Appendix A: Error Codes
 
 | Code | Message | Description |
 |------|---------|-------------|
 | `-32001` | Feature set not enabled | Message used a disabled feature set |
+| `-32002` | Capability denied | Method requires a capability not in the effective grant (§5.4); `data: { capability }` |
 | `-32003` | Unknown feature set | Message used undeclared feature set |
 | `-32005` | Checkpoint not found | Rollback targeted a pruned or unknown checkpoint |
 | `-32017` | Channel not permitted | Lacking scope to publish or observe channel |
@@ -2012,11 +2341,55 @@ the closure-expanded tag set.
 }
 ```
 
-### B.3 Enums
+### B.3 Manifest (§17)
+
+```jsonc
+{
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "string" },
+    "revision": {
+      "type": "string",
+      "pattern": "^sha256:[A-Za-z0-9_-]{43}$",
+      "description": "Canonical content digest, §17.2. Omitted by servers that do not support §17."
+    }
+    // …capability members and featureSets, per §5.1
+  }
+}
+```
+
+`mcpl/manifestChanged` params:
+
+```jsonc
+{
+  "type": "object",
+  "required": ["revision", "domains"],
+  "properties": {
+    "revision": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
+    "domains": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["capabilities", "featureSets", "tagOntology"] }
+    }
+  },
+  "additionalProperties": false   // §17.3: the notification carries no payload
+}
+```
+
+`mcpl/manifest` takes no params and returns the manifest object above.
+
+### B.4 Enums
 
 **Position:** `"system" | "beforeUser" | "afterUser"`
 
 **FinishReason:** `"end_turn" | "max_tokens" | "stop_sequence"`
+
+**ChangeDomain:** `"capabilities" | "featureSets" | "tagOntology"`
+
+**ChangeImpact:** `"capability-revoked" | "capability-expansion-pending" | "feature-degraded" | "feature-restored" | "ontology-acceptance-invalidated" | "ontology-reference-undeclared" | "surface-changed"`
+
+**Disposition:** `"applied" | "decision-needed" | "informational"`
 
 ---
 
@@ -2024,9 +2397,9 @@ the closure-expanded tag set.
 
 ### 0.5.0-draft (August 2026)
 
-Merges RFC-002 (capability grants) and RFC-001 rev 2 (event tags). Grounded in AUDIT-001,
-an implementation audit of 15 trees; every removal below is backed by evidence from it
-rather than by taste.
+Merges RFC-002 (capability grants), RFC-001 rev 2 (event tags), and RFC-003 (server manifest
+changes). Grounded in AUDIT-001, an implementation audit of 15 trees; every removal below is
+backed by evidence from it rather than by taste.
 
 **Authorization**
 - Advertisement is now **recursive**, mirroring the capability paths, and
@@ -2066,9 +2439,9 @@ rather than by taste.
   blocking hook form go with it — no server ever produced one, and one server adopted the
   capability and deliberately retired it.
 - **Removed `featureSets/changed`** — it carried a server-authored change payload. *(Amended
-  post-release: the original rationale, "folded into reconnect semantics", was wrong —
-  reconnect is not sufficient once the manifest is consequential. The removal stands; see
-  RFC-003, which supersedes it with a host-diffed manifest fetch.)*
+  in draft: the original rationale, "folded into reconnect semantics", was wrong — reconnect
+  is not sufficient once the manifest is consequential. The removal stands; §17 supersedes
+  it with a host-diffed manifest fetch.)*
 - **Removed §6.4's initialization contradiction** with §5.3/§6.7.
 - **Removed `canEnable`** from `-32001` data.
 
@@ -2093,6 +2466,23 @@ rather than by taste.
   exclusion after expansion.
 - Producer `suggestedTreatment` is a hint requiring explicit acceptance (§16.5), not a
   middle tier of policy — otherwise a server purchases inference by declaration.
+
+**Manifest changes (§17)**
+- Added `mcpl/manifestChanged` (S→H Notification: opaque revision plus changed domains, **no
+  payload**) and `mcpl/manifest` (H→S Request returning the complete current manifest, never
+  a delta). Both optional; a server implementing neither behaves as before.
+- Added a normative **canonical content digest** (§17.2) —
+  `sha256:base64url(SHA-256(JCS(manifest minus revision)))`, RFC 8785 canonicalization, RFC
+  4648 §5 unpadded, set arrays sorted by UTF-8 byte order — with a reproducible test vector.
+  Hand-maintained or package-derived revisions are non-conforming.
+- Added the optional `revision` member to the §5.1 advertisement.
+- Host **diffs the fetched manifest** and that diff is authoritative; the revision is a cheap
+  path, never evidence. A **partially invalid manifest MUST still apply removals** (§17.5),
+  which closes the case where a server narrows one capability while malforming another.
+- Added a closed, **host-derived** impact vocabulary for the change receipt (§17.6, App. B.4)
+  — so what a resident is told about a change is not authored by the party that made it.
+- This is a **trigger for existing machinery**, not new policy: all consequences route
+  through §6.7. It is cooperative-only and explicitly **not** a security mechanism (§17.9).
 
 **Security**
 - §13.1 risk table rewritten per capability path; §13.4 replaced a MUST NOT aimed at the

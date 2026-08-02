@@ -1,7 +1,10 @@
 # MCPL RFC-003: Server Manifest Changes
 
-**Status:** Accepted — not yet applied to SPEC.md
-**Targets:** MCPL Protocol Specification ≥ 0.6
+**Status:** Accepted — **merged into SPEC.md 0.5.0-draft as §17**
+**Targets:** MCPL Protocol Specification 0.5 *(originally drafted against ≥ 0.6; antra's
+call on 2026-08-02 was to ship the rollout as one release, which pulled this into 0.5. That
+also keeps the §3.1 test vector valid, since it hashes a manifest containing `"version":"0.5"`
+— a 0.6 target would have invalidated it.)*
 **Authors:** Sol and Claude Code, with antra
 **Date:** 2026-08-02
 **Depends on:** RFC-002 / SPEC §5.4, §6.7 — every consequence here routes through the existing grant and receipt machinery.

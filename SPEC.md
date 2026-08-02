@@ -291,6 +291,18 @@ behavior as unavailable, and a host MUST reject inbound privileged methods.
 
 The response is a degradation receipt — see §6.7.
 
+**Field semantics** (pinned 2026-08-02; four server implementations had each answered these
+identically from the fail-closed principle, but no text said so):
+
+- **Absent `effectiveCapabilities` in a Request is a grant of nothing**, not "no change".
+  Absence is denial (§5.4) and there is no unspecified state; treating it as no-alteration
+  would leave a previous, wider grant standing — the §6.7 stale-authority hole.
+- **Absent `enabled` constrains nothing**: capability derivation (§6.4) alone governs.
+  **Present `enabled` is an allowlist**: a declared feature set it does not name is disabled
+  with reason `not_selected`. Naming a set in `enabled` never supplies capabilities its
+  `uses` lacks — selection narrows, it cannot widen.
+- **`disabled` always subtracts**, from either form.
+
 ---
 
 ### 5.4 Capability Grants
@@ -306,6 +318,20 @@ host to send a process a payload, all code in that process can read it.
 - Capability paths are dot-separated (§6.2). Matching is over full paths with `*` wildcards,
   and implementations MUST perform a **generic recursive walk** — a hardcoded set of
   nestable keys is non-conforming, since the vocabulary is depth 3 and will grow.
+
+**`*` matches exactly one path segment, and segment counts MUST be equal.** `channels.*`
+grants `channels.publish` but not `channels.publish.anything`; `contextHooks.*` grants
+**none** of the depth-4 injection leaves; a bare `*` matches only depth-1 paths. A trailing
+`*` is NOT a subtree match. There is no multi-segment wildcard. This is the deny-safe
+reading — a mistaken narrow pattern can only under-grant, which the host observes and
+corrects, while a suffix wildcard silently widens the grant class this section exists to
+narrow. *(Pinned 2026-08-02: two independent library implementations diverged here, one
+granting depth-4 injection under `contextHooks.*` and one granting nothing; every server
+implementation that faced the question had chosen the one-segment reading.)*
+
+**A bare parent path does not grant its leaves.** §5.1's boolean-`true` shorthand is an
+*advertisement* convention only; it is not restated for the grant. `channels` in
+`effectiveCapabilities` grants only the path `channels`, which no method requires.
 
 **`effectiveCapabilities` is the sole normative allowlist**: the intersection of the
 server's advertisement as the host understands it and host policy. **Every path not present
@@ -510,6 +536,14 @@ policy (§5.3), reductions, and expansions. Notifications remain valid only for 
 descriptive feature metadata that does not alter the grant, and a Notification **cannot
 establish a ready state**.
 
+**Server handling of a non-conforming Notification** (one that nevertheless carries grant
+fields): apply a narrowing `disabled` list — reductions must be respected regardless of
+carrier — and **ignore everything else** with a diagnostic. `effectiveCapabilities`,
+`enabled`, and any widening are discarded: honouring a widening from an unacknowledgeable
+message would have the server acting on a path the host cannot know it accepted. *(Pinned
+2026-08-02: five implementations had each already chosen exactly this — narrow-only, never
+ready.)*
+
 **The response is a degradation receipt**, not an acknowledgement:
 
 ```jsonc
@@ -533,6 +567,12 @@ Or a refusal, which names its own consequence rather than leaving the host to gu
 ```jsonc
 { "accepted": false, "fallback": "mcp-only", "missingCapabilities": [...], "reason": "…" }
 ```
+
+**`fallback` is REQUIRED when `accepted` is `false`** — naming the consequence is the
+server's job, and its absence is a silent value at exactly the point the host chooses
+between mcp-only and closing the transport. Each `unavailableFeatures` entry MUST carry
+`effect`. When nothing degraded, **omit `mode`** rather than inventing a value — an absent
+field cannot be misread as a claim.
 
 **Consequence testimony is not policy authority.** The receipt reports what the server
 *will do*; it does not assert what the server is *entitled to*. The host **MUST NOT** widen
@@ -1996,7 +2036,36 @@ array is declared set-like or list-like:
 | `keyed.*.values` | **List** — order is meaningful and preserved |
 
 Any array not listed is a list; its order is part of the manifest and **MUST** be
-deterministic across restarts.
+deterministic across restarts. That default covers `suggestedTreatment`'s
+`tagsAny`/`tagsAll`/`tagsNone` matchers: semantically unordered, but **lists here** — this
+is deliberate, restated so it cannot be reopened by inference. (The cost is known: two
+servers with identical matching behaviour but reordered matchers produce different
+revisions. The alternative — set semantics by semantic judgment rather than by enumeration —
+is how two implementations drift.)
+
+**The digest is total.** Set semantics apply **only when the value actually is an array**
+at one of the three named locations, in the object-keyed `featureSets` shape those paths
+are written against. A wrong-typed value in a set position (`"uses": "tools"`), an
+array-shaped `featureSets`, or any other non-conforming structure is **hashed verbatim** —
+canonicalized by JCS, never set-normalized, never refused. Validation (§6.4) is where a
+wrong type fails; the digest's job is to give any two libraries the same answer for the
+same bytes, including bytes that will then fail validation. *(Pinned 2026-08-02: the two
+library implementations diverged on both cases — digest-vs-error for a wrong-typed `uses`,
+and two different revisions for one array-shaped manifest.)*
+
+The **only** input the digest refuses is an identifier-charset violation
+(`identifier_charset`): hashing a non-ASCII identifier makes the UTF-8/UTF-16 ordering
+divergence reachable inside a set-valued array, which is the failure the ASCII rule exists
+to prevent. Identifier positions are: capability member names at every depth, feature-set
+names, `uses` entries, `coreTags`, `tags` keys, `implies` entries, `keyed` keys and their
+`values` entries, and `suggestedTreatment` rule matchers. Free-text fields (`description`,
+`desc`) are not identifiers.
+
+Two structural pins, both consequences of "nothing else is stripped": the root `revision`
+member is stripped and **only** the root one — a nested member named `revision` is ordinary
+content; and §5.1's boolean-`true` shorthand is **not expanded** before hashing — shorthand
+and expanded forms are different manifests with different digests, since expansion would
+bind the digest to the leaf vocabulary of the day.
 
 **Set ordering.** Sort by **UTF-8 byte sequence**, ascending. Not "code point order" and not
 a language's default string comparison: JavaScript compares UTF-16 code units and Rust
@@ -2063,6 +2132,12 @@ and asserting it invites the self-attestation defect this specification removes 
 
 A host **MAY** ignore the notification entirely. A host that acts on it **MUST** fetch
 (§17.4) before changing anything.
+
+**Deriving `domains`:** an **absent** member and an **empty** one are different manifests —
+they canonicalize differently — so a member appearing or disappearing IS a change to its
+domain. Going from `{"version":"0.5"}` to `{"version":"0.5","featureSets":{}}` announces
+`featureSets` (and `tagOntology`, whose carrier appeared). *(Pinned 2026-08-02: the two
+libraries diverged; conflating absent with empty under-announces.)*
 
 **No capability path gates this.** That is deliberate and is an exception worth stating:
 announcing conveys no authority, and gating it would perversely silence exactly the servers

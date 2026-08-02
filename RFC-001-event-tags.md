@@ -198,10 +198,11 @@ are inherited from §4, do not redescribe them — and describe only your own na
 
 ```jsonc
 {
-  "featureSets": [{
-    "name": "discord.messaging",
-    "description": "…",
-    "tagOntology": {
+  "featureSets": {
+    "discord.messaging": {
+      "description": "…",
+      "uses": ["pushEvents", "channels.incoming", "channels.publish", "tools"],
+      "tagOntology": {
       "coreTags": ["chat:addressed","chat:mention","chat:reply","chat:dm",
                    "chat:ambient","chat:broadcast","chat:reaction","chat:reaction-remove",
                    "chat:to-self","chat:from-human","chat:from-bot","chat:from-agent",
@@ -229,10 +230,19 @@ are inherited from §4, do not redescribe them — and describe only your own na
         { "tagsAny": ["chat:ambient","chat:from-bot"], "behavior": "throttle" }
       ],
       "open": true
+      }
     }
-  }]
+  }
 }
 ```
+
+> **Corrected 2026-08-02.** Earlier revisions showed `featureSets` as an *array* of
+> `{name, …}` declarations here. That contradicted SPEC §6.1/§5.1 and Appendix B.2, which
+> define an **object keyed by feature-set name** — and it was not cosmetic: one library
+> implementation followed this example, set-normalized inside the array shape, and produced
+> a different §17.2 revision than the other library for identical manifest bytes. Examples
+> are load-bearing. The object form above is the only conforming shape; a digest
+> implementation receiving the array form hashes it verbatim (§17.2).
 
 ### 5.1 Descriptor fields (all optional)
 

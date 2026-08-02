@@ -537,9 +537,16 @@ expansion simply does not activate.
 
 Servers MUST immediately respect a reduction.
 
-**`featureSets/changed` is removed in 0.5.0.** No server implemented it; servers that change
-their declared feature sets do so by reconnecting and re-declaring. Folded into reconnect
-semantics.
+**`featureSets/changed` is removed in 0.5.0.** It carried a server-authored account of what
+had changed, which is the self-attestation defect §5.4 exists to remove.
+
+> **Amended.** 0.5.0 originally justified this as "folded into reconnect semantics" — that
+> reconnection was sufficient. That rationale is **wrong**. This specification made the
+> manifest consequential (capabilities determine the grant, `uses` determines degradation,
+> ontology acceptance is bound to a snapshot), so a stale manifest is no longer cosmetic.
+> The method stays removed; the need is real and is met by RFC-003's manifest mechanism
+> (`mcpl/manifestChanged` + `mcpl/manifest`), where the host re-fetches and diffs rather
+> than trusting a payload.
 
 ---
 
@@ -2015,7 +2022,10 @@ rather than by taste.
   (§10.5) with a normative exactly-once terminal-phase invariant. `modifiedResponse` and the
   blocking hook form go with it — no server ever produced one, and one server adopted the
   capability and deliberately retired it.
-- **Removed `featureSets/changed`** — folded into reconnect semantics.
+- **Removed `featureSets/changed`** — it carried a server-authored change payload. *(Amended
+  post-release: the original rationale, "folded into reconnect semantics", was wrong —
+  reconnect is not sufficient once the manifest is consequential. The removal stands; see
+  RFC-003, which supersedes it with a host-diffed manifest fetch.)*
 - **Removed §6.4's initialization contradiction** with §5.3/§6.7.
 - **Removed `canEnable`** from `-32001` data.
 

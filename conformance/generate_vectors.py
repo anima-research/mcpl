@@ -192,6 +192,14 @@ def _path_matches(path, pattern):
         return False
     for got, want in zip(path, pattern):
         if want == "*":
+            # "*" is a DICT-KEY wildcard. It never matches a list index
+            # ("[i]") — SPEC §17.2's set/identifier paths are written against
+            # the object-keyed shape, and the non-conforming array shape is
+            # hashed verbatim (differ adjudication 2026-08-02; the sorted
+            # reading shipped once, in Rust, and produced a second revision
+            # for identical bytes).
+            if got == "[i]":
+                return False
             continue
         if got != want:
             return False
@@ -232,7 +240,7 @@ def normalize(value, path=()):
             out[k] = normalize(v, path + (k,))
         return out
     if isinstance(value, list):
-        items = [normalize(v, path + ("*",)) for v in value]
+        items = [normalize(v, path + ("[i]",)) for v in value]
         epath = path + ("[]",)
         if _is_ident_path(epath):
             for it in items:
@@ -848,6 +856,68 @@ def build_vectors():
             },
         },
         "expectError": "identifier_charset",
+    })
+
+    # ── Differ adjudications, 2026-08-02 (SPEC §17.2 "the digest is total") ──
+    # Each pins a case where the two library implementations diverged. See the
+    # review comments on mcpl-core-ts#6 and Anarchid/mcpl-core#3.
+
+    V.append({
+        "name": "wrong-typed-set-field-hashed-verbatim",
+        "description": (
+            "SPEC §17.2: the digest is TOTAL — set semantics apply only when "
+            "the value actually IS an array. `\"uses\": \"tools\"` is a "
+            "wrong-typed value in a set position: it is hashed verbatim (JCS "
+            "only), never sorted and never refused. Validation (§6.4 "
+            "invalid_uses) is where this fails; the digest's job is to give "
+            "two libraries the same answer for the same bytes. Adjudicated "
+            "after one implementation refused with an invented error code "
+            "while the other hashed — digest-vs-error for identical bytes."
+        ),
+        "input": {
+            "version": "0.5",
+            "featureSets": {
+                "demo.messaging": {"description": "d", "uses": "tools"}
+            },
+        },
+    })
+
+    V.append({
+        "name": "array-form-featuresets-hashed-verbatim",
+        "description": (
+            "The array-of-{name,...} featureSets shape is NON-CONFORMING "
+            "(SPEC §6.1 defines an object keyed by name; RFC-001's array "
+            "example was a documented error, corrected 2026-08-02). A digest "
+            "implementation MUST NOT set-normalize inside it: §17.2's set "
+            "paths are written against the object shape, so `uses` here keeps "
+            "its input order (['tools','pushEvents'] stays unsorted) and no "
+            "identifier check applies. Adjudicated after one implementation "
+            "sorted inside the array shape and produced a different revision "
+            "than the other for identical manifest bytes — precisely the "
+            "failure the digest exists to prevent. Hash verbatim; let "
+            "validation reject the shape."
+        ),
+        "input": {
+            "version": "0.5",
+            "featureSets": [
+                {"name": "f", "description": "d", "uses": ["tools", "pushEvents"]}
+            ],
+        },
+    })
+
+    V.append({
+        "name": "empty-member-differs-from-absent",
+        "description": (
+            "SPEC §17.3: an ABSENT member and an EMPTY one are different "
+            "manifests — they canonicalize differently — so a member "
+            "appearing or disappearing IS a change to its domain. This vector "
+            "is {version, featureSets:{}}; its digest MUST differ from "
+            "minimal-manifest ({version} alone). Adjudicated after one "
+            "implementation projected absent to {} in its domain diff and "
+            "under-announced the change."
+        ),
+        "input": {"version": "0.5", "featureSets": {}},
+        "differentDigestFrom": "minimal-manifest",
     })
 
     return V

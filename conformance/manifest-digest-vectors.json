@@ -599,6 +599,54 @@
       },
       "expectError": "identifier_charset",
       "errorDetail": "featureSets.demo.messaging.uses[] = ''"
+    },
+    {
+      "name": "wrong-typed-set-field-hashed-verbatim",
+      "description": "SPEC \u00a717.2: the digest is TOTAL \u2014 set semantics apply only when the value actually IS an array. `\"uses\": \"tools\"` is a wrong-typed value in a set position: it is hashed verbatim (JCS only), never sorted and never refused. Validation (\u00a76.4 invalid_uses) is where this fails; the digest's job is to give two libraries the same answer for the same bytes. Adjudicated after one implementation refused with an invented error code while the other hashed \u2014 digest-vs-error for identical bytes.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo.messaging": {
+            "description": "d",
+            "uses": "tools"
+          }
+        }
+      },
+      "canonicalJson": "{\"featureSets\":{\"demo.messaging\":{\"description\":\"d\",\"uses\":\"tools\"}},\"version\":\"0.5\"}",
+      "sha256Hex": "3ff00fd7174be8a6386bf4ad89ad04a92e991f5fa7e6f15eeeaf113319101fe2",
+      "digest": "sha256:P_AP1xdL6KY4a_Stia0EqS6ZH1-n5vFe7q8RMxkQH-I"
+    },
+    {
+      "name": "array-form-featuresets-hashed-verbatim",
+      "description": "The array-of-{name,...} featureSets shape is NON-CONFORMING (SPEC \u00a76.1 defines an object keyed by name; RFC-001's array example was a documented error, corrected 2026-08-02). A digest implementation MUST NOT set-normalize inside it: \u00a717.2's set paths are written against the object shape, so `uses` here keeps its input order (['tools','pushEvents'] stays unsorted) and no identifier check applies. Adjudicated after one implementation sorted inside the array shape and produced a different revision than the other for identical manifest bytes \u2014 precisely the failure the digest exists to prevent. Hash verbatim; let validation reject the shape.",
+      "input": {
+        "version": "0.5",
+        "featureSets": [
+          {
+            "name": "f",
+            "description": "d",
+            "uses": [
+              "tools",
+              "pushEvents"
+            ]
+          }
+        ]
+      },
+      "canonicalJson": "{\"featureSets\":[{\"description\":\"d\",\"name\":\"f\",\"uses\":[\"tools\",\"pushEvents\"]}],\"version\":\"0.5\"}",
+      "sha256Hex": "388a1f016882cec383a0bb3645f6dc6f24355f0be4deec2d5f9ad47a0f6baff7",
+      "digest": "sha256:OIofAWiCzsODoLs2RfbcbyQ1Xwvk3uwtX5rUeg9rr_c"
+    },
+    {
+      "name": "empty-member-differs-from-absent",
+      "description": "SPEC \u00a717.3: an ABSENT member and an EMPTY one are different manifests \u2014 they canonicalize differently \u2014 so a member appearing or disappearing IS a change to its domain. This vector is {version, featureSets:{}}; its digest MUST differ from minimal-manifest ({version} alone). Adjudicated after one implementation projected absent to {} in its domain diff and under-announced the change.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {}
+      },
+      "canonicalJson": "{\"featureSets\":{},\"version\":\"0.5\"}",
+      "sha256Hex": "6840e5900d7d7c2a6ee52aa5ba97c46051a178330911d53af1c2919faa70e3f4",
+      "digest": "sha256:aEDlkA19fCpu5SqlupfEYFGheDMJEdU68cKRn6pw4_Q",
+      "differentDigestFrom": "minimal-manifest"
     }
   ],
   "sortVectors": [

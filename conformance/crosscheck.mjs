@@ -15,7 +15,7 @@ const SET_PATHS = [
   ['featureSets', '*', 'tagOntology', 'tags', '*', 'implies'],
 ];
 const matches = (p, pat) =>
-  p.length === pat.length && p.every((s, i) => pat[i] === '*' || pat[i] === s);
+  p.length === pat.length && p.every((s, i) => pat[i] === '*' ? s !== '[i]' : pat[i] === s); // '*' = dict-key wildcard, never a list index (differ adjudication 2026-08-02)
 const isSet = (p) => SET_PATHS.some((pat) => matches(p, pat));
 
 // UTF-8 byte-order comparator, built from actual UTF-8 bytes.
@@ -30,7 +30,7 @@ function utf8cmp(a, b) {
 // JCS object member order: UTF-16 code-unit sequence == JS default string <.
 function normalize(v, path = []) {
   if (Array.isArray(v)) {
-    const items = v.map((x) => normalize(x, [...path, '*']));
+    const items = v.map((x) => normalize(x, [...path, '[i]']));
     if (isSet(path)) return [...new Set(items)].sort(utf8cmp);
     return items;
   }

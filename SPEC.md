@@ -1,9 +1,9 @@
 # MCP Live (MCPL) Protocol Specification
 
-**Version:** 0.4.1-draft  
+**Version:** 0.5.0-draft  
 **Status:** Draft  
 **Authors:** Antra  
-**Date:** March 2026
+**Date:** August 2026
 
 ---
 
@@ -12,9 +12,11 @@
 MCP Live (MCPL) is a backward-compatible extension to the Model Context Protocol (MCP) that adds:
 
 1. **Push Events** — Servers can push events to hosts that may trigger model inference
-2. **Context Hooks** — Servers can inject or modify context before and after inference (multimodal)
+2. **Context Hooks** — Servers can inject context before inference (multimodal)
 3. **Server-Initiated Inference** — Servers can request autonomous inference from the host
-4. **Feature Sets** — Fine-grained access control allowing hosts to enable/disable specific server behaviors
+4. **Capability Grants** — Host-computed, hierarchical authorization separating observation from authority to alter
+5. **Feature Sets** — Named behavior bundles, derived from the grant
+6. **Event Tags** — Namespaced semantic labels letting hosts route attention portably
 
 MCPL enables servers to be active participants in the inference lifecycle rather than passive tool providers.
 
@@ -28,7 +30,7 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 4. [Protocol Overview](#4-protocol-overview)
 5. [Capability Negotiation](#5-capability-negotiation)
 6. [Feature Sets](#6-feature-sets)
-7. [Scoped Access](#7-scoped-access)
+7. [Scoped Access — removed in 0.5.0](#7-scoped-access--removed-in-050)
 8. [State Management](#8-state-management)
 9. [Push Events](#9-push-events)
 10. [Context Hooks](#10-context-hooks)
@@ -37,6 +39,7 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 13. [Security Considerations](#13-security-considerations)
 14. [Channels of Communication](#14-channels-of-communication)
 15. [Examples](#15-examples)
+16. [Event Tags](#16-event-tags)
 
 ---
 
@@ -91,7 +94,7 @@ MCPL is advertised as an experimental capability extension, not a protocol versi
     "resources": {},
     "experimental": {
       "mcpl": {
-        "version": "0.4",
+        "version": "0.5",
         "pushEvents": true,
         "contextHooks": { ... },
         "inferenceRequest": { ... },
@@ -132,13 +135,11 @@ MCPL extends the MCP message flow:
 │                                                                     │
 │   tools/call, resources/read,    push/event (server → host)        │
 │   sampling/createMessage, etc.   context/beforeInference           │
-│                                   context/afterInference            │
+│                                   inference/lifecycle               │
 │                                   inference/request                 │
 │                                   inference/chunk                   │
 │                                   model/info                        │
 │                                   featureSets/update                │
-│                                   featureSets/changed               │
-│                                   scope/elevate                     │
 │                                   state/rollback                    │
 │                                   channels/register                 │
 │                                   channels/changed                  │
@@ -166,16 +167,14 @@ Per JSON-RPC 2.0:
 |--------|------|-----------|
 | `push/event` | Request | Server → Host |
 | `context/beforeInference` | Request | Host → Server |
-| `context/afterInference` | Request or Notification | Host → Server |
+| `inference/lifecycle` | Notification | Host → Server |
 | `inference/request` | Request | Server → Host |
 | `inference/chunk` | Notification | Host → Server |
 | `model/info` | Request | Server → Host |
-| `featureSets/update` | Notification | Host → Server |
-| `featureSets/changed` | Notification | Server → Host |
-| `scope/elevate` | Request | Server → Host |
+| `featureSets/update` | Notification **or Request** | Host → Server |
 | `state/rollback` | Request | Host → Server |
 | `channels/register` | Request | Server → Host |
-| `channels/changed` | Notification | Server → Host |
+| `channels/changed` | Notification **or Request** | Server → Host |
 | `channels/list` | Request | Either |
 | `channels/open` | Request | Host → Server |
 | `channels/close` | Request | Host → Server |
@@ -203,14 +202,13 @@ Servers advertise MCPL support under `experimental.mcpl`:
     // MCPL extension
     "experimental": {
       "mcpl": {
-        "version": "0.4",
+        "version": "0.5",
         "pushEvents": true,
-        "contextHooks": {
-          "beforeInference": true,
-          "afterInference": { "blocking": false }
-        },
+        "contextHooks": { "beforeInference": true },
+        "inferenceLifecycle": true,
         "inferenceRequest": { "streaming": true },
         "modelInfo": true,
+        "channels": { "register": true, "publish": true, "incoming": true },
         "featureSets": { ... }  // See Section 6
       }
     }
@@ -230,13 +228,12 @@ The host advertises its MCPL support under `capabilities.experimental.mcpl` (mir
 
     "experimental": {
       "mcpl": {
-        "version": "0.4",
+        "version": "0.5",
         "pushEvents": true,
-        "contextHooks": {
-          "beforeInference": true,
-          "afterInference": { "blocking": true }
-        },
+        "contextHooks": { "beforeInference": true },
+        "inferenceLifecycle": true,
         "inferenceRequest": { "streaming": true },
+        "channels": { "register": true, "publish": true, "incoming": true },
         "featureSets": true
       }
     }
@@ -244,32 +241,80 @@ The host advertises its MCPL support under `capabilities.experimental.mcpl` (mir
 }
 ```
 
-### 5.3 Initial Configuration
+### 5.3 Initial Policy
 
-After initialization, hosts SHOULD send `featureSets/update` (Host → Server) to declare initially enabled/disabled feature sets and any scope configuration.
+After initialization, hosts **MUST** send `featureSets/update` as a **Request** (§6.7)
+carrying the effective capability grant, and MUST do so:
+
+- before the first context-hook fan-out, and
+- before accepting any inbound privileged method,
+
+and **even when nothing is enabled or disabled** — a server defaulted to fully disabled has
+to be told.
+
+Until the initial policy exchange completes, a server MUST treat every capability-dependent
+behavior as unavailable, and a host MUST reject inbound privileged methods.
 
 ```jsonc
 {
   "jsonrpc": "2.0",
+  "id": 7,
   "method": "featureSets/update",
   "params": {
-    "enabled": ["memory.retrieval", "memory.extraction"],
-    "disabled": ["memory.consolidation"],
-    "scopes": {
-      "files.edit": {
-        "whitelist": ["/project/**", "/tmp/**"],
-        "blacklist": ["**/.env", "**/secrets/**"]
-      }
-    }
+    "effectiveCapabilities": ["tools", "channels.publish",
+                              "contextHooks.beforeInference.observe"],
+    "deniedCapabilities": ["contextHooks.beforeInference.inject.system"],
+    "enabled": ["memory.retrieval"],
+    "disabled": ["memory.extraction"]
   }
 }
 ```
+
+The response is a degradation receipt — see §6.7.
+
+---
+
+### 5.4 Capability Grants
+
+The **capability grant** is the security boundary. Feature sets (§6) are a cooperative
+convenience derived from it, and are **not** a confidentiality boundary: on a hook response
+the `featureSet` is supplied by the server (§6.5), and once any enabled feature causes the
+host to send a process a payload, all code in that process can read it.
+
+- The server advertises what it **can** do in `initialize`.
+- The host computes the **effective grant** per connection: what this server **may** do or
+  receive. Advertisement is an input, never an authorization.
+- Capability paths are dot-separated (§6.2). Matching is over full paths with `*` wildcards,
+  and implementations MUST perform a **generic recursive walk** — a hardcoded set of
+  nestable keys is non-conforming, since the vocabulary is depth 3 and will grow.
+
+**`effectiveCapabilities` is the sole normative allowlist**: the intersection of the
+server's advertisement as the host understands it and host policy. **Every path not present
+is denied**; absence is the denial, and there is no unspecified state.
+`deniedCapabilities` is derived diagnostic data only, MAY be omitted, and MUST NOT
+participate in any authorization decision. If a path appears in both, the receiving side
+MUST fail closed and reject the policy message as malformed.
+
+**A denied capability behaves as if never advertised.** The host MUST NOT deliver a message
+requiring one, MUST reject an inbound method requiring one, and MUST NOT accept a response
+contribution requiring one.
+
+**Enforcement is evaluated at response-receipt.** For any host-initiated request whose
+response carries a contribution — `beforeInference` injections, and any contribution-bearing
+response added later — the host MUST authorize **each contribution** against the grant
+**current when the response is received**, not when the request was sent. This makes
+per-injection `position` checks well-defined when one response carries a mixed array, and
+closes the in-flight window on revocation without additional machinery (§10.6 recommends a
+5s hook timeout, so a hook dispatched before a revocation can return after it).
+
+Authorization MUST NOT use the `featureSet` or `namespace` supplied in a response.
 
 ---
 
 ## 6. Feature Sets
 
-Feature sets provide fine-grained access control over server behaviors.
+Feature sets are named bundles of behavior, derived from the capability grant (§5.4). They
+provide ergonomics and honest self-reporting; they do not provide security.
 
 ### 6.1 Declaration
 
@@ -286,7 +331,7 @@ Servers declare feature sets in their capabilities:
         },
         "memory.extraction": {
           "description": "Extract new memories from conversations",
-          "uses": ["contextHooks.afterInference"]
+          "uses": ["inferenceLifecycle"]
         },
         "memory.consolidation": {
           "description": "Summarize and consolidate memories using AI inference",
@@ -309,14 +354,33 @@ Servers declare feature sets in their capabilities:
 | `description` | `string` | Yes | Human-readable description |
 | `uses` | `string[]` | Yes | Capabilities used (see below) |
 
-**Valid `uses` values:**
-- `"pushEvents"`
-- `"contextHooks.beforeInference"`
-- `"contextHooks.afterInference"`
-- `"inferenceRequest"`
-- `"tools"`
-- `"channels.publish"`
-- `"channels.observe"`
+**Valid `uses` values** are capability paths (§5.4):
+
+```
+pushEvents
+tools
+modelInfo
+inferenceRequest
+inferenceRequest.streaming
+inferenceLifecycle
+
+contextHooks.beforeInference.observe
+contextHooks.beforeInference.inject.system
+contextHooks.beforeInference.inject.beforeUser
+contextHooks.beforeInference.inject.afterUser
+
+channels.register
+channels.lifecycle
+channels.publish
+channels.incoming
+channels.streaming
+channels.acknowledge
+channels.typing
+```
+
+`uses` MUST contain only these values. A feature set whose `uses` is absent, empty, or
+contains an unrecognized value is **invalid**: the host disables it with reason
+`invalid_uses` (§6.6).
 
 ### 6.3 Hierarchical Naming
 
@@ -330,9 +394,24 @@ memory.consolidation
 
 Hosts MAY support wildcards: `memory.*` enables/disables all `memory.` features.
 
-### 6.4 Initialization
+### 6.4 Derivation from the capability grant
 
-Feature set selection happens during initialization. The host includes enabled/disabled sets in its response.
+Feature sets do not carry authority of their own. A denied capability disables every
+declared feature set whose `uses` requires it.
+
+The derivation MUST fail closed:
+
+1. **Absent, empty, or unrecognized `uses`** ⇒ the declaration is invalid; the feature set
+   is disabled with reason `invalid_uses`. The host does not guess what it meant.
+2. **Valid but incomplete `uses`** ⇒ the connection grant still protects. When the server
+   later exercises a capability its feature set did not declare, the host rejects that use
+   and emits a **declaration-mismatch** diagnostic. Security never depended on the
+   declaration.
+3. **A server MAY report further needs in its receipt** (§6.7), from knowledge of its own
+   implementation. That is testimony, not host derivation, and confers nothing.
+
+Implementations SHOULD warn at declaration time when a server exercises a capability absent
+from the exercising feature set's `uses`.
 
 ### 6.5 Tagging Messages
 
@@ -372,9 +451,13 @@ Feature set selection happens during initialization. The host includes enabled/d
 }
 ```
 
-### 6.6 Enforcement
+### 6.6 Rejection and diagnostics
 
-When a host receives a message tagged with a disabled feature set:
+Rejection is **diagnostics, not authorization** — authorization is the grant (§5.4). A
+server MUST NOT depend on being told; the negotiated policy of §6.7 is what informs it.
+
+When a host does reject, it MUST use a JSON-RPC **error object**, not a result carrying a
+failure flag, and MUST populate the documented code:
 
 ```jsonc
 {
@@ -383,191 +466,109 @@ When a host receives a message tagged with a disabled feature set:
   "error": {
     "code": -32001,
     "message": "Feature set not enabled",
-    "data": { 
-      "featureSet": "memory.consolidation",
-      "canEnable": true
-    }
+    "data": { "featureSet": "memory.consolidation" }
   }
 }
 ```
 
-For unknown feature sets, hosts SHOULD reject with `-32003`.
+For unknown feature sets, hosts SHOULD reject with `-32003`; for a denied capability,
+`-32002` with `data: { capability }`.
 
-### 6.7 Dynamic Updates
+**A method that will never be answered MUST return an error.** Silently sending no response
+to a request bearing an `id` leaves the caller hanging and makes the surface impossible to
+evaluate — apparent disuse becomes a measurement artifact rather than a signal.
 
-**featureSets/update (Host → Server, Notification):**
+> `canEnable` is removed. It told an untrusted peer what it might obtain by asking, which
+> is the mirror image of the coercion `featureSets/update` refusals are barred from (§6.7).
+
+### 6.7 Negotiated policy
+
+`featureSets/update` (Host → Server) MAY be sent as a Notification or as a Request — the
+same optional-ACK idiom §14.3 uses for `channels/publish`.
+
+Hosts **MUST** send it as a Request for **any change to the effective grant**: initial
+policy (§5.3), reductions, and expansions. Notifications remain valid only for purely
+descriptive feature metadata that does not alter the grant, and a Notification **cannot
+establish a ready state**.
+
+**The response is a degradation receipt**, not an acknowledgement:
 
 ```jsonc
 {
-  "jsonrpc": "2.0",
-  "method": "featureSets/update",
-  "params": {
-    "enabled": ["memory.proactive"],
-    "disabled": ["memory.consolidation"],
-    "scopes": {
-      "discord.post": {
-        "whitelist": ["#general", "#dev-*"],
-        "blacklist": ["#admin-*"]
-      }
-    }
+  "jsonrpc": "2.0", "id": 7,
+  "result": {
+    "accepted": true,
+    "mode": "degraded",
+    "unavailableFeatures": [
+      { "featureSet": "memory.extraction",
+        "missingCapabilities": ["inferenceLifecycle"],
+        "effect": "disabled" }
+    ],
+    "notes": []
   }
 }
 ```
 
-Servers MUST immediately respect the new configuration.
-
-**featureSets/changed (Server → Host, Notification):**
+Or a refusal, which names its own consequence rather than leaving the host to guess:
 
 ```jsonc
-{
-  "jsonrpc": "2.0",
-  "method": "featureSets/changed",
-  "params": {
-    "added": {
-      "memory.semantic": {
-        "description": "Semantic search (index now ready)",
-        "uses": ["contextHooks.beforeInference"]
-      }
-    },
-    "removed": ["memory.legacy"]
-  }
-}
+{ "accepted": false, "fallback": "mcp-only", "missingCapabilities": [...], "reason": "…" }
 ```
+
+**Consequence testimony is not policy authority.** The receipt reports what the server
+*will do*; it does not assert what the server is *entitled to*. The host **MUST NOT** widen
+any grant in response to a receipt. A refusal MAY be surfaced to a human for a new decision;
+it MUST NOT reach the policy engine as an input. Otherwise refusal becomes a coercion lever
+— *"I will not start unless you grant `inject.system`"* — and a host that widens to satisfy
+a refusal has inverted the trust direction.
+
+`accepted: false` does **not** mean close the transport. MCPL is an experimental extension
+(§3.1) and §3.2 already defines the weaker outcome: disable MCPL, retain tools, resources
+and prompts. The server names which applies via `fallback: "mcp-only" | "close"`. The host
+MAY close regardless.
+
+**Revocation and expansion have mirrored orderings.** A security-reducing change takes
+effect **atomically first**, then the host sends the Request and the server acknowledges or
+refuses; security cannot wait on consent. An expansion is the reverse: the host sends the
+Request, waits for the receipt, and **only then** begins fan-out on newly granted hooks or
+accepts newly granted inbound methods. Reducing late leaves a window of over-permission;
+expanding early sends on a path the recipient does not yet believe it has. An unanswered
+expansion simply does not activate.
+
+Servers MUST immediately respect a reduction.
+
+**`featureSets/changed` is removed in 0.5.0.** No server implemented it; servers that change
+their declared feature sets do so by reconnecting and re-declaring. Folded into reconnect
+semantics.
 
 ---
 
-## 7. Scoped Access
+## 7. Scoped Access — removed in 0.5.0
 
-Scoped access provides fine-grained permission control within feature sets. Servers can declare that actions require scope approval, and hosts can whitelist or blacklist scopes.
+**Removed.** Section 7 previously defined `scope/elevate` and scope whitelist/blacklist
+configuration. MCPL now has **two** authorization layers, not three: the connection
+capability grant (§5.4) and feature-set selection (§6).
 
-### 7.1 Declaration
+Two independent reasons:
 
-Servers declare that a feature set uses scopes:
+- **Nothing depended on it.** No server implemented `scope/elevate`; no feature set anywhere
+  declared `scoped: true`; hosts configured `scopes` locally and never put them on the wire.
+- **Its shape was unsafe.** The server supplied both `scope.label` and an arbitrary
+  `scope.payload`, and the host was instructed to match the *server-supplied label* against
+  its whitelist. A malicious server could label an `/etc/hosts` action as `/project/**`, or
+  make label and payload disagree — the same self-attestation defect as feature sets, one
+  layer down. Session-persisted approvals compounded it with no expiry, provenance, or
+  revocation.
 
-```jsonc
-{
-  "featureSets": {
-    "files.edit": {
-      "description": "Edit files on the filesystem",
-      "uses": ["tools"],
-      "scoped": true
-    },
-    "discord.post": {
-      "description": "Post messages to Discord channels",
-      "uses": ["tools"],
-      "scoped": true
-    }
-  }
-}
-```
+Mid-run elevation remains a real need for cooperative servers. When it returns it must be a
+**host-issued bounded grant**, not a trusted request: the host canonicalizes the scope from
+trusted method arguments or a host-owned adapter — never from the server's label — and
+approval returns an opaque grant id bound to server, capability, normalized target, expiry,
+and one-shot/lease semantics, against which execution is checked. The server's label
+survives only as display testimony.
 
-### 7.2 Host Configuration
-
-Hosts configure whitelist and blacklist patterns for scoped feature sets via `featureSets/update`:
-
-```jsonc
-{
-  "jsonrpc": "2.0",
-  "method": "featureSets/update",
-  "params": {
-    "enabled": ["files.edit", "discord.post"],
-    "scopes": {
-      "files.edit": {
-        "whitelist": ["/project/**", "/tmp/**"],
-        "blacklist": ["**/.env", "**/secrets/**"]
-      },
-      "discord.post": {
-        "whitelist": ["#general", "#dev-*"],
-        "blacklist": ["#admin-*"]
-      }
-    }
-  }
-}
-```
-
-Pattern matching semantics (glob, regex, exact) are host-defined.
-
-### 7.3 Scope Structure
-
-A scope consists of a label and an optional payload:
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `label` | `string` | Yes | Human-readable identifier for whitelist/blacklist matching |
-| `payload` | `object` | No | Arbitrary data passed back to server when approved |
-
-The label is used for display and pattern matching. The payload carries structured data the server needs when the scope is approved.
-
-### 7.4 scope/elevate (Server → Host, Request)
-
-When a server needs to act in a scope that isn't whitelisted (or is blacklisted), it requests elevation:
-
-```jsonc
-{
-  "jsonrpc": "2.0",
-  "method": "scope/elevate",
-  "id": 1,
-  "params": {
-    "featureSet": "files.edit",
-    "scope": {
-      "label": "/etc/hosts",
-      "payload": { "path": "/etc/hosts", "mode": "append" }
-    }
-  }
-}
-```
-
-### 7.5 Response
-
-```jsonc
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "approved": true,
-    "payload": { "path": "/etc/hosts", "mode": "append" }
-  }
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `approved` | `boolean` | Whether the scope was approved |
-| `payload` | `object` | The payload from the request, returned on approval |
-| `reason` | `string` | Present if `approved: false` |
-
-Hosts MAY enrich the `payload` with additional resolved or host-specific fields (for example, resolving `#general` to a channel ID). When enrichment occurs, hosts SHOULD return the enriched payload in this response.
-
-### 7.6 Host Evaluation
-
-When a server requests elevation:
-
-1. If label matches blacklist → deny
-2. If label matches whitelist → approve, return payload
-3. Otherwise → host decides (may prompt user for approval)
-
-Hosts MAY cache approvals for the session or persist them.
-
-### 7.7 Tagging Actions with Scope
-
-When invoking scoped tools, hosts SHOULD include the scope.
-
-```jsonc
-// Host → Server
-{
-  "method": "tools/call",
-  "params": {
-    "name": "edit_file",
-    "scope": {
-      "label": "/project/src/main.ts",
-      "payload": { "path": "/project/src/main.ts" }
-    },
-    "arguments": { /* ... */ }
-  }
-}
-```
-
-Hosts validate the scope against whitelist/blacklist before executing.
+Per-channel narrowing (patterns like `discord:acme/*`) now attaches to the grant entry
+(§14.5), not to a separate layer.
 
 ---
 
@@ -793,6 +794,10 @@ Push events allow servers to notify the host of external occurrences that may wa
 
 ### 9.2 Parameters
 
+`push/event` params MAY carry `tags: string[]` (§16) — namespaced semantic labels the host
+may route attention on. Tags are descriptive claims and never authority (§16.6).
+
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `featureSet` | `string` | Yes | Declaring feature set |
@@ -933,55 +938,67 @@ For convenience, `content` MAY be a plain string (equivalent to a single text bl
 | `content` | `string \| ContentBlock[]` | Yes | Content to inject |
 | `metadata` | `object` | No | Arbitrary metadata |
 
-### 10.5 context/afterInference
+### 10.5 inference/lifecycle (Host → Server, Notification)
 
-Sent after inference completes.
-
-**As Notification** (default, `afterInference.blocking: false`):
+`context/afterInference` is **removed in 0.5.0** and replaced by a metadata-only lifecycle
+signal. Gated on `inferenceLifecycle`.
 
 ```jsonc
 {
   "jsonrpc": "2.0",
-  "method": "context/afterInference",
+  "method": "inference/lifecycle",
   "params": {
     "inferenceId": "inf_xyz",
     "conversationId": "conv_123",
     "turnIndex": 7,
-    "userMessage": "How's the project?",
-    "assistantMessage": "Based on your recent work...",
-    "model": { ... },
-    "usage": {
-      "inputTokens": 1250,
-      "outputTokens": 340
-    }
+    "phase": "started",
+    "model": { "…": "…" },
+    "usage": { "inputTokens": 1250, "outputTokens": 340 }
   }
 }
 ```
 
-**As Request** (`afterInference.blocking: true`):
+| Field | Type | Description |
+|-------|------|-------------|
+| `inferenceId` | `string` | Identifies this inference |
+| `conversationId` | `string` | Persistent across turns |
+| `turnIndex` | `integer` | 0-indexed turn number |
+| `phase` | `"started" \| "completed" \| "aborted" \| "failed"` | Lifecycle position |
+| `model` | `ModelInfo` | OPTIONAL; only if `modelInfo` is granted |
+| `usage` | `object` | OPTIONAL; `completed` only |
 
-Same structure but includes `id`. Host waits for response.
+**It MUST NOT carry message content** — no `userMessage`, no `assistantMessage`, no injected
+context, no tool arguments or results. The content fields do not exist.
 
-```jsonc
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "result": {
-    "featureSet": "compliance.redaction",
-    "modifiedResponse": "The API key is [REDACTED]...",
-    "metadata": {
-      "redactions": [{ "type": "api_key", "position": [16, 38] }]
-    }
-  }
-}
-```
+**Pairing invariant.** For every `started` the host emits, it MUST emit **exactly one**
+terminal phase — `completed`, `aborted`, or `failed` — for the same `inferenceId`, on
+**every** exit path, including host crash-recovery paths where the host regains control. A
+terminal phase for an `inferenceId` that had no `started`, or a second terminal phase for one
+already terminated, is a conformance defect and SHOULD be logged as such. Servers MAY rely on
+exactly-once termination; a busy/idle state machine is only sound if they can.
+
+> **Why the replacement.** `context/afterInference` handed every subscribing server the user
+> message plus the joined assistant message — including prose destined for *other* servers'
+> surfaces and text the host's routing withheld. That was the broadest content-exfiltration
+> surface in MCPL, and broader than the per-channel moderated view a server already gets from
+> `channels/outgoing/complete`.
+>
+> `modifiedResponse` and the blocking form are removed with it. Response rewriting was the
+> only authority in MCPL to alter model output, and no server ever produced one. Servers
+> needing the *content* of a turn should take it per-channel and moderated via
+> `channels/outgoing/complete`, scoped to a surface they own.
+>
+> `phase: "started"` additionally removes pure observers from the blocking critical path,
+> and explicit `aborted`/`failed` mean an observer no longer has to infer a dead turn from
+> silence.
 
 ### 10.6 Hook Timeouts
 
 Hosts SHOULD enforce timeouts on context hooks:
 
 - `beforeInference`: Recommended 5 seconds
-- `afterInference` (blocking): Recommended 10 seconds
+
+`inference/lifecycle` is a Notification and has no timeout.
 
 On timeout, hosts SHOULD proceed without the hook's contribution and MAY log the timeout.
 
@@ -994,6 +1011,11 @@ Hosts MAY track hook depth and reject nested hook invocations.
 ### 10.8 Ordering
 
 When multiple servers provide injections, hosts group by `position` and determine order within each position.
+
+Each returned injection MUST be authorized independently, by its typed `position` against
+the connection grant, at response-receipt (§5.4). A single response carries one claimed
+`featureSet` but an array of injections at differing positions; authorizing per response
+would let one permitted position carry others.
 
 ---
 
@@ -1115,6 +1137,13 @@ Example policy (illustrative):
 
 ## 12. Model Information
 
+Gated on `modelInfo`. A host that does not support or does not grant `model/info` MUST reply
+with an error (§6.6) — silently sending no response leaves the caller hanging and makes the
+surface impossible to evaluate.
+
+Beyond identifying the text model, `model/info` is how a server discovers other models a
+host exposes, such as image generation.
+
 ### 12.1 model/info (Server → Host, Request)
 
 ```jsonc
@@ -1151,11 +1180,17 @@ MCPL expands server capabilities significantly. Feature sets and scoped access p
 
 | Capability | Risk | Mitigation |
 |------------|------|------------|
-| `pushEvents` | Cost, attention | Disable proactive features |
-| `contextHooks.beforeInference` | Read context, inject content | Review descriptions |
-| `contextHooks.afterInference` | Read/modify responses | Disable blocking hooks |
-| `inferenceRequest` | Consume inference budget | Disable high-cost features |
-| Scoped actions | Access beyond intended scope | Whitelist/blacklist patterns |
+| `pushEvents` | Cost, attention | Deny the capability; gate treatment by tags (§16) |
+| `contextHooks.beforeInference.observe` | Reads user input | Deny; grantable separately from injection |
+| `contextHooks.beforeInference.inject.system` | **Writes the system position** | Deny. The most consequential grant in MCPL |
+| `contextHooks.beforeInference.inject.beforeUser`/`.afterUser` | Writes conversational context | Deny independently of `system` |
+| `inferenceLifecycle` | Turn timing metadata | Deny. Carries no content by construction (§10.5) |
+| `inferenceRequest` | Consumes inference budget | Deny |
+| `channels.incoming` | Injects content, wakes the agent | Deny; narrow per-channel (§14.5) |
+| `channels.publish` | Speaks as the agent | Deny; narrow per-channel |
+
+Every row is a distinct capability path, separately grantable. Observation is never bundled
+with authority to alter — that separation is the point of §5.4.
 
 ### 13.2 Audit Logging
 
@@ -1169,18 +1204,27 @@ Hosts SHOULD log MCPL operations with:
 
 This enables debugging, cost attribution, and security review.
 
-### 13.3 Blocking Hook Policy
+### 13.3 Hook Failure Policy
 
-For blocking `afterInference` hooks, hosts should decide:
+`beforeInference` is the only remaining blocking hook. On timeout or error hosts SHOULD
+proceed without that server's contribution (fail-open) — a context enricher that is slow or
+broken should not block the turn.
 
-- **Fail-open**: On timeout/error, show unmodified response
-- **Fail-closed**: On timeout/error, show error to user
-
-Fail-open is recommended for most use cases.
+Blocking `afterInference` and its `modifiedResponse` are removed (§10.5), so there is no
+longer a hook that can withhold or rewrite a completed response.
 
 ### 13.4 Context Injection Safety
 
-Hosts MAY validate injected content. Servers MUST NOT inject content that attempts to override system instructions or impersonate other entities.
+The control is the grant, not the instruction. `contextHooks.beforeInference.inject.system`
+MUST be separately grantable and SHOULD be denied by default: for an untrusted server, write
+access to the system position is a larger hazard than read access to output.
+
+Hosts MUST authorize each returned injection by its typed `position` at response-receipt
+(§5.4, §10.8), and MAY additionally validate injected content.
+
+> Earlier drafts stated only *"Servers MUST NOT inject content that attempts to override
+> system instructions"*. A MUST NOT addressed to the untrusted party is not a control. It is
+> retained as a conformance expectation for cooperative servers, and nothing more.
 
 ---
 
@@ -1197,13 +1241,15 @@ Servers and hosts advertise channel support under `experimental.mcpl.channels`.
   "capabilities": {
     "experimental": {
       "mcpl": {
-        "version": "0.4",
+        "version": "0.5",
         "channels": {
           "register": true,
           "publish": true,
-          "observe": true,
+          "incoming": true,
           "lifecycle": true,
-          "streaming": true
+          "streaming": true,
+          "acknowledge": true,
+          "typing": true
         }
       }
     }
@@ -1211,33 +1257,26 @@ Servers and hosts advertise channel support under `experimental.mcpl.channels`.
 }
 ```
 
-Feature sets may gate channel behavior:
+Channel methods are authorized by the connection grant (§5.4), keyed on method and channel
+id — **not** by a `featureSet` field, which channel methods do not carry:
 
-```jsonc
-{
-  "experimental": {
-    "mcpl": {
-      "featureSets": {
-        "channels.publish": {
-          "description": "Publish to registered channels",
-          "uses": ["channels.publish"],
-          "scoped": true
-        },
-        "channels.observe": {
-          "description": "Observe outgoing/incoming messages",
-          "uses": ["channels.observe"],
-          "scoped": true
-        },
-        "channels.thinking": {
-          "description": "Observe private thinking channel (read-only)",
-          "uses": ["channels.observe"],
-          "scoped": true
-        }
-      }
-    }
-  }
-}
-```
+| Method | Required capability |
+|---|---|
+| `channels/register`, `channels/changed` | `channels.register` |
+| `channels/list` (either direction) | `channels.register` |
+| `channels/open`, `channels/close` | `channels.lifecycle` |
+| `channels/publish` | `channels.publish` |
+| `channels/incoming` | `channels.incoming` |
+| `channels/outgoing/chunk`, `channels/outgoing/complete` | `channels.streaming` |
+| `channels/acknowledge` | `channels.acknowledge` |
+| `channels/typing` | `channels.typing` |
+
+`channels.incoming` is deliberately distinct from any "observe" grant: `channels/incoming`
+is server→host content injection plus wake authority — a write, and one of the most
+consequential a server has.
+
+Feature sets MAY still name these capabilities in `uses` for ergonomics and honest
+degradation reporting (§6.4), but they are not the authorization.
 
 ### 14.2 Channel Descriptors
 
@@ -1280,7 +1319,9 @@ Feature sets may gate channel behavior:
 }
 ```
 
-- `channels/list` (Request): List known channels for this connection.
+- `channels/list` (Request, either direction): List known channels for this connection.
+  A host that does not implement the inbound form MUST reply with an error, not silence
+  (§6.6).
 
 ```jsonc
 {
@@ -1484,9 +1525,41 @@ Servers MAY supply channel-related `contextInjections` (e.g., thread context). T
 
 ### 14.5 Security and Scoping
 
-- Use `featureSets.update.scopes` to whitelist/blacklist channel patterns (e.g., `discord:acme/*`).
-- The `channels.thinking` feature set only allows read-only observation of a private thinking pseudo-channel; publishing to thinking is invalid.
-- Hosts SHOULD moderate content before routing/publishing and may provide raw vs moderated views to observers per policy.
+**Per-descriptor authorization.** `channels/register` and `channels/changed` carry *arrays*
+of descriptors, not a single trusted `channelId`. The host MUST authorize **each descriptor
+independently**. A server MUST NOT be able to widen its registration by bundling one
+permitted descriptor with nine forbidden ones — whole-request authorization on an array is
+one attacker-chosen token standing in for many independent decisions.
+
+`channels/changed` is therefore **dual-mode**. As a Notification it cannot carry a result, so
+neither whole-rejection nor itemized reporting is expressible. A host whose policy can reject
+descriptors MUST require the Request form; a server MUST use it when signalled. The Request
+form returns an itemized result, one entry per submitted descriptor:
+
+```jsonc
+{ "results": [
+    { "id": "discord:#general", "accepted": true },
+    { "id": "discord:#admin",   "accepted": false, "reason": "capability_denied" }
+] }
+```
+
+The same shape applies to `channels/register`. A host receiving a Notification it must
+partially reject MUST filter itemwise **and** emit a diagnostic — never silently, since
+silent filtering leaves the two sides disagreeing about which channels exist.
+
+**Receipt-time validation.** `channels/incoming` MUST be validated at receipt against the
+**current** grant and the **actually registered** channel — not against the channel id the
+message claims, and not against the grant as it stood at registration. A channel registered
+under a grant that has since narrowed does not keep its old authority.
+
+**Per-channel narrowing** (patterns like `discord:acme/*`) attaches to the grant entry.
+
+**Delivery is never a side effect of a lifecycle event.** A server MUST NOT deliver content
+to its surface in response to a host lifecycle notification or hook. Delivery occurs only via
+`channels/publish`. Hosts SHOULD treat a server-side send triggered by `inference/lifecycle`,
+`channels/outgoing/chunk`, or `channels/outgoing/complete` as a conformance defect.
+
+Hosts SHOULD moderate content before routing/publishing.
 
 ### 14.6 Error Codes
 
@@ -1494,7 +1567,8 @@ Add to Appendix A:
 
 | Code | Message | Description |
 |------|---------|-------------|
-| `-32017` | Channel not permitted | Lacking scope to publish or observe channel |
+| `-32002` | Capability denied | Method requires a capability not in the effective grant; `data: { capability }` |
+| `-32017` | Channel not permitted | Lacking capability to publish to or receive from channel |
 | `-32023` | Unknown channel | Channel id doesn’t exist or not registered |
 | `-32024` | Channel open failed | Server could not open/connect the requested channel |
 
@@ -1511,21 +1585,20 @@ Add to Appendix A:
   "capabilities": {
     "experimental": {
       "mcpl": {
-        "version": "0.4",
-        "contextHooks": {
-          "beforeInference": true,
-          "afterInference": { "blocking": false }
-        },
+        "version": "0.5",
+        "contextHooks": { "beforeInference": true },
+        "inferenceLifecycle": true,
         "inferenceRequest": { "streaming": true },
         "pushEvents": true,
         "featureSets": {
           "memory.retrieval": {
             "description": "Retrieve relevant memories",
-            "uses": ["contextHooks.beforeInference"]
+            "uses": ["contextHooks.beforeInference.observe",
+                     "contextHooks.beforeInference.inject.system"]
           },
           "memory.extraction": {
             "description": "Learn from conversations",
-            "uses": ["contextHooks.afterInference"]
+            "uses": ["inferenceLifecycle"]
           },
           "memory.consolidation": {
             "description": "Summarize memories using AI",
@@ -1601,7 +1674,11 @@ Add to Appendix A:
 }
 ```
 
-### 15.2 Compliance Server (Blocking Hook)
+### 15.2 Embodiment Server (write-without-read)
+
+A server bridging a physical body. It needs to know when a turn starts and ends, and to
+prepend one line of body status — but it never needs to read what the user said. Under the
+split capability vocabulary it can be granted exactly that.
 
 **Capabilities:**
 
@@ -1610,14 +1687,16 @@ Add to Appendix A:
   "capabilities": {
     "experimental": {
       "mcpl": {
-        "version": "0.4",
-        "contextHooks": {
-          "afterInference": { "blocking": true }
-        },
+        "version": "0.5",
+        "contextHooks": { "beforeInference": true },
+        "inferenceLifecycle": true,
+        "pushEvents": true,
         "featureSets": {
-          "compliance.redaction": {
-            "description": "Redact secrets and PII from responses",
-            "uses": ["contextHooks.afterInference"]
+          "body.presence": {
+            "description": "Report body state and track attention",
+            "uses": ["pushEvents",
+                     "inferenceLifecycle",
+                     "contextHooks.beforeInference.inject.beforeUser"]
           }
         }
       }
@@ -1626,36 +1705,160 @@ Add to Appendix A:
 }
 ```
 
-**Redaction flow:**
+Note the absence of `contextHooks.beforeInference.observe`. The host will call the hook and
+accept the injection, but `userMessage` is not this server's to read.
+
+**Turn start — host signals, server marks busy:**
 
 ```jsonc
-// Host → Server
 {
   "jsonrpc": "2.0",
-  "method": "context/afterInference",
-  "id": 15,
-  "params": {
-    "inferenceId": "inf_abc",
-    "conversationId": "conv_456",
-    "turnIndex": 3,
-    "userMessage": "What's the API key?",
-    "assistantMessage": "The API key is sk-1234567890abcdef...",
-    "model": { ... },
-    "usage": { "inputTokens": 50, "outputTokens": 20 }
-  }
+  "method": "inference/lifecycle",
+  "params": { "inferenceId": "inf_abc", "conversationId": "conv_456",
+              "turnIndex": 3, "phase": "started" }
 }
+```
 
-// Server → Host
+**Injection — one line, no read:**
+
+```jsonc
 {
   "jsonrpc": "2.0",
   "id": 15,
   "result": {
-    "featureSet": "compliance.redaction",
-    "modifiedResponse": "The API key is [REDACTED]...",
-    "metadata": { "redactions": [{ "type": "api_key" }] }
+    "featureSet": "body.presence",
+    "contextInjections": [
+      { "namespace": "body", "position": "beforeUser",
+        "content": "[body] online, battery 62%, attention mode: ambient" }
+    ]
   }
 }
 ```
+
+The host authorizes this injection by its `position` — `beforeUser` — against the grant, at
+response-receipt (§5.4). Had the same server returned a `system` injection it would be
+rejected, without the server's claimed `featureSet` entering the decision.
+
+**Turn end — exactly once, on every exit path:**
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "method": "inference/lifecycle",
+  "params": { "inferenceId": "inf_abc", "phase": "aborted" }
+}
+```
+
+Because §10.5 guarantees exactly one terminal phase per `started`, the server's busy/idle
+state machine is sound without a safety timeout.
+
+---
+
+## 16. Event Tags
+
+A multi-valued **`tags`** dimension lets a producer label what an event *is*, so a consumer
+can decide *how to treat it* — including whether it wakes the model. Tags are namespaced,
+discrete (never an ordered scale), and their meaning is assigned by the consumer.
+
+### 16.1 The field
+
+`tags: string[]` is OPTIONAL on `push/event` params (§9.2) and on `channels/incoming`
+messages (§14.3).
+
+- A tag is `namespace:value`, optionally `namespace:key=value` for faceted tags.
+- The `chat:` (§16.2) and `mcpl:` namespaces are reserved. All others are producer-defined
+  and SHOULD match the producer's declared name.
+- Tags are a **set** — unordered, deduplicated.
+- Producers **MUST NOT** emit un-namespaced tags. A bare `"mention"` is not a tag.
+
+### 16.2 Reserved core vocabulary: `chat:*`
+
+| Facet | Tag | Meaning |
+|---|---|---|
+| Addressing | `chat:addressed` | Umbrella: directed at the agent |
+| | `chat:mention` | Explicitly named/@-mentioned |
+| | `chat:reply` | A reply to the agent's own message |
+| | `chat:dm` | A direct/private 1:1 message |
+| | `chat:ambient` | Overheard; not addressed |
+| | `chat:broadcast` | Channel-wide ping |
+| | `chat:to-self` | Acts on the agent's own content |
+| Sender | `chat:from-human` / `chat:from-bot` / `chat:from-self` / `chat:from-agent` | Authorship |
+| Lifecycle | `chat:edited` / `chat:deleted` / `chat:reaction` / `chat:reaction-remove` | Plain creation is the implicit default and carries no tag |
+| Content | `chat:has-image` / `chat:has-audio` / `chat:has-file` / `chat:has-link` / `chat:command` | Modality |
+| Locus | `chat:private` / `chat:group` / `chat:thread` | Conversation shape |
+
+`chat:reaction-remove` is distinct from `chat:reaction`: emitting the latter for a removal
+makes "wake on reactions to my messages" fire on un-reactions.
+
+### 16.3 Normative core closure
+
+These implications are defined by this specification. Hosts MUST expand them, and MUST do so
+**without consulting any producer ontology**:
+
+```
+chat:mention  ⇒ chat:addressed
+chat:reply    ⇒ chat:addressed
+chat:dm       ⇒ chat:addressed, chat:private
+```
+
+Expansion is transitive and purely additive. Producers SHOULD **also** emit every applicable
+core tag directly; both are conforming, and direct emission is more robust.
+
+**Mutual exclusion.** `chat:addressed` and `chat:ambient` are opposites. Because closure is
+additive it can produce both. After expansion a host MUST resolve this by **dropping
+`chat:ambient`**: an event carrying both is not interpretable by a first-match-wins rule
+list, where the outcome would depend on rule ordering rather than on the event. Producers
+SHOULD NOT emit `chat:ambient` alongside anything implying `chat:addressed`.
+
+**Producer-declared `implies` edges are advisory** and MUST NOT be applied automatically —
+in particular an edge targeting a reserved `chat:*` tag MUST NOT be applied unless the host
+or operator has explicitly accepted that producer's ontology (§16.5). An arbitrary declared
+edge lets a producer promote its own traffic into whatever band the consumer reserved for
+being spoken to, without the consumer ever writing a rule about it.
+
+### 16.4 Producer ontology
+
+Producers SHOULD advertise the tags they emit as an open-world ontology on their feature-set
+declaration — a hint catalog, not a closed schema. Hosts MUST tolerate undescribed tags.
+
+Fields (all optional): `coreTags` (which reserved tags this server emits, descriptions
+inherited from §16.2); per-tag `desc`, `facet`, `implies`, `suggestedTreatment`, `stability`;
+`keyed` families; a top-level `suggestedTreatment` rule list; and `open`.
+
+Discovery is at init only. There is no runtime ontology-query method: a mutable ontology
+cannot be meaningfully "accepted" per §16.5.
+
+### 16.5 Suggested treatment is a hint, not policy
+
+A producer's `suggestedTreatment` **MUST NOT** be applied automatically. It is inspectable
+configuration, surfaced to a host or operator and applied only on **explicit acceptance**.
+Absent acceptance the precedence chain is **consumer rules → host default**; there is no
+producer tier.
+
+> Otherwise an untrusted server suggests `immediate` for everything and **purchases
+> inference by declaration**, without the consumer ever writing a rule. Wake-ups cost money,
+> attention, and context.
+
+Accepted suggestions SHOULD remain attributable and revocable.
+
+### 16.6 Tags are never authority
+
+Admission is decided **before** tags are read: whether a `push/event` or `channels/incoming`
+message enters the host at all is decided by the capability grant (§5.4) and channel
+authorization (§14.5). Tags influence *treatment* only after admission.
+
+- A tag or ontology MUST NOT widen a capability grant.
+- A tag MUST NOT authorize a channel or cause a message on an unauthorized channel to be
+  admitted.
+- A tag MUST NOT bypass source-aware gate policy.
+- Tags are **untrusted claims** authored by the producer, exactly like `origin` and
+  `metadata`. A host MAY disbelieve them.
+
+### 16.7 Consumer treatment (recommended)
+
+Hosts SHOULD evaluate treatment as an ordered, first-match-wins rule list with `tagsAny` /
+`tagsAll` / `tagsNone` matchers (globs allowed), composable with `source` / `channel`, over
+the closure-expanded tag set.
 
 ---
 
@@ -1739,12 +1942,22 @@ Add to Appendix A:
         "type": "string",
         "enum": [
           "pushEvents",
-          "contextHooks.beforeInference",
-          "contextHooks.afterInference",
-          "inferenceRequest",
           "tools",
+          "modelInfo",
+          "inferenceRequest",
+          "inferenceRequest.streaming",
+          "inferenceLifecycle",
+          "contextHooks.beforeInference.observe",
+          "contextHooks.beforeInference.inject.system",
+          "contextHooks.beforeInference.inject.beforeUser",
+          "contextHooks.beforeInference.inject.afterUser",
+          "channels.register",
+          "channels.lifecycle",
           "channels.publish",
-          "channels.observe"
+          "channels.incoming",
+          "channels.streaming",
+          "channels.acknowledge",
+          "channels.typing"
         ]
       }
     }
@@ -1761,6 +1974,78 @@ Add to Appendix A:
 ---
 
 ## Changelog
+
+### 0.5.0-draft (August 2026)
+
+Merges RFC-002 (capability grants) and RFC-001 rev 2 (event tags). Grounded in AUDIT-001,
+an implementation audit of 15 trees; every removal below is backed by evidence from it
+rather than by taste.
+
+**Authorization**
+- Added **capability grants** (§5.4) as the security boundary — hierarchical, host-computed,
+  splitting observation from authority to alter. `effectiveCapabilities` is the sole
+  normative allowlist; absence is denial; `deniedCapabilities` is diagnostic only.
+- Replaced the flat `uses` enum with capability paths (§6.2, App. B.2), adding
+  `modelInfo`, `inferenceLifecycle`, `inferenceRequest.streaming`, `channels.register`,
+  `channels.lifecycle`, `channels.incoming`, `channels.streaming`, `channels.acknowledge`,
+  `channels.typing`, and splitting `contextHooks.beforeInference` into `.observe` and
+  `.inject.{system,beforeUser,afterUser}`.
+- Enforcement is evaluated **at response-receipt** against the current grant, which makes
+  per-injection `position` checks well-defined and closes the revocation in-flight window.
+- Feature sets now **derive** from the grant (§6.4), fail-closed, with `invalid_uses` and
+  declaration-mismatch diagnostics.
+- Matching requires a **generic recursive walk**; a hardcoded nestable-key list is
+  non-conforming.
+
+**Negotiation**
+- `featureSets/update` is **dual-mode** (§6.7) and MUST be a Request for any grant change.
+  Its response is a **degradation receipt**, not an acknowledgement.
+- Consequence testimony is not policy authority: hosts MUST NOT widen a grant in response to
+  a receipt. `accepted:false` offers `fallback: "mcp-only" | "close"` rather than defaulting
+  to closing the transport.
+- Revocation applies atomically first; expansion activates only after the receipt (§6.7).
+- Initial policy MUST precede first hook fan-out and MUST be sent even when nothing is
+  enabled or disabled (§5.3).
+
+**Removals**
+- **Removed §7 Scoped Access and `scope/elevate`.** Zero implementations, and its shape was
+  unsafe: the host matched a *server-supplied* `scope.label` against its own whitelist.
+  Two authorization layers now, not three.
+- **Removed `context/afterInference`**, replaced by metadata-only `inference/lifecycle`
+  (§10.5) with a normative exactly-once terminal-phase invariant. `modifiedResponse` and the
+  blocking hook form go with it — no server ever produced one, and one server adopted the
+  capability and deliberately retired it.
+- **Removed `featureSets/changed`** — folded into reconnect semantics.
+- **Removed §6.4's initialization contradiction** with §5.3/§6.7.
+- **Removed `canEnable`** from `-32001` data.
+
+**Channels**
+- Channel methods authorize against the connection grant, with an explicit method →
+  capability table (§14.1). The prior feature-set example bound to nothing, since channel
+  methods carry no `featureSet`.
+- **Per-descriptor authorization** with itemized results; `channels/changed` becomes
+  dual-mode (§14.5).
+- `channels/incoming` validated at receipt against the current grant and the actually
+  registered channel.
+- **Promoted `channels/acknowledge` and `channels/typing`** into the spec — four and three
+  independent implementations respectively had already invented them.
+- Normative rule: **delivery is never a side effect of a lifecycle event** (§14.5).
+
+**Event tags (§16)**
+- Added `tags` on `push/event` and `channels/incoming`, the reserved `chat:*` vocabulary,
+  and consumer matching.
+- **Tags are never authority** (§16.6). Admission precedes tags.
+- Core implications are **normative and spec-defined** (§16.3); producer `implies` edges are
+  advisory pending explicit acceptance. Added `chat:addressed`/`chat:ambient` mutual
+  exclusion after expansion.
+- Producer `suggestedTreatment` is a hint requiring explicit acceptance (§16.5), not a
+  middle tier of policy — otherwise a server purchases inference by declaration.
+
+**Security**
+- §13.1 risk table rewritten per capability path; §13.4 replaced a MUST NOT aimed at the
+  untrusted party with an actual control (deny `inject.system` by default).
+- Added `-32002 Capability denied`.
+- A method that will never be answered MUST return an error (§6.6).
 
 ### 0.4.0-draft (March 2026)
 

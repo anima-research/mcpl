@@ -70,11 +70,30 @@ The **manifest** is the `experimental.mcpl` capability block a server presents a
 
 A server that supports this RFC includes an opaque `revision: string` in that block.
 
-- The revision is **server-authored and untrusted**. It MUST change whenever any domain
-  changes; a host MUST NOT treat an unchanged revision as proof that nothing changed.
+- The revision **MUST be derived from the canonical manifest content** — a stable digest
+  over the normalized manifest — and MUST NOT be hand-maintained or tied to a package
+  version. It MUST be stable across process restarts.
+- The revision is nonetheless **server-authored and untrusted**. A host MUST NOT treat an
+  unchanged revision as proof that nothing changed.
 - Hosts MUST NOT parse or order revisions. Equality is the only defined operation.
 - The host's **diff of the fetched manifest is authoritative** for every decision. The
   revision exists to make the common case cheap, not to be believed.
+
+> **Why content-derived is normative rather than advice.** A hand-maintained revision fails
+> the way every hand-maintained invariant fails — silently, and precisely when someone is
+> busy shipping something else. A content digest moves on its own, so a cooperative server
+> **cannot accidentally** change without announcing. That does not make this a security
+> mechanism (§10); it moves silent change from *likely-by-accident* to *only-by-intent*,
+> which is a materially better cooperative guarantee than "remember to bump it".
+>
+> Stating it as an invariant rather than as a library API also makes it portable: any
+> implementation in any language can satisfy it, and a host can check it by fetching twice.
+
+**Package version is not surface identity.** A protocol- or package-version field is useful
+for validation and migration, and MUST NOT substitute for comparing the manifest. This is
+already observable: mcpl-editor advertises `version: "0.5"` while implementing methods no
+spec version has contained, and both core libraries advertise `"0.4"` while their `channels`
+shape matches no spec version at all.
 
 ## 4. `mcpl/manifestChanged` (Server → Host, Notification)
 
@@ -101,7 +120,7 @@ changing anything.
 **No capability path gates this.** That is deliberate and is an exception worth stating:
 announcing conveys no authority, and gating it would perversely silence exactly the servers
 whose grants had just been narrowed. The cost of the announcement is the host's re-fetch,
-which §7 bounds.
+which §11 bounds.
 
 ## 5. `mcpl/manifest` (Host → Server, Request)
 
@@ -232,7 +251,36 @@ coalesce multiple notifications into a single fetch. Exceeding the host's limit 
 **conformance defect**, not a negotiation: the host drops the excess and SHOULD surface the
 defect, rather than fetching or renegotiating anything.
 
-## 12. Out of scope
+## 12. Implementation note (non-normative)
+
+Conformance requires only §3–§7. But the two sides are tracking **different facts**, and
+implementations that conflate them tend to reintroduce self-attestation:
+
+**Server library** — canonicalize the complete manifest, compute the content digest,
+diff old against new to derive changed domains, install atomically, coalesce rapid edits
+(a batch API so six related edits produce one announcement, not six intermediate manifests),
+emit `mcpl/manifestChanged` per connection where the last-announced revision differs, and
+answer `mcpl/manifest` from the same canonical snapshot. Servers should call something like
+`setManifest(next)` — never hand-author an announcement.
+
+Seed each connection's last-announced revision from the `initialize` handshake. Otherwise a
+fresh connection starts empty and fires a redundant announcement immediately after
+initialize, which already carried the manifest.
+
+**Host** — retain, per connection: last fetched and validated manifest digest; last
+negotiated effective grant with timestamp and provenance; accepted ontology digest; current
+feature degradation; last receipt delivered to the resident.
+
+The division answers "which revision was announced": the server tracks what it announced to
+each host; the host tracks what it actually fetched, validated, negotiated, and delivered.
+Those are different facts and both matter — a server's announcement log is not evidence the
+host acted on it.
+
+**The server library MUST NOT generate resident-facing prose or policy conclusions.** The
+impact vocabulary (§7) is host-derived precisely so that what a resident is told about a
+change is not authored by the party that made it.
+
+## 13. Out of scope
 
 - **Mid-run capability elevation.** A server *asking* for a capability it lacks is a
   different mechanism with a coercion profile of its own. `manifestChanged` announces what a
@@ -242,7 +290,7 @@ defect, rather than fetching or renegotiating anything.
 - **Signed or attested manifests.** Would move this from freshness to assurance, and needs
   an identity story MCPL does not have.
 
-## 13. Backward compatibility
+## 14. Backward compatibility
 
 - Both methods are optional. A server that implements neither behaves exactly as today:
   its manifest is fixed at `initialize`.

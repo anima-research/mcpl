@@ -204,7 +204,12 @@ Servers advertise MCPL support under `experimental.mcpl`:
       "mcpl": {
         "version": "0.5",
         "pushEvents": true,
-        "contextHooks": { "beforeInference": true },
+        "contextHooks": {
+          "beforeInference": {
+            "observe": true,
+            "inject": { "system": false, "beforeUser": true, "afterUser": true }
+          }
+        },
         "inferenceLifecycle": true,
         "inferenceRequest": { "streaming": true },
         "modelInfo": true,
@@ -215,6 +220,13 @@ Servers advertise MCPL support under `experimental.mcpl`:
   }
 }
 ```
+
+**Advertisement mirrors the capability paths.** A capability with sub-capabilities is
+advertised as a nested object whose members are the leaves of §6.2's vocabulary. A boolean
+`true` at any level is shorthand for "every leaf beneath this node"; `false` or absence means
+none. `"beforeInference": true` therefore remains valid and means observe plus all three
+injection positions — but a server that only injects should say so, and the host computes the
+grant against leaves either way (§5.4).
 
 ### 5.2 Host Support
 
@@ -870,8 +882,21 @@ Context hooks allow servers to inject or modify context at inference boundaries.
 | `inferenceId` | `string` | Unique identifier for this inference |
 | `conversationId` | `string` | Persistent across turns |
 | `turnIndex` | `integer` | 0-indexed turn number |
-| `userMessage` | `string \| null` | User input (null for continued generation) |
+| `userMessage` | `string \| null` | User input. `null` for continued generation, **and `null` whenever `contextHooks.beforeInference.observe` is not granted** |
 | `model` | `ModelInfo` | Current model metadata |
+
+**Observation and injection are independently granted.** A host MUST still invoke
+`context/beforeInference` for a server granted any `inject.*` leaf but denied `observe`, and
+MUST send `userMessage: null` in that case. The hook is *how injection happens*; withholding
+the call would deny injection along with observation.
+
+This is what makes write-without-read real rather than nominal. A server that appends a body
+status line has no need of the user's text, and under this rule is never handed it.
+`inferenceId`, `conversationId` and `turnIndex` are correlation identifiers rather than
+content, and are sent regardless.
+
+Hosts MUST NOT rely on servers ignoring fields they were not granted — the field is absent,
+not merely discouraged.
 
 ### 10.2 beforeInference Response
 
@@ -977,12 +1002,25 @@ signal. Gated on `inferenceLifecycle`.
 **It MUST NOT carry message content** — no `userMessage`, no `assistantMessage`, no injected
 context, no tool arguments or results. The content fields do not exist.
 
-**Pairing invariant.** For every `started` the host emits, it MUST emit **exactly one**
-terminal phase — `completed`, `aborted`, or `failed` — for the same `inferenceId`, on
-**every** exit path, including host crash-recovery paths where the host regains control. A
-terminal phase for an `inferenceId` that had no `started`, or a second terminal phase for one
-already terminated, is a conformance defect and SHOULD be logged as such. Servers MAY rely on
-exactly-once termination; a busy/idle state machine is only sound if they can.
+**Pairing, best-effort.** `inference/lifecycle` is an unacknowledged Notification, so its
+delivery guarantee is **best-effort**, deliberately:
+
+- A host MUST attempt exactly one terminal phase — `completed`, `aborted`, or `failed` —
+  per emitted `started`, on every exit path it controls.
+- A host that loses control (crash, kill, transport loss) MAY never send the terminal. There
+  is no outbox, replay, acknowledgement, or event identity, and this specification does not
+  add one.
+- A terminal with no preceding `started`, or a second terminal for an already-terminated
+  `inferenceId`, is a conformance defect and SHOULD be logged.
+
+**Consumers MUST be defensive**: deduplicate terminals by `inferenceId`, tolerate a missing
+terminal, and **retain a safety timeout** for any state machine gated on turn completion.
+
+> An earlier draft claimed exactly-once delivery including crash recovery, and that servers
+> could rely on it. That is not achievable for an unacknowledged notification without durable
+> outbox, replay, acknowledgement and idempotency — a substantial mechanism this
+> specification does not have. The honest guarantee is above: much better than inferring a
+> dead turn from silence, but not a substitute for a timeout.
 
 > **Why the replacement.** `context/afterInference` handed every subscribing server the user
 > message plus the joined assistant message — including prose destined for *other* servers'
@@ -996,8 +1034,9 @@ exactly-once termination; a busy/idle state machine is only sound if they can.
 > `channels/outgoing/complete`, scoped to a surface they own.
 >
 > `phase: "started"` additionally removes pure observers from the blocking critical path,
-> and explicit `aborted`/`failed` mean an observer no longer has to infer a dead turn from
-> silence.
+> and explicit `aborted`/`failed` mean an observer usually learns of a dead turn instead of
+> inferring it from silence — which shortens how long a safety timeout sits armed, without
+> removing the need for one.
 
 ### 10.6 Hook Timeouts
 
@@ -1756,8 +1795,9 @@ rejected, without the server's claimed `featureSet` entering the decision.
 }
 ```
 
-Because §10.5 guarantees exactly one terminal phase per `started`, the server's busy/idle
-state machine is sound without a safety timeout.
+§10.5's terminal phases are best-effort, so the server still keeps a safety timeout — but it
+now learns of an aborted turn directly in the common case, rather than waiting the timeout
+out on every failure.
 
 ---
 
@@ -1989,6 +2029,9 @@ an implementation audit of 15 trees; every removal below is backed by evidence f
 rather than by taste.
 
 **Authorization**
+- Advertisement is now **recursive**, mirroring the capability paths, and
+  `context/beforeInference` sends `userMessage: null` when `observe` is not granted (§5.1,
+  §10.1) — without which the observe/inject split would exist only in names.
 - Added **capability grants** (§5.4) as the security boundary — hierarchical, host-computed,
   splitting observation from authority to alter. `effectiveCapabilities` is the sole
   normative allowlist; absence is denial; `deniedCapabilities` is diagnostic only.
@@ -2019,7 +2062,7 @@ rather than by taste.
   unsafe: the host matched a *server-supplied* `scope.label` against its own whitelist.
   Two authorization layers now, not three.
 - **Removed `context/afterInference`**, replaced by metadata-only `inference/lifecycle`
-  (§10.5) with a normative exactly-once terminal-phase invariant. `modifiedResponse` and the
+  (§10.5) with best-effort terminal phases — consumers dedupe and keep a safety timeout. `modifiedResponse` and the
   blocking hook form go with it — no server ever produced one, and one server adopted the
   capability and deliberately retired it.
 - **Removed `featureSets/changed`** — it carried a server-authored change payload. *(Amended

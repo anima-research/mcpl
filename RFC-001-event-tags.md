@@ -155,7 +155,22 @@ chat:dm       ⇒ chat:addressed, chat:private
 Expansion is transitive, purely additive, and never removes a tag.
 
 Producers SHOULD **also** emit every applicable core tag directly rather than relying on
-expansion. Both behaviours are conforming; direct emission is more robust across hosts.
+expansion. Both behaviours are conforming; direct emission is more robust across hosts, and
+is what discord-mcpl and portal-mcpl already do — both compute the umbrellas themselves,
+with source comments saying "so no host-side implication expansion is needed."
+
+**Mutual exclusion.** `chat:addressed` and `chat:ambient` are opposites: an event is either
+directed at the agent or overheard. Because closure is purely additive, it can produce
+`chat:addressed` on an event a producer also tagged `chat:ambient` — for example a DM tagged
+`chat:dm` + `chat:ambient` by a producer whose addressing logic did not treat it as
+addressed.
+
+After expansion, a host MUST resolve this by **dropping `chat:ambient`**: a tag implying
+`chat:addressed` is more specific than the producer's ambient classification, and an event
+carrying both is not interpretable by a first-match-wins rule list, where the outcome would
+depend on rule ordering rather than on the event.
+
+Producers SHOULD NOT emit `chat:ambient` alongside any tag that implies `chat:addressed`.
 
 **Producer-declared `implies` edges are advisory.** An edge declared in a `tagOntology`
 (§5.1) MUST NOT be applied automatically, and in particular an edge whose target is a
@@ -366,8 +381,14 @@ to-self|from-human|from-bot|from-agent|edited|deleted|has-*|thread`. Extensions:
 
 **portal** (webhook personas over the relay) — maps `AddressInfo.reasons` to core:
 role/name mention → `chat:mention`, reply → `chat:reply`, subscription → `chat:ambient`;
-persona author → `chat:from-agent`. No DMs (omits `chat:dm`). Extensions:
-`portal:role-mention`, `portal:name-mention`, `portal:subscription`, `portal:persona`.
+persona author → `chat:from-agent`. Emits the `chat:addressed`/`chat:ambient` umbrella
+directly. Extensions: `portal:role-mention`, `portal:name-mention`, `portal:subscription`,
+`portal:persona`.
+
+> **Correction to revision 1**, which stated portal has "No DMs (omits `chat:dm`)". It does
+> emit `chat:dm`, when `guildId === null` or the relay reports a `dm` reason. What portal
+> emits no locus tags for is `chat:private` / `chat:group` — neither appears in the tree, so
+> §4.1's `chat:dm ⇒ chat:private` closure is a widening for portal, not a conflict.
 
 **telegram** — chat types map to core: private → `chat:dm`+`chat:private`,
 group/supergroup → `chat:group`, channel → `chat:broadcast`. Extensions:

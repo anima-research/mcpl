@@ -1,0 +1,695 @@
+{
+  "$schema": "https://github.com/anima-research/mcpl conformance/manifest-digest-vectors",
+  "title": "MCPL RFC-003 \u00a73.1 canonical manifest digest \u2014 conformance vectors",
+  "specRevision": "RFC-003 (Accepted, 2026-08-02), against SPEC.md 0.5.0-draft",
+  "generatedBy": "conformance/generate_vectors.py",
+  "readme": "conformance/README.md",
+  "algorithm": {
+    "formula": "revision = \"sha256:\" + base64url_unpadded(SHA-256( JCS( manifest_without_revision ) ) )",
+    "canonicalization": "RFC 8785 JSON Canonicalization Scheme",
+    "hash": "SHA-256 over the UTF-8 encoding of the JCS string",
+    "encoding": "RFC 4648 \u00a75 base64url, '=' padding removed",
+    "strip": "the `revision` member of the manifest root object, and nothing else",
+    "setArraySort": "UTF-8 byte sequence, ascending; duplicates removed",
+    "objectMemberSort": "RFC 8785: UTF-16 code-unit sequence of the member name. Every member name in a conforming manifest is ASCII, so this coincides with UTF-8 byte order throughout.",
+    "identifierCharset": "[A-Za-z0-9._:*-] (non-empty)"
+  },
+  "setValuedArrayPaths": [
+    "featureSets.*.uses",
+    "featureSets.*.tagOntology.coreTags",
+    "featureSets.*.tagOntology.tags.*.implies"
+  ],
+  "listValuedArrayNote": "Every array not listed in setValuedArrayPaths is a list: its order is part of the manifest and is preserved verbatim. This includes `keyed.*.values` (RFC-003 \u00a73.1) and, less obviously, the `tagsAny`/`tagsAll`/`tagsNone` members of `suggestedTreatment` rules, which are semantically sets but are not named as such.",
+  "identifierPositions": [
+    "featureSets.#key",
+    "featureSets.*.uses.[]",
+    "featureSets.*.tagOntology.coreTags.[]",
+    "featureSets.*.tagOntology.tags.#key",
+    "featureSets.*.tagOntology.tags.*.implies.[]",
+    "featureSets.*.tagOntology.keyed.#key",
+    "featureSets.*.tagOntology.keyed.*.values.[]",
+    "featureSets.*.tagOntology.suggestedTreatment.*.tagsAny.[]",
+    "featureSets.*.tagOntology.suggestedTreatment.*.tagsAll.[]",
+    "featureSets.*.tagOntology.suggestedTreatment.*.tagsNone.[]",
+    "featureSets.*.tagOntology.tags.*.facet"
+  ],
+  "identifierPositionsNote": "'#key' means the object's member names at that path; '[]' means the array's elements. RFC-003 does not enumerate these positions; this list is the fail-closed reading and is the one thing in this file most in need of RFC confirmation. Root member names are capability paths and are checked, except `version`, `revision` and `featureSets`, which are not capabilities (RFC-003 \u00a73).",
+  "errorCodes": {
+    "identifier_charset": "A string in an identifier position is empty or contains a character outside [A-Za-z0-9._:*-].",
+    "set_member_not_string": "A set-valued array contains a non-string.",
+    "manifest_not_object": "The manifest is not a JSON object."
+  },
+  "howToRead": "`input` is the manifest as received, before any normalization. `canonicalJson` is the exact JCS string; it is stored as a JSON string, so parse it and encode the result as UTF-8 to obtain the bytes that are hashed \u2014 do not compare raw file bytes. `sha256Hex` is that hash in hex, present so a mismatch localizes to canonicalization or to encoding rather than 'somewhere'. `digest` is the full revision value. A vector carries either `digest` or `expectError`, never both. `sameDigestAs` and `differentDigestFrom` are assertions to test in addition to the digest itself.",
+  "vectors": [
+    {
+      "name": "rfc-003-worked-example",
+      "description": "The single worked vector already present in RFC-003 \u00a73.1. Reproduced and verified here byte for byte; every other vector in this file is only as trustworthy as this one. Object members are supplied out of JCS order and `uses` out of set order, so neither JCS member sorting nor set sorting alone yields this digest.",
+      "input": {
+        "version": "0.5",
+        "pushEvents": true,
+        "contextHooks": {
+          "beforeInference": true
+        },
+        "inferenceLifecycle": true,
+        "channels": {
+          "register": true,
+          "publish": true,
+          "incoming": true
+        },
+        "featureSets": {
+          "demo.messaging": {
+            "description": "Demo",
+            "uses": [
+              "channels.publish",
+              "channels.incoming",
+              "pushEvents",
+              "tools"
+            ]
+          }
+        }
+      },
+      "canonicalJson": "{\"channels\":{\"incoming\":true,\"publish\":true,\"register\":true},\"contextHooks\":{\"beforeInference\":true},\"featureSets\":{\"demo.messaging\":{\"description\":\"Demo\",\"uses\":[\"channels.incoming\",\"channels.publish\",\"pushEvents\",\"tools\"]}},\"inferenceLifecycle\":true,\"pushEvents\":true,\"version\":\"0.5\"}",
+      "sha256Hex": "fd86534b4875b6a4c031923a784942b3349013658dc77c610219a052f348f47e",
+      "digest": "sha256:_YZTS0h1tqTAMZI6eElCszSQE2WNx3xhAhmgUvNI9H4"
+    },
+    {
+      "name": "key-ordering-and-set-ordering-independence",
+      "description": "Same manifest as vector 0 with every object's members supplied in a different order, `uses` reversed, and one duplicate `uses` entry. MUST produce the identical digest to vector 0: JCS fixes member order, set semantics fix `uses` order and remove duplicates. A reader that preserves JSON insertion order sees genuinely shuffled input here; a reader that sorts on parse trivially passes, which is fine \u2014 the invariant is the digest, not the intermediate.",
+      "input": {
+        "featureSets": {
+          "demo.messaging": {
+            "uses": [
+              "tools",
+              "pushEvents",
+              "channels.publish",
+              "channels.incoming",
+              "tools"
+            ],
+            "description": "Demo"
+          }
+        },
+        "channels": {
+          "incoming": true,
+          "register": true,
+          "publish": true
+        },
+        "inferenceLifecycle": true,
+        "contextHooks": {
+          "beforeInference": true
+        },
+        "pushEvents": true,
+        "version": "0.5"
+      },
+      "canonicalJson": "{\"channels\":{\"incoming\":true,\"publish\":true,\"register\":true},\"contextHooks\":{\"beforeInference\":true},\"featureSets\":{\"demo.messaging\":{\"description\":\"Demo\",\"uses\":[\"channels.incoming\",\"channels.publish\",\"pushEvents\",\"tools\"]}},\"inferenceLifecycle\":true,\"pushEvents\":true,\"version\":\"0.5\"}",
+      "sha256Hex": "fd86534b4875b6a4c031923a784942b3349013658dc77c610219a052f348f47e",
+      "digest": "sha256:_YZTS0h1tqTAMZI6eElCszSQE2WNx3xhAhmgUvNI9H4",
+      "sameDigestAs": "rfc-003-worked-example"
+    },
+    {
+      "name": "revision-present-is-stripped",
+      "description": "Vector 0 with a `revision` member carrying a deliberately WRONG value. The digest never covers itself: `revision` is removed before canonicalization, so this MUST yield vector 0's digest and the supplied value MUST NOT influence it. An implementation that hashes the manifest as received fails here. Note `revision` is stripped only at the manifest root \u2014 see vector 'revision-only-stripped-at-root'.",
+      "input": {
+        "revision": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "version": "0.5",
+        "pushEvents": true,
+        "contextHooks": {
+          "beforeInference": true
+        },
+        "inferenceLifecycle": true,
+        "channels": {
+          "register": true,
+          "publish": true,
+          "incoming": true
+        },
+        "featureSets": {
+          "demo.messaging": {
+            "description": "Demo",
+            "uses": [
+              "channels.publish",
+              "channels.incoming",
+              "pushEvents",
+              "tools"
+            ]
+          }
+        }
+      },
+      "canonicalJson": "{\"channels\":{\"incoming\":true,\"publish\":true,\"register\":true},\"contextHooks\":{\"beforeInference\":true},\"featureSets\":{\"demo.messaging\":{\"description\":\"Demo\",\"uses\":[\"channels.incoming\",\"channels.publish\",\"pushEvents\",\"tools\"]}},\"inferenceLifecycle\":true,\"pushEvents\":true,\"version\":\"0.5\"}",
+      "sha256Hex": "fd86534b4875b6a4c031923a784942b3349013658dc77c610219a052f348f47e",
+      "digest": "sha256:_YZTS0h1tqTAMZI6eElCszSQE2WNx3xhAhmgUvNI9H4",
+      "sameDigestAs": "rfc-003-worked-example"
+    },
+    {
+      "name": "revision-only-stripped-at-root",
+      "description": "RFC-003 \u00a73.1 strips `revision` from the manifest object, not from everything named `revision`. A nested member of that name is ordinary content and is hashed. Contrast with 'revision-present-is-stripped'; an implementation that strips recursively produces a different digest here.",
+      "input": {
+        "version": "0.5",
+        "revision": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "demoExtension": {
+          "revision": "not-stripped"
+        }
+      },
+      "canonicalJson": "{\"demoExtension\":{\"revision\":\"not-stripped\"},\"version\":\"0.5\"}",
+      "sha256Hex": "6af42d3f858e782423067830aa96ad8b4c33f4e519ae1c8806b41e7003bc0fff",
+      "digest": "sha256:avQtP4WOeCQjBngwqpati0wz9OUZrhyIBrQecAO8D_8"
+    },
+    {
+      "name": "empty-manifest",
+      "description": "The empty object. Not a valid manifest \u2014 SPEC \u00a75.1 always shows `version` \u2014 but the digest function MUST be total, because a host recomputes the digest of whatever it fetched before deciding anything about it (RFC-003 \u00a76.6: rejection is diagnostics, not authorization). Canonicalizes to two bytes.",
+      "input": {},
+      "canonicalJson": "{}",
+      "sha256Hex": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "digest": "sha256:RBNvo1WzZ4oRRq0W9-hknpT7T8If536DEMBg9hyq_4o"
+    },
+    {
+      "name": "minimal-manifest",
+      "description": "The smallest manifest a conforming server can present: protocol version only, no capabilities, no feature sets.",
+      "input": {
+        "version": "0.5"
+      },
+      "canonicalJson": "{\"version\":\"0.5\"}",
+      "sha256Hex": "6f31241638571f8ca714ba6d8dbecc150933312117891911b869c0d4657117c8",
+      "digest": "sha256:bzEkFjhXH4ynFLptjb7MFQkzMSEXiRkRuGnA1GVxF8g"
+    },
+    {
+      "name": "unicode-and-json-escapes",
+      "description": "Exercises RFC 8785 \u00a73.2.2.2 string serialization on a `description` (descriptions are free text; only identifiers are charset-restricted). The escaping rule is ECMAScript JSON.stringify: escape ONLY U+0022, U+005C and C0 controls, using \\b \\t \\n \\f \\r where defined and \\u00xx otherwise. Everything else is literal UTF-8 \u2014 including U+007F DELETE, U+2028/U+2029 (which some serializers escape for JavaScript embedding and MUST NOT here), U+00A0, a combining sequence that MUST NOT be NFC-normalized, and an astral emoji that MUST be one 4-byte UTF-8 sequence, not a surrogate pair escape. Non-ASCII also appears in a nested tagOntology `desc`.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo.unicode": {
+            "description": "Caf\u00e9 \u65e5\u672c\u8a9e \ud83d\ude42 \"quoted\" and back\\slash, tab[\t] nl[\n] cr[\r] bs[\b] ff[\f] soh[\u0001] us[\u001f] del[\u007f] ls[\u2028] ps[\u2029] nbsp[\u00a0] combining[e\u0301] precomposed[\u00e9] end",
+            "uses": [
+              "pushEvents"
+            ],
+            "tagOntology": {
+              "tags": {
+                "demo:accent": {
+                  "desc": "na\u00efve r\u00e9sum\u00e9 \u2014 em dash, \u00abguillemets\u00bb, \u4e2d\u6587",
+                  "facet": "content"
+                }
+              },
+              "open": true
+            }
+          }
+        }
+      },
+      "canonicalJson": "{\"featureSets\":{\"demo.unicode\":{\"description\":\"Caf\u00e9 \u65e5\u672c\u8a9e \ud83d\ude42 \\\"quoted\\\" and back\\\\slash, tab[\\t] nl[\\n] cr[\\r] bs[\\b] ff[\\f] soh[\\u0001] us[\\u001f] del[\u007f] ls[\u2028] ps[\u2029] nbsp[\u00a0] combining[e\u0301] precomposed[\u00e9] end\",\"tagOntology\":{\"open\":true,\"tags\":{\"demo:accent\":{\"desc\":\"na\u00efve r\u00e9sum\u00e9 \u2014 em dash, \u00abguillemets\u00bb, \u4e2d\u6587\",\"facet\":\"content\"}}},\"uses\":[\"pushEvents\"]}},\"version\":\"0.5\"}",
+      "sha256Hex": "584c8cba1a460489b17b6375d34e5060e00b49edbf16d7752b662d0f6cb74163",
+      "digest": "sha256:WEyMuhpGBImxe2N1005QYOALSe2_Ftd1K2YtD2y3QWM"
+    },
+    {
+      "name": "number-canonicalisation",
+      "description": "No spec-defined manifest member is numeric in MCPL 0.5. But RFC-003 \u00a73 digests the COMPLETE experimental.mcpl object \u2014 'every member other than version, revision and featureSets' is the capabilities domain, vendor extensions included \u2014 so an implementation that cannot serialize a number cannot digest a real server's manifest. `demoLimits` is a vendor extension, not spec surface. Values pin RFC 8785 \u00a73.2.2.3 / ECMAScript Number::toString: integer-valued doubles lose the '.0'; negative zero serializes as '0'; 1e20 stays positional while 1e21 goes exponential as '1e+21'; 1e-6 stays positional while 1e-7 becomes '1e-7'; the shortest round-tripping digit string is used, so 0.1 is '0.1' and not '0.1000000000000000055511151231257827'.",
+      "input": {
+        "version": "0.5",
+        "demoLimits": {
+          "zero": 0,
+          "negZero": -0.0,
+          "one": 1.0,
+          "hundred": 100,
+          "negative": -17,
+          "half": 2.5,
+          "tenth": 0.1,
+          "thirds": 0.3333333333333333,
+          "e20": 1e+20,
+          "e21": 1e+21,
+          "e-6": 1e-06,
+          "e-7": 1e-07,
+          "maxSafeInteger": 9007199254740991,
+          "pow2To53": 9007199254740992,
+          "minSubnormal": 5e-324,
+          "large": 1.7976931348623157e+308
+        }
+      },
+      "canonicalJson": "{\"demoLimits\":{\"e-6\":0.000001,\"e-7\":1e-7,\"e20\":100000000000000000000,\"e21\":1e+21,\"half\":2.5,\"hundred\":100,\"large\":1.7976931348623157e+308,\"maxSafeInteger\":9007199254740991,\"minSubnormal\":5e-324,\"negZero\":0,\"negative\":-17,\"one\":1,\"pow2To53\":9007199254740992,\"tenth\":0.1,\"thirds\":0.3333333333333333,\"zero\":0},\"version\":\"0.5\"}",
+      "sha256Hex": "311aa9a702ee06ef2eb61594219658853eae9a0b4cce05cde5653400b9b958e2",
+      "digest": "sha256:MRqppwLuBu8uthWUIZZYhT6umgtMzgXN5WU0ALm5WOI"
+    },
+    {
+      "name": "set-sort-is-utf8-byte-order",
+      "description": "Set-valued arrays sort by UTF-8 byte sequence ascending (RFC-003 \u00a73.1) \u2014 not by locale collation and not case-insensitively. Every value here is a legal identifier, so this is reachable from a conforming manifest. It discriminates byte order from the alternatives: 'demo:Alpha' and 'demo:Zeta' precede ALL lowercase entries because 0x41/0x5A < 0x61; a locale or case-folding sort would interleave them. Within the lowercase run the ASCII punctuation order '-'(0x2D) < '.'(0x2E) < digits(0x30..) < ':'(0x3A) is exercised, which ICU-style collations reorder or ignore entirely. 'demo:alpha' being a proper prefix sorts first. `coreTags` additionally carries a duplicate that MUST be removed.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo.sorting": {
+            "description": "Set ordering",
+            "uses": [
+              "tools",
+              "channels.publish",
+              "channels.incoming",
+              "channels.acknowledge",
+              "pushEvents"
+            ],
+            "tagOntology": {
+              "coreTags": [
+                "chat:reply",
+                "chat:dm",
+                "chat:addressed",
+                "chat:mention",
+                "chat:dm",
+                "chat:from-bot",
+                "chat:from-human"
+              ],
+              "tags": {
+                "demo:sorted": {
+                  "desc": "Byte-order probe",
+                  "implies": [
+                    "demo:zeta",
+                    "demo:Zeta",
+                    "demo:alpha-1",
+                    "demo:alpha.1",
+                    "demo:Alpha",
+                    "demo:alpha1",
+                    "demo:alpha:1",
+                    "demo:alpha",
+                    "demo:alpha9",
+                    "demo:alpha-1"
+                  ]
+                }
+              },
+              "open": false
+            }
+          }
+        }
+      },
+      "canonicalJson": "{\"featureSets\":{\"demo.sorting\":{\"description\":\"Set ordering\",\"tagOntology\":{\"coreTags\":[\"chat:addressed\",\"chat:dm\",\"chat:from-bot\",\"chat:from-human\",\"chat:mention\",\"chat:reply\"],\"open\":false,\"tags\":{\"demo:sorted\":{\"desc\":\"Byte-order probe\",\"implies\":[\"demo:Alpha\",\"demo:Zeta\",\"demo:alpha\",\"demo:alpha-1\",\"demo:alpha.1\",\"demo:alpha1\",\"demo:alpha9\",\"demo:alpha:1\",\"demo:zeta\"]}}},\"uses\":[\"channels.acknowledge\",\"channels.incoming\",\"channels.publish\",\"pushEvents\",\"tools\"]}},\"version\":\"0.5\"}",
+      "sha256Hex": "e330141afe604023f31f1652b1a3718c36209568f6c45aac8fbd8f739e871f64",
+      "digest": "sha256:4zAUGv5gQCPzHxZSsaNxjDYglWj2xFqsj72Pc56HH2Q"
+    },
+    {
+      "name": "nested-featuresets-and-list-arrays",
+      "description": "Five feature sets with a full tagOntology, pinning the boundary between set-valued and list-valued arrays. SETS (sorted, deduped): `uses`, `tagOntology.coreTags`, `tagOntology.tags.*.implies`. LISTS (order preserved verbatim, RFC-003 \u00a73.1 'any array not listed is a list'): `keyed.*.values`, the `tagOntology.suggestedTreatment` rule list, and \u2014 this is the trap \u2014 the `tagsAny`/`tagsNone` members inside those rules, which are semantically sets but are not named in RFC-003's table. They are supplied out of sorted order and MUST stay that way. Feature-set names also exercise JCS member sorting: 'demo.Messaging' precedes 'demo.messaging' (0x4D < 0x6D), 'demo.messaging.extra' precedes 'demo.messaging2' (0x2E < 0x32), and the all-digits name '10' sorts first \u2014 harmlessly, since JCS re-sorts and JavaScript's integer-like own-key reordering therefore cannot be observed.",
+      "input": {
+        "version": "0.5",
+        "pushEvents": true,
+        "modelInfo": true,
+        "inferenceRequest": {
+          "streaming": true
+        },
+        "contextHooks": {
+          "beforeInference": {
+            "observe": true,
+            "inject": {
+              "system": false,
+              "beforeUser": true,
+              "afterUser": true
+            }
+          }
+        },
+        "channels": {
+          "register": true,
+          "lifecycle": true,
+          "publish": true,
+          "incoming": true,
+          "streaming": false,
+          "acknowledge": true,
+          "typing": false
+        },
+        "featureSets": {
+          "demo.messaging": {
+            "description": "Messaging",
+            "uses": [
+              "channels.publish",
+              "channels.incoming",
+              "channels.register",
+              "pushEvents"
+            ],
+            "tagOntology": {
+              "coreTags": [
+                "chat:mention",
+                "chat:reply",
+                "chat:addressed",
+                "chat:ambient",
+                "chat:from-bot"
+              ],
+              "tags": {
+                "demo:role-mention": {
+                  "desc": "A role the agent holds was pinged",
+                  "facet": "addressing",
+                  "implies": [
+                    "chat:broadcast",
+                    "chat:ambient"
+                  ],
+                  "suggestedTreatment": "throttle"
+                },
+                "demo:voice": {
+                  "desc": "Voice state change",
+                  "facet": "lifecycle",
+                  "stability": "experimental"
+                }
+              },
+              "keyed": {
+                "urgency": {
+                  "desc": "Producer urgency hint",
+                  "values": [
+                    "low",
+                    "normal",
+                    "high",
+                    "critical"
+                  ],
+                  "ordered": true
+                },
+                "locale": {
+                  "desc": "Message locale",
+                  "values": [
+                    "ja-JP",
+                    "en-GB",
+                    "en-US"
+                  ],
+                  "ordered": false
+                }
+              },
+              "suggestedTreatment": [
+                {
+                  "tagsAny": [
+                    "chat:mention",
+                    "chat:addressed"
+                  ],
+                  "behavior": "immediate"
+                },
+                {
+                  "tagsAny": [
+                    "chat:deleted"
+                  ],
+                  "behavior": "mute"
+                },
+                {
+                  "tagsAny": [
+                    "chat:from-bot",
+                    "chat:ambient"
+                  ],
+                  "tagsNone": [
+                    "chat:reply",
+                    "chat:mention"
+                  ],
+                  "behavior": "throttle"
+                }
+              ],
+              "open": true
+            }
+          },
+          "demo.messaging.extra": {
+            "description": "Extra",
+            "uses": [
+              "tools"
+            ],
+            "rollback": true
+          },
+          "demo.messaging2": {
+            "description": "Second",
+            "uses": [
+              "inferenceLifecycle",
+              "modelInfo"
+            ]
+          },
+          "demo.Messaging": {
+            "description": "Capitalised sibling",
+            "uses": [
+              "contextHooks.beforeInference.inject.afterUser",
+              "contextHooks.beforeInference.observe",
+              "contextHooks.beforeInference.inject.beforeUser"
+            ]
+          },
+          "10": {
+            "description": "All-digits feature set name",
+            "uses": [
+              "modelInfo"
+            ]
+          }
+        }
+      },
+      "canonicalJson": "{\"channels\":{\"acknowledge\":true,\"incoming\":true,\"lifecycle\":true,\"publish\":true,\"register\":true,\"streaming\":false,\"typing\":false},\"contextHooks\":{\"beforeInference\":{\"inject\":{\"afterUser\":true,\"beforeUser\":true,\"system\":false},\"observe\":true}},\"featureSets\":{\"10\":{\"description\":\"All-digits feature set name\",\"uses\":[\"modelInfo\"]},\"demo.Messaging\":{\"description\":\"Capitalised sibling\",\"uses\":[\"contextHooks.beforeInference.inject.afterUser\",\"contextHooks.beforeInference.inject.beforeUser\",\"contextHooks.beforeInference.observe\"]},\"demo.messaging\":{\"description\":\"Messaging\",\"tagOntology\":{\"coreTags\":[\"chat:addressed\",\"chat:ambient\",\"chat:from-bot\",\"chat:mention\",\"chat:reply\"],\"keyed\":{\"locale\":{\"desc\":\"Message locale\",\"ordered\":false,\"values\":[\"ja-JP\",\"en-GB\",\"en-US\"]},\"urgency\":{\"desc\":\"Producer urgency hint\",\"ordered\":true,\"values\":[\"low\",\"normal\",\"high\",\"critical\"]}},\"open\":true,\"suggestedTreatment\":[{\"behavior\":\"immediate\",\"tagsAny\":[\"chat:mention\",\"chat:addressed\"]},{\"behavior\":\"mute\",\"tagsAny\":[\"chat:deleted\"]},{\"behavior\":\"throttle\",\"tagsAny\":[\"chat:from-bot\",\"chat:ambient\"],\"tagsNone\":[\"chat:reply\",\"chat:mention\"]}],\"tags\":{\"demo:role-mention\":{\"desc\":\"A role the agent holds was pinged\",\"facet\":\"addressing\",\"implies\":[\"chat:ambient\",\"chat:broadcast\"],\"suggestedTreatment\":\"throttle\"},\"demo:voice\":{\"desc\":\"Voice state change\",\"facet\":\"lifecycle\",\"stability\":\"experimental\"}}},\"uses\":[\"channels.incoming\",\"channels.publish\",\"channels.register\",\"pushEvents\"]},\"demo.messaging.extra\":{\"description\":\"Extra\",\"rollback\":true,\"uses\":[\"tools\"]},\"demo.messaging2\":{\"description\":\"Second\",\"uses\":[\"inferenceLifecycle\",\"modelInfo\"]}},\"inferenceRequest\":{\"streaming\":true},\"modelInfo\":true,\"pushEvents\":true,\"version\":\"0.5\"}",
+      "sha256Hex": "e64bb023608ee82dac13ce24c5b411133a4014ab9d487627e496e95c9b1a41e1",
+      "digest": "sha256:5kuwI2CO6C2sE84kxbQREzpAFKudSHYn5JbpXJsaQeE"
+    },
+    {
+      "name": "boolean-shorthand-is-not-expanded",
+      "description": "SPEC \u00a75.1 says a boolean `true` at any level is shorthand for every leaf beneath it. That shorthand is an input to the host's GRANT computation, not a canonicalization step: RFC-003 \u00a73.1 defines no expansion, and expanding would make the digest depend on a vocabulary that \u00a75.4 says will grow \u2014 two implementations on different vocabulary revisions would then disagree. So the shorthand form and the expanded form are DIFFERENT manifests with DIFFERENT digests. This vector is the shorthand form; 'boolean-shorthand-expanded-differs' is the expansion, and their digests differ by construction. See README 'Unresolved'.",
+      "input": {
+        "version": "0.5",
+        "contextHooks": {
+          "beforeInference": true
+        },
+        "channels": true
+      },
+      "canonicalJson": "{\"channels\":true,\"contextHooks\":{\"beforeInference\":true},\"version\":\"0.5\"}",
+      "sha256Hex": "4cd54f59e40b0eafbf54deb1dafdccb7eabc105af649f112a267f410ad6b63af",
+      "digest": "sha256:TNVPWeQLDq-_VN6x2v3Mt-q8EFr2SfESomf0EK1rY68"
+    },
+    {
+      "name": "boolean-shorthand-expanded-differs",
+      "description": "The expansion of 'boolean-shorthand-is-not-expanded'. Semantically the same advertisement under SPEC \u00a75.1; a different manifest under RFC-003 \u00a73.1, hence a different digest. Asserting the digests differ is the conformance check \u2014 an implementation that normalizes shorthand will collapse these two and fail.",
+      "input": {
+        "version": "0.5",
+        "contextHooks": {
+          "beforeInference": {
+            "observe": true,
+            "inject": {
+              "system": true,
+              "beforeUser": true,
+              "afterUser": true
+            }
+          }
+        },
+        "channels": {
+          "register": true,
+          "lifecycle": true,
+          "publish": true,
+          "incoming": true,
+          "streaming": true,
+          "acknowledge": true,
+          "typing": true
+        }
+      },
+      "canonicalJson": "{\"channels\":{\"acknowledge\":true,\"incoming\":true,\"lifecycle\":true,\"publish\":true,\"register\":true,\"streaming\":true,\"typing\":true},\"contextHooks\":{\"beforeInference\":{\"inject\":{\"afterUser\":true,\"beforeUser\":true,\"system\":true},\"observe\":true}},\"version\":\"0.5\"}",
+      "sha256Hex": "effd2a835358473a39ae28b4adf2fe92f2c49fea21ecde589f6719db200e6ab5",
+      "digest": "sha256:7_0qg1NYRzo5rii0rfL-kvLEn-oh7N5Yn2cZ2yAOarU",
+      "differentDigestFrom": "boolean-shorthand-is-not-expanded"
+    },
+    {
+      "name": "dot-in-capability-member-name",
+      "description": "'.' is inside [A-Za-z0-9._:*-], and capability paths are dot-separated (SPEC \u00a75.4), so a member NAME may legally contain the separator. `{\"a.b\": {\"c\": true}}` and `{\"a\": {\"b.c\": true}}` both flatten to the path 'a.b.c' while being different manifests with different digests. That is not a digest defect \u2014 canonicalization is over the tree, not the flattened paths, so the digest is well defined either way \u2014 but it IS a grant-matching ambiguity, and it is unresolved (see README). This vector pins the digest behaviour so the two libraries agree while the spec question is open: DO NOT flatten before hashing.",
+      "input": {
+        "version": "0.5",
+        "a.b": {
+          "c": true
+        },
+        "a": {
+          "b.c": true
+        }
+      },
+      "canonicalJson": "{\"a\":{\"b.c\":true},\"a.b\":{\"c\":true},\"version\":\"0.5\"}",
+      "sha256Hex": "134be18b3cdc22e5379ef693a0cdea42ddc6d632123b5f0f5242fde5d0a0615d",
+      "digest": "sha256:E0vhizzcIuU3nvaToM3qQt3G1jISO18PUkL95dCgYV0"
+    },
+    {
+      "name": "null-and-false-members-are-content",
+      "description": "RFC-003 \u00a73.1 strips exactly one thing: the root `revision`. 'Nothing else is stripped.' A `false` capability and a `null` member are therefore hashed as written and are NOT equivalent to the member being absent \u2014 see 'null-and-false-members-omitted' for the contrasting digest. An implementation that drops falsy or null members before hashing (a common serializer default) fails here.",
+      "input": {
+        "version": "0.5",
+        "pushEvents": false,
+        "modelInfo": null,
+        "inferenceLifecycle": true
+      },
+      "canonicalJson": "{\"inferenceLifecycle\":true,\"modelInfo\":null,\"pushEvents\":false,\"version\":\"0.5\"}",
+      "sha256Hex": "b5fe1d16ec764ffb10c8cd10263db810530679723d561cb01affb56afadffdf3",
+      "digest": "sha256:tf4dFux2T_sQyM0QJj24EFMGeXI9VhywGv-1avrf_fM"
+    },
+    {
+      "name": "null-and-false-members-omitted",
+      "description": "The same manifest as 'null-and-false-members-are-content' with the false and null members absent. Digests MUST differ.",
+      "input": {
+        "version": "0.5",
+        "inferenceLifecycle": true
+      },
+      "canonicalJson": "{\"inferenceLifecycle\":true,\"version\":\"0.5\"}",
+      "sha256Hex": "c89479fad52a837fdae3aaccff18cf18ec513db7474d913084279090f0c5cf45",
+      "digest": "sha256:yJR5-tUqg3_a46rM_xjPGOxRPbdHTZEwhCeQkPDFz0U",
+      "differentDigestFrom": "null-and-false-members-are-content"
+    },
+    {
+      "name": "negative-non-ascii-tag-identifier",
+      "description": "RFC-003 \u00a73.1: 'capability paths and tag identifiers MUST be ASCII \u2014 [A-Za-z0-9._:*-]'. 'demo:na\u00efve' is a tag identifier containing U+00EF. A conforming digest implementation MUST refuse to produce a revision for this manifest rather than silently hashing it, because the UTF-8-vs-UTF-16 ordering divergence the ASCII rule exists to prevent becomes reachable the moment non-ASCII enters a set-valued array. See README 'Unresolved' \u2014 this is the fail-closed reading; the RFC states the MUST but not who enforces it.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo.bad": {
+            "description": "Bad tag identifier",
+            "uses": [
+              "pushEvents"
+            ],
+            "tagOntology": {
+              "tags": {
+                "demo:na\u00efve": {
+                  "desc": "non-ASCII key"
+                }
+              }
+            }
+          }
+        }
+      },
+      "expectError": "identifier_charset",
+      "errorDetail": "featureSets.demo.bad.tagOntology.tags.demo:na\u00efve = 'demo:na\u00efve'"
+    },
+    {
+      "name": "negative-solidus-in-feature-set-name",
+      "description": "Feature-set names are dot-separated identifiers (SPEC \u00a76.3). 'demo/messaging' contains U+002F SOLIDUS, which is outside [A-Za-z0-9._:*-]. MUST be rejected. The value is plausible enough to be typed by hand \u2014 MCPL method names use '/' \u2014 which is exactly why it is here.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo/messaging": {
+            "description": "Slash in name",
+            "uses": [
+              "tools"
+            ]
+          }
+        }
+      },
+      "expectError": "identifier_charset",
+      "errorDetail": "featureSets.demo/messaging = 'demo/messaging'"
+    },
+    {
+      "name": "negative-trailing-space-in-uses",
+      "description": "'channels.publish ' with a trailing U+0020. Invisible in review, invisible in most diffs, and it changes both the digest and the SPEC \u00a76.2 enum match. MUST be rejected on the charset rule. Note this failure is distinct from SPEC \u00a76.4's `invalid_uses` degradation: `invalid_uses` disables one feature set while the manifest still gets a revision, whereas a charset violation means no revision can be computed at all.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo.messaging": {
+            "description": "Trailing space",
+            "uses": [
+              "pushEvents",
+              "channels.publish "
+            ]
+          }
+        }
+      },
+      "expectError": "identifier_charset",
+      "errorDetail": "featureSets.demo.messaging.uses[] = 'channels.publish '"
+    },
+    {
+      "name": "negative-space-in-nested-capability-member",
+      "description": "The charset rule applies to capability PATHS, and SPEC \u00a75.1 says advertisement mirrors those paths \u2014 a nested member name is a path segment, so 'contextHooks.beforeInference.inject.before user' is a capability path containing U+0020. \u00a75.4 additionally requires a 'generic recursive walk' and calls a hardcoded set of nestable keys non-conforming, so an implementation that only validates root-level member names is wrong at exactly the depth the vocabulary is growing into. MUST be rejected.",
+      "input": {
+        "version": "0.5",
+        "contextHooks": {
+          "beforeInference": {
+            "observe": true,
+            "inject": {
+              "before user": true
+            }
+          }
+        }
+      },
+      "expectError": "identifier_charset",
+      "errorDetail": "contextHooks.beforeInference.inject.before user = 'before user'"
+    },
+    {
+      "name": "negative-empty-identifier",
+      "description": "The empty string is not a match for [A-Za-z0-9._:*-]+ and is not a capability path. An implementation using a regex without anchors, or one testing 'contains only allowed chars' rather than 'is a non-empty run of allowed chars', accepts this.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo.messaging": {
+            "description": "Empty uses entry",
+            "uses": [
+              ""
+            ]
+          }
+        }
+      },
+      "expectError": "identifier_charset",
+      "errorDetail": "featureSets.demo.messaging.uses[] = ''"
+    }
+  ],
+  "sortVectors": [
+    {
+      "name": "ascii-punctuation-and-case",
+      "description": "Pure ASCII, reachable from a conforming manifest. Byte order is '*'(0x2A) < '-'(0x2D) < '.'(0x2E) < '0'(0x30) < ':'(0x3A) < 'A'(0x41) < 'a'(0x61). Any case-insensitive or ICU-style collation produces a different order.",
+      "input": [
+        "a:b",
+        "A:b",
+        "a.b",
+        "a-b",
+        "a*b",
+        "a0b",
+        "a:",
+        "a",
+        "ab",
+        "A",
+        "Ab"
+      ],
+      "sorted": [
+        "A",
+        "A:b",
+        "Ab",
+        "a",
+        "a*b",
+        "a-b",
+        "a.b",
+        "a0b",
+        "a:",
+        "a:b",
+        "ab"
+      ]
+    },
+    {
+      "name": "prefix-is-shortest-first",
+      "description": "A proper prefix sorts before any extension of it, in both UTF-8 byte order and every other order \u2014 included because length-then-lexicographic comparators get it wrong.",
+      "input": [
+        "chat:from-self",
+        "chat:from",
+        "chat:from-human",
+        "chat:f",
+        "chat:from-bot"
+      ],
+      "sorted": [
+        "chat:f",
+        "chat:from",
+        "chat:from-bot",
+        "chat:from-human",
+        "chat:from-self"
+      ]
+    },
+    {
+      "name": "utf8-vs-utf16-divergence-above-bmp",
+      "description": "THE reason RFC-003 \u00a73.1 says 'UTF-8 byte sequence' and not 'sort'. U+FFFD encodes as EF BF BD and U+10000 as F0 90 80 80, so UTF-8 puts U+FFFD first. In UTF-16, U+10000 is the surrogate pair D800 DC00 and U+FFFD is FFFD, so JavaScript's default Array.prototype.sort() (UTF-16 code units) puts U+10000 first. Rust's str Ord (UTF-8 bytes, equivalently code points) agrees with the RFC. A JavaScript implementation MUST NOT use the default comparator; compare code points, or encode to UTF-8 and compare bytes. Not reachable from a conforming 0.5 manifest \u2014 see README.",
+      "input": [
+        "\ud800\udc00",
+        "\ufffd",
+        "\ud83d\ude42",
+        "\uffff",
+        "z"
+      ],
+      "sorted": [
+        "z",
+        "\ufffd",
+        "\uffff",
+        "\ud800\udc00",
+        "\ud83d\ude42"
+      ]
+    },
+    {
+      "name": "utf8-equals-codepoint-order",
+      "description": "UTF-8 byte order and Unicode code-point order are the same order \u2014 UTF-8 is order-preserving. This vector exists so an implementation may compare code points instead of encoding, and know that is conforming.",
+      "input": [
+        "\u00ff",
+        "\u0100",
+        "\u07ff",
+        "\u0800",
+        "\u07c0",
+        "\u0080",
+        "\u007f"
+      ],
+      "sorted": [
+        "\u007f",
+        "\u0080",
+        "\u00ff",
+        "\u0100",
+        "\u07c0",
+        "\u07ff",
+        "\u0800"
+      ]
+    }
+  ],
+  "sortVectorsNote": "These test the set-array comparator in isolation: input is a list of strings, `sorted` is the required result after deduplication. They are not manifests. They exist because no set-valued array in the 0.5 manifest shape can legally hold a non-ASCII string \u2014 every one of them holds identifiers \u2014 so RFC-003's 'the UTF-8 rule governs anything else' clause is currently unreachable through a conforming manifest and would otherwise go untested until the first field that needs it."
+}

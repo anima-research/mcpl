@@ -70,9 +70,8 @@ The **manifest** is the `experimental.mcpl` capability block a server presents a
 
 A server that supports this RFC includes an opaque `revision: string` in that block.
 
-- The revision **MUST be derived from the canonical manifest content** — a stable digest
-  over the normalized manifest — and MUST NOT be hand-maintained or tied to a package
-  version. It MUST be stable across process restarts.
+- The revision **MUST be the canonical content digest defined in §3.1**, and MUST NOT be
+  hand-maintained or tied to a package version. It MUST be stable across process restarts.
 - The revision is nonetheless **server-authored and untrusted**. A host MUST NOT treat an
   unchanged revision as proof that nothing changed.
 - Hosts MUST NOT parse or order revisions. Equality is the only defined operation.
@@ -88,6 +87,38 @@ A server that supports this RFC includes an opaque `revision: string` in that bl
 >
 > Stating it as an invariant rather than as a library API also makes it portable: any
 > implementation in any language can satisfy it, and a host can check it by fetching twice.
+
+### 3.1 Canonical digest
+
+The digest MUST be computed as:
+
+```
+revision = "sha256:" + base64url_unpadded( SHA-256( JCS( manifest_without_revision ) ) )
+```
+
+- **`JCS`** is JSON Canonicalization Scheme (RFC 8785).
+- **`manifest_without_revision`** is the manifest with the `revision` member removed, so the
+  digest never covers itself.
+- **`base64url_unpadded`** is RFC 4648 §5 without `=` padding.
+
+**Array semantics.** Canonicalization fixes object member order but not array order, so each
+array must be declared set-like or list-like:
+
+| Field | Semantics |
+|---|---|
+| `uses` | **Set** — sort ascending by Unicode code point before hashing; duplicates removed |
+| `coreTags`, `tagOntology.tags.*.implies` | **Set** — same treatment |
+| `keyed.*.values` | **List** — order is meaningful and preserved |
+
+Any array not listed is a list; its order is part of the manifest and MUST be deterministic
+across restarts.
+
+A host MAY recompute the digest from a fetched manifest and compare. A mismatch is a
+**conformance defect**, not grounds to reject the manifest — the manifest's *content* is
+what the host acts on, and the digest is only the cheap path (§3).
+
+> Without this, "the host can check it" and "stable across restarts" are not testable, and a
+> Rust server and a TypeScript host cannot derive the same value from the same manifest.
 
 **Package version is not surface identity.** A protocol- or package-version field is useful
 for validation and migration, and MUST NOT substitute for comparing the manifest. This is
@@ -153,8 +184,24 @@ Returns the server's **current, complete** manifest in the same shape it would p
 On a fetched manifest the host MUST:
 
 1. **Validate** it exactly as at `initialize`, including `uses` (SPEC §6.4). Invalid
-   declarations fail closed with `invalid_uses`; a malformed manifest is rejected and the
-   previous manifest stands.
+   declarations fail closed with `invalid_uses`.
+
+   **A partially invalid manifest MUST NOT leave broader authority standing.** If the
+   manifest parses but some declarations are invalid, the host MUST still apply every
+   **removal** it can determine — a capability or feature set absent from the new manifest
+   is revoked, regardless of whether some other declaration failed validation. Invalid
+   *additions* are simply ignored; they could not have been granted without negotiation
+   anyway (§6.7).
+
+   This falls out of RFC-002's existing asymmetry rather than adding policy: removals are
+   safe to apply eagerly, additions are not. Applying removals eagerly costs a cooperative
+   server nothing, and closes the case where a server narrows one capability while
+   malforming another and the host keeps sending under the old, broader grant.
+
+   If the manifest **does not parse at all**, the host has learned nothing — no narrowing
+   can be inferred — so the previous manifest stands. Repeated unparseable responses are a
+   conformance defect; a host MAY then suspend MCPL privileges and fall back to MCP-only
+   (SPEC §3.2), but MUST NOT do so on a single failure.
 2. **Diff** it against the manifest currently in force.
 3. **Apply SPEC §6.7 consequences**, unchanged — this RFC adds no new policy machinery:
    - **Removals and narrowing** revoke **host-first**, then the Request and receipt.
@@ -184,7 +231,7 @@ Impacts use a **closed, host-derived vocabulary** — never a server-authored fl
 | `feature-degraded` | A feature set was disabled by derivation |
 | `feature-restored` | A previously degraded feature set is available again |
 | `ontology-acceptance-invalidated` | Accepted tag ontology no longer applies (§16.5) |
-| `wake-rule-reference-unresolved` | A consumer gate rule references a tag the server no longer declares |
+| `ontology-reference-undeclared` | A consumer gate rule references a tag the server no longer declares |
 | `surface-changed` | Tools, resources, prompts or channels changed (§8) |
 
 Each impact carries a disposition: `applied` | `decision-needed` | `informational`.
@@ -193,8 +240,14 @@ Whether a receipt **wakes** the resident is ordinary RFC-001 policy (SPEC §16) 
 against tags the host attaches — not a property of the change and not the server's to
 decide.
 
-`wake-rule-reference-unresolved` deserves emphasis: a resident's gate rules can silently
-stop matching when a producer drops a tag. Today that failure is invisible.
+`ontology-reference-undeclared` is **informational by default**, and the name matters. An
+earlier draft called it `wake-rule-reference-unresolved`, which overclaimed: tag ontologies
+are open-world, so a tag absent from the new declaration may still be emitted when
+`open: true`, and a consumer rule matches raw event tags regardless of what is declared.
+
+The certain fact is narrower — **the accepted description disappeared**, not that the rule
+stopped matching. A resident may well want to know, because it often *precedes* a rule going
+dead, but the host cannot assert that it has.
 
 ## 8. Relationship to existing change notifications
 

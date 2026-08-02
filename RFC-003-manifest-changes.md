@@ -65,10 +65,22 @@ notification the host cannot act on.
 
 ## 3. Manifest and revision
 
-The **manifest** is the `experimental.mcpl` capability block a server presents at
-`initialize`: `capabilities`, `featureSets` (with `uses` and any `tagOntology`).
+The **manifest** is the complete `experimental.mcpl` object a server presents at
+`initialize`, exactly as initialized — capability members at the top level, with
+`featureSets` as one member among them. There is no nested `capabilities` wrapper.
 
-A server that supports this RFC includes an opaque `revision: string` in that block.
+A server that supports this RFC includes a `revision: string` member in that object.
+
+The three change **domains** (§4) partition it:
+
+| Domain | Members |
+|---|---|
+| `capabilities` | every member other than `version`, `revision`, and `featureSets` |
+| `featureSets` | the `featureSets` member, excluding any `tagOntology` within it |
+| `tagOntology` | the `tagOntology` of any feature set |
+
+`version` and `revision` are not a domain: `version` is protocol identity, not surface, and
+`revision` is derived (§3.1).
 
 - The revision **MUST be the canonical content digest defined in §3.1**, and MUST NOT be
   hand-maintained or tied to a package version. It MUST be stable across process restarts.
@@ -97,8 +109,9 @@ revision = "sha256:" + base64url_unpadded( SHA-256( JCS( manifest_without_revisi
 ```
 
 - **`JCS`** is JSON Canonicalization Scheme (RFC 8785).
-- **`manifest_without_revision`** is the manifest with the `revision` member removed, so the
-  digest never covers itself.
+- **`manifest_without_revision`** is the complete `experimental.mcpl` object with the
+  `revision` member removed, so the digest never covers itself. Nothing else is stripped —
+  `version` is included.
 - **`base64url_unpadded`** is RFC 4648 §5 without `=` padding.
 
 **Array semantics.** Canonicalization fixes object member order but not array order, so each
@@ -106,12 +119,22 @@ array must be declared set-like or list-like:
 
 | Field | Semantics |
 |---|---|
-| `uses` | **Set** — sort ascending by Unicode code point before hashing; duplicates removed |
+| `uses` | **Set** — sorted (see below), duplicates removed |
 | `coreTags`, `tagOntology.tags.*.implies` | **Set** — same treatment |
 | `keyed.*.values` | **List** — order is meaningful and preserved |
 
 Any array not listed is a list; its order is part of the manifest and MUST be deterministic
 across restarts.
+
+**Set ordering.** Sort by **UTF-8 byte sequence**, ascending. Not "code point order" and not
+a language's default string comparison: JavaScript compares UTF-16 code units and Rust
+compares UTF-8 bytes, and the two disagree above U+FFFF, so an unqualified "sort" is not
+interoperable.
+
+Additionally, **capability paths and tag identifiers MUST be ASCII** — `[A-Za-z0-9._:*-]`.
+For ASCII strings UTF-8 byte order, UTF-16 code-unit order, and code-point order coincide,
+so the ordering question cannot arise for the values this actually applies to. The UTF-8
+rule governs anything else.
 
 A host MAY recompute the digest from a fetched manifest and compare. A mismatch is a
 **conformance defect**, not grounds to reject the manifest — the manifest's *content* is
@@ -133,7 +156,7 @@ shape matches no spec version at all.
   "jsonrpc": "2.0",
   "method": "mcpl/manifestChanged",
   "params": {
-    "revision": "r7",
+    "revision": "sha256:QLXa7BigUFzNlw_IWPSqpYbDzdvBX7PVQIPS5lgnkaw",
     "domains": ["capabilities", "featureSets"]
   }
 }
@@ -166,12 +189,18 @@ Returns the server's **current, complete** manifest in the same shape it would p
 {
   "jsonrpc": "2.0", "id": 21,
   "result": {
-    "revision": "r7",
-    "capabilities": { "…": "…" },
+    "revision": "sha256:QLXa7BigUFzNlw_IWPSqpYbDzdvBX7PVQIPS5lgnkaw",
+    "version": "0.5",
+    "pushEvents": true,
+    "contextHooks": { "beforeInference": true },
+    "channels": { "register": true, "publish": true, "incoming": true },
     "featureSets": { "…": "…" }
   }
 }
 ```
+
+The result is the `experimental.mcpl` object itself — the same shape `initialize` carries,
+not a re-wrapped one.
 
 - Complete, never a delta. Deltas would require the host to trust the server's account of
   its own previous state.

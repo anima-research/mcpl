@@ -241,15 +241,22 @@ def normalize(value, path=()):
         return out
     if isinstance(value, list):
         items = [normalize(v, path + ("[i]",)) for v in value]
+        # SPEC §17.2 totality (adjudicated 2026-08-03, Sol's library review):
+        # set semantics AND identifier checks apply only to the CONFORMING
+        # all-string shape. A set-declared array containing any non-string
+        # member is non-conforming input: left untouched for JCS — no sort,
+        # no dedupe, no charset check — and validation rejects it later.
+        # (The identifier refusal exists solely to keep the UTF-8/UTF-16
+        # sort divergence unreachable; an unsorted array cannot diverge.)
+        # Mirrors the wrong-typed-set-FIELD and array-form-featureSets rules.
+        all_strings = all(isinstance(it, str) for it in items)
         epath = path + ("[]",)
-        if _is_ident_path(epath):
+        if all_strings and _is_ident_path(epath):
             for it in items:
                 _check_ident(it, ".".join(path) + "[]")
-        if _is_set_path(path):
+        if all_strings and _is_set_path(path):
             seen, uniq = set(), []
             for it in items:
-                if not isinstance(it, str):
-                    raise VectorError("set_member_not_string", ".".join(path))
                 if it in seen:
                     continue
                 seen.add(it)
@@ -920,6 +927,39 @@ def build_vectors():
         "differentDigestFrom": "minimal-manifest",
     })
 
+    V.append({
+        "name": "non-string-set-member-hashed-verbatim",
+        "description": (
+            "SPEC §17.2 totality, second corollary (adjudicated 2026-08-03): "
+            "a set-DECLARED array containing any non-string member is "
+            "non-conforming input and is hashed VERBATIM — no set sort, no "
+            "dedupe, no identifier check. An earlier draft declared a "
+            "set_member_not_string refusal; both libraries implemented it and "
+            "review struck it — the identifier refusal exists solely to keep "
+            "the UTF-8/UTF-16 sort divergence unreachable, and an unsorted "
+            "array cannot diverge. Note the order [\"tools\", 1, "
+            "\"pushEvents\"] is preserved and the duplicate is kept."
+        ),
+        "input": {
+            "version": "0.5",
+            "featureSets": {
+                "demo.messaging": {"description": "d", "uses": ["tools", 1, "pushEvents", "tools"]}
+            },
+        },
+    })
+
+    V.append({
+        "name": "non-string-set-member-single",
+        "description": (
+            "Minimal companion to non-string-set-member-hashed-verbatim: "
+            "uses:[1] digests (totality), never refuses."
+        ),
+        "input": {
+            "version": "0.5",
+            "featureSets": {"f": {"description": "d", "uses": [1]}},
+        },
+    })
+
     return V
 
 
@@ -1084,7 +1124,7 @@ def assemble():
             "identifier_charset": "A string in an identifier position is empty "
                                   "or contains a character outside "
                                   "[A-Za-z0-9._:*-].",
-            "set_member_not_string": "A set-valued array contains a non-string.",
+            
             "manifest_not_object": "The manifest is not a JSON object.",
         },
         "howToRead": (

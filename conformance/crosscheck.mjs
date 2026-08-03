@@ -31,7 +31,9 @@ function utf8cmp(a, b) {
 function normalize(v, path = []) {
   if (Array.isArray(v)) {
     const items = v.map((x) => normalize(x, [...path, '[i]']));
-    if (isSet(path)) return [...new Set(items)].sort(utf8cmp);
+    // §17.2 totality: set semantics only for the conforming all-string
+    // shape; a non-string member leaves the array verbatim (2026-08-03).
+    if (isSet(path) && items.every((x) => typeof x === 'string')) return [...new Set(items)].sort(utf8cmp);
     return items;
   }
   if (v && typeof v === 'object') {

@@ -36,7 +36,6 @@
   "identifierPositionsNote": "'#key' means the object's member names at that path; '[]' means the array's elements. RFC-003 does not enumerate these positions; this list is the fail-closed reading and is the one thing in this file most in need of RFC confirmation. Root member names are capability paths and are checked, except `version`, `revision` and `featureSets`, which are not capabilities (RFC-003 \u00a73).",
   "errorCodes": {
     "identifier_charset": "A string in an identifier position is empty or contains a character outside [A-Za-z0-9._:*-].",
-    "set_member_not_string": "A set-valued array contains a non-string.",
     "manifest_not_object": "The manifest is not a JSON object."
   },
   "howToRead": "`input` is the manifest as received, before any normalization. `canonicalJson` is the exact JCS string; it is stored as a JSON string, so parse it and encode the result as UTF-8 to obtain the bytes that are hashed \u2014 do not compare raw file bytes. `sha256Hex` is that hash in hex, present so a mismatch localizes to canonicalization or to encoding rather than 'somewhere'. `digest` is the full revision value. A vector carries either `digest` or `expectError`, never both. `sameDigestAs` and `differentDigestFrom` are assertions to test in addition to the digest itself.",
@@ -647,6 +646,45 @@
       "sha256Hex": "6840e5900d7d7c2a6ee52aa5ba97c46051a178330911d53af1c2919faa70e3f4",
       "digest": "sha256:aEDlkA19fCpu5SqlupfEYFGheDMJEdU68cKRn6pw4_Q",
       "differentDigestFrom": "minimal-manifest"
+    },
+    {
+      "name": "non-string-set-member-hashed-verbatim",
+      "description": "SPEC \u00a717.2 totality, second corollary (adjudicated 2026-08-03): a set-DECLARED array containing any non-string member is non-conforming input and is hashed VERBATIM \u2014 no set sort, no dedupe, no identifier check. An earlier draft declared a set_member_not_string refusal; both libraries implemented it and review struck it \u2014 the identifier refusal exists solely to keep the UTF-8/UTF-16 sort divergence unreachable, and an unsorted array cannot diverge. Note the order [\"tools\", 1, \"pushEvents\"] is preserved and the duplicate is kept.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "demo.messaging": {
+            "description": "d",
+            "uses": [
+              "tools",
+              1,
+              "pushEvents",
+              "tools"
+            ]
+          }
+        }
+      },
+      "canonicalJson": "{\"featureSets\":{\"demo.messaging\":{\"description\":\"d\",\"uses\":[\"tools\",1,\"pushEvents\",\"tools\"]}},\"version\":\"0.5\"}",
+      "sha256Hex": "5a1b11f09786c34916727031be456d6ff9d7a89c0ed8ba141ea0eea6a10a1715",
+      "digest": "sha256:WhsR8JeGw0kWcnAxvkVtb_nXqJwO2LoUHqDupqEKFxU"
+    },
+    {
+      "name": "non-string-set-member-single",
+      "description": "Minimal companion to non-string-set-member-hashed-verbatim: uses:[1] digests (totality), never refuses.",
+      "input": {
+        "version": "0.5",
+        "featureSets": {
+          "f": {
+            "description": "d",
+            "uses": [
+              1
+            ]
+          }
+        }
+      },
+      "canonicalJson": "{\"featureSets\":{\"f\":{\"description\":\"d\",\"uses\":[1]}},\"version\":\"0.5\"}",
+      "sha256Hex": "0442c55fc2e72aeb6613afa15e3e75f90b42f5bcb80609a8460176791366eea1",
+      "digest": "sha256:BELFX8LnKutmE6-hXj51-QtC9by4BgmoRgF2eRNm7qE"
     }
   ],
   "sortVectors": [

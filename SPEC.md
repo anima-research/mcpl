@@ -2043,9 +2043,14 @@ servers with identical matching behaviour but reordered matchers produce differe
 revisions. The alternative — set semantics by semantic judgment rather than by enumeration —
 is how two implementations drift.)
 
-**The digest is total.** Set semantics apply **only when the value actually is an array**
-at one of the three named locations, in the object-keyed `featureSets` shape those paths
-are written against. A wrong-typed value in a set position (`"uses": "tools"`), an
+**The digest is total.** Set semantics apply **only when the value actually is an
+all-string array** at one of the three named locations, in the object-keyed `featureSets`
+shape those paths are written against. A set-declared array containing any non-string
+member is non-conforming input: hashed verbatim — no sort, no dedupe, no identifier
+check — since the identifier refusal exists solely to keep the sort-order divergence
+unreachable, and an array that is never sorted cannot diverge. *(Second totality
+corollary, adjudicated 2026-08-03: both libraries had implemented a
+`set_member_not_string` refusal contradicting this rule.)* A wrong-typed value in a set position (`"uses": "tools"`), an
 array-shaped `featureSets`, or any other non-conforming structure is **hashed verbatim** —
 canonicalized by JCS, never set-normalized, never refused. Validation (§6.4) is where a
 wrong type fails; the digest's job is to give any two libraries the same answer for the

@@ -1,12 +1,41 @@
 # MCPL RFC-005: Bulk Content References
 
-**Status:** Draft (revision 2)
+**Status:** Draft (revision 3)
 **Targets:** MCPL Protocol Specification 0.5
-**Authors:** Claude Code, from a scope proposed by antra; revised after review
-**Date:** 2026-08-31 (revision 1); 2026-09-01 (revision 2)
+**Authors:** Claude Code, from a scope proposed by antra; revised after review (twice)
+**Date:** 2026-08-31 (revision 1); 2026-09-01 (revisions 2, 3)
 **Depends on:** nothing for authority — RFC-002 / SPEC §5.4 remains the sole source of what a
 connected server may do, and this RFC adds no capability path (§9). Amends the SPEC §10.3 /
 Appendix B.1 content-block shapes (§8); reuses the RFC-003 digest encoding.
+
+> **Revision 3 note.** The `e9edc31` re-review confirmed the revision-2 architecture and
+> found three normative contradictions/holes, all fixed here without structural change:
+>
+> - **`never` is unconditional (§5).** Revision 2 let host policy restore a
+>   "non-capability-bearing" URI to the stub under any disposition — quietly weakening the
+>   RFC's strongest MUST below its own conformance vector. The URI-visibility MAY is now
+>   scoped to `ref`/absent disposition only; under `never`, no host policy or capability
+>   classification restores the URI.
+> - **Authenticated dereference narrows to the dialed origin (§6.1); declared reference
+>   origins are deferred (§10).** Revision 2 advertised a manifest-declared-origin path with
+>   no manifest field, origin grammar, matching rule, or vector behind it. Rather than
+>   specify all of that now, revision 3 takes the small-core option: authentication context
+>   applies to exactly the origin the connection was dialed to; every other origin is
+>   fetched credential-less. The server-side "MUST accept its own authentication context"
+>   is restated as a transport-scoped serving requirement (testable per transport) plus the
+>   syntactically testable no-embedded-credential MUST.
+> - **Metadata is bounded (§3, §5, §7.3, §8).** `sizeBytes` was bounded; `uri`, `name`,
+>   `mimeType`, and `expiresAt` were not, so a server could move the context bomb into a
+>   field name and falsify vector 8. Schema maxima are added emitter-side; hosts truncate
+>   every server-supplied string to their own display bounds before stub/wake assembly, so
+>   stub size is independent of every server-supplied field length. Storage paths are
+>   host-generated from the reference id — the server `name` is a display label that is
+>   never a path component, replacing revision 2's "sanitize to a basename".
+> - Nonblockings taken: one interoperable invalid-field rule (reject the field, keep the
+>   block and its subtractive ceiling); a content-coding vector pinning digest/size to
+>   decoded identity octets; an MCP `ResourceLink` mapping note (§8.1); reference-id
+>   eviction/staleness semantics (§5); and an acceptance criterion freezing the vectors as
+>   executable before Draft→Accepted (§11).
 
 > **Revision 2 note.** Revision 1 (`389995e`) was reviewed the day after it was written and
 > came back CHANGES REQUESTED — correctly. It had the shape of a security architecture
@@ -112,10 +141,10 @@ No new content type. The §10.3 `resource` block gains optional fields, and the 
 |---|---|---|---|
 | `uri` | `string` | Yes | Where the server serves the payload. `https` expected; the *host* decides what it will ever dereference (§7). |
 | `mimeType` | `string` | SHOULD | Claimed media type. Testimony — verify or sniff where safety or provider compatibility depends on it; a digest authenticates bytes, not type. |
-| `sizeBytes` | `integer` | SHOULD | Claimed payload size: a non-negative integer within the JSON-safe range (0 ≤ n ≤ 2^53−1). Consumers MUST reject fractional, negative, or unsafe values (§8). Testimony — real fetch limits run on actual bytes (§7). |
+| `sizeBytes` | `integer` | SHOULD | Claimed payload size: a non-negative integer within the JSON-safe range (0 ≤ n ≤ 2^53−1). An invalid value is rejected **as a field** — treated as absent — while the block and its `disposition` remain in force (§8, vector 15). Testimony — real fetch limits run on actual bytes (§7). |
 | `digest` | `string` | MAY | `sha256:` + base64url, the RFC-003 *encoding*; the hash is SHA-256 over the exact payload octets — the representation with **no content coding applied**. `sizeBytes` and `digest` MUST describe the same octet sequence. |
 | `expiresAt` | `string` (ISO-8601) | MAY | Advisory availability horizon. An unparseable value fails closed: consumers treat the reference as already expired, never as immortal (§7.4). |
-| `name` | `string` | MAY | Display label. A label, never a path: sanitize before any filesystem use (§7.3). |
+| `name` | `string` | MAY | Display label, nothing more: never a path component — storage names are host-generated (§7.3) — and truncated to host display bounds in stubs (§5). |
 | `disposition` | `"never" \| "ref"` | MAY | Requested context disposition (§3.1). Only legal on URI-form blocks (§8). |
 
 A reference with neither `mimeType` nor `sizeBytes` is legal but self-defeating: it denies
@@ -186,13 +215,25 @@ the host represents it as at most:
   stub time;
 - one line of provenance ("from tool `vst_render`" / "attachment on push event …").
 
-**The raw `uri` is not part of the stub by default.** Signed URLs and query capabilities
-are bearer credentials that look like locations; putting them in context recreates in one
-field the leak §6 closes in another. A host MAY include the URI where its policy
-classifies the reference as non-capability-bearing (for example: an origin-bound URI that
-is unusable without the host-private auth context — precisely what §6.1's no-embedded-
-credential rule produces). The safe default is the opaque id. `disposition: "never"`
-limits **payload and access-capability exposure both** (vector 9).
+**The raw `uri` is not part of the stub by default, and under `disposition:"never"` it is
+removed unconditionally** — no host policy, capability classification, or user setting
+restores it; `never` limits payload and access-capability exposure both, always (vectors
+1, 9). Signed URLs and query capabilities are bearer credentials that look like locations;
+putting them in context recreates in one field the leak §6 closes in another. For `ref` or
+absent disposition only, a host MAY include the URI where its policy classifies the
+reference as non-capability-bearing (for example: an origin-bound URI that is unusable
+without the host-private auth context — precisely what §6.1's no-embedded-credential rule
+produces). The safe default everywhere is the opaque id.
+
+**Stub bounds.** Before stub or wake-text assembly the host truncates every
+server-supplied string (`name`, `mimeType`, provenance inputs) to its own display bounds,
+marking truncation, and bounds the total stub by its own policy. Stub and wake size are
+therefore independent of the length of *every* server-supplied field, not only of
+`sizeBytes` (vectors 8, 17).
+
+Reference ids are not reused within a session. Records MAY be evicted by host policy
+(quota, age, session shrink); a lookup of a stale or unknown id returns a defined
+"unknown reference" error and never resolves to a different record (vector 20).
 
 Hosts SHOULD render stubs uniformly so models learn one shape, and SHOULD retain an
 operator-visible receipt when policy drops a block entirely, so "missing attachment" is
@@ -213,9 +254,12 @@ A host MAY apply that authentication context **only**:
 
 - through a **host-mediated fetcher** (the host's own code; never by handing material to
   the requester), and
-- to an origin **bound to the authenticated server connection**: the origin the connection
-  itself was dialed to, or a reference origin the server declared in its manifest and the
-  host's policy accepted. An arbitrary URI in a content block binds nothing.
+- to **exactly the origin the connection was dialed to.** An arbitrary URI in a content
+  block binds nothing, and no other origin is authenticated: every reference elsewhere is
+  fetched without the connection's authentication context. (A manifest mechanism for
+  declaring additional authenticated reference origins — field, canonical origin grammar,
+  matching rule, redirect relation, vectors — is deferred, §10; revision 2 advertised it
+  without specifying any of that, which made it neither interoperable nor testable.)
 
 Authentication context is **never forwarded cross-origin**: on any redirect that leaves
 the bound origin, credentials are stripped, and a host MAY simply refuse redirect
@@ -223,12 +267,19 @@ traversal entirely (§7.2). References to third-party locations (a public CDN, a
 archipelago service) are fetched **without** the server's authentication context; that
 location's own auth applies and is out of scope.
 
-Servers MUST accept their own connection's authentication context on their reference
-endpoints, and MUST NOT mint per-reference bearer credentials into the `uri` itself. A URI
-with an embedded credential is a capability that looks like a location; it gets pasted
-into channels, logged by proxies, and quoted in stubs. (Not theory: the first ad-hoc
-implementation shipped a `download_note: "append your token"` — the app-level pattern this
-rule exists to retire.)
+Server side, two requirements of different testability, stated separately:
+
+- A server that intends its references to be host-fetchable *with authentication* MUST
+  serve them at the connection's dialed origin, under an authentication mechanism
+  satisfiable by that connection's transport-native context — a per-transport requirement,
+  testable per transport (for the WebSocket bearer case: the reference endpoint accepts
+  the same token that opened the session). Where it cannot or does not, it serves them
+  unauthenticated or accepts that they are not host-fetchable.
+- Servers MUST NOT mint per-reference bearer credentials into the `uri` itself — testable
+  syntactically (vector 6). A URI with an embedded credential is a capability that looks
+  like a location; it gets pasted into channels, logged by proxies, and quoted in stubs.
+  (Not theory: the first ad-hoc implementation shipped a `download_note: "append your
+  token"` — the app-level pattern this rule exists to retire.)
 
 **Transports without a reusable credential** (stdio; host-managed access; short-lived
 session auth): the authentication context is whatever transport-native identity the
@@ -278,10 +329,15 @@ A conformant host fetcher:
    `mimeType` is verified or sniffed where anything safety- or compatibility-relevant
    depends on it (vector 13).
 
-### 7.3 Filesystem hygiene
+### 7.3 Storage naming
 
-`name` is a display label. Before any filesystem use it is sanitized to a basename — no
-separators, no traversal, no reliance on the server's goodwill (vector 14).
+When a host materializes a fetched payload, **the host generates the storage path and
+filename** — from the reference record (e.g. the reference id plus an extension derived
+from the *verified* media type) — and the server-supplied `name` is never a path
+component, sanitized or otherwise. Basename-sanitizing a hostile string still leaves
+collisions, reserved/device names, control characters, and bidi/homoglyph surprises;
+generating the name leaves nothing. The display label, if kept alongside, is stripped of
+control and bidi-override characters and bounded per §5 (vectors 14, 18).
 
 ### 7.4 Lifetime
 
@@ -303,16 +359,28 @@ The `resource` variant of `ContentBlock` is replaced by:
   "required": ["type", "uri"],
   "properties": {
     "type": { "const": "resource" },
-    "uri": { "type": "string" },
-    "mimeType": { "type": "string" },
+    "uri": { "type": "string", "maxLength": 4096 },
+    "mimeType": { "type": "string", "maxLength": 255 },
     "sizeBytes": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
     "digest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
-    "expiresAt": { "type": "string" },
-    "name": { "type": "string" },
+    "expiresAt": { "type": "string", "maxLength": 64 },
+    "name": { "type": "string", "maxLength": 255 },
     "disposition": { "enum": ["never", "ref"] }
   }
 }
 ```
+
+The maxima are emitter conformance bounds, and they are the *outer* fence, not the
+guarantee: the guarantee is host-side (§5) — every server-supplied string is truncated to
+host display bounds before stub/wake assembly, so a nonconforming emitter still cannot
+move mass into metadata (vector 17).
+
+**One invalid-field rule** for every optional property: a value that violates its schema
+constraint is rejected **as a field** and treated as absent; the block remains valid, and
+a subtractive `disposition` remains in force. Field invalidity never widens exposure —
+there is no reading of a malformed `sizeBytes` under which the payload becomes
+context-eligible (vector 15). (`uri` is the one required property; a block whose `uri`
+violates the schema is rejected whole.)
 
 The `image` and `audio` variants gain the same seven optional properties **on their
 `uri`-form branch only**; their existing `oneOf` (which already rejects a block carrying
@@ -326,6 +394,16 @@ MCP already defines an `annotations` vocabulary on content blocks (`audience`,
 `priority`, …); colliding with it, or with `_meta`, buys nothing. `disposition` is a
 top-level property of the block variants that can carry it, and the schema — not prose —
 says which those are.
+
+### 8.1 MCP interoperability
+
+MCP's own vocabulary has a nested `EmbeddedResource` (inline content — under this RFC an
+ordinary inline block, nothing new) and a distinct `ResourceLink`. MCPL keeps its direct
+`resource: {uri}` shape; a host or bridge translating MCP→MCPL maps a `ResourceLink` onto
+this testimony record field-for-field (`uri`→`uri`, `name`→`name`, `mimeType`→`mimeType`,
+`size`→`sizeBytes`, `annotations` dropped or host-mapped) with no `disposition` — absent
+testimony, host default policy, exactly as for any unannotated reference. There is one
+reference vocabulary here, not two; `ResourceLink` is an import path into it.
 
 Handling rules the schema cannot express:
 
@@ -344,9 +422,9 @@ Emitting a reference block inside a message the server was already authorized to
 no authority: the block moves strictly less into context than the same bytes inlined would
 have, and §6/§7 give the server no new reach into the host. There is therefore no `uses`
 entry, no grant, and nothing for RFC-002 to gate. Conversely, nothing here bypasses
-RFC-002: a server that cannot push cannot push a reference either. The one manifest touch
-is optional and restrictive: a server MAY declare reference origins (§6.1) for hosts that
-require origin pre-binding stricter than the connection origin.
+RFC-002: a server that cannot push cannot push a reference either. There is no manifest
+touch in revision 3: declared reference origins are deferred with the rest of cross-origin
+authentication (§10).
 
 ---
 
@@ -361,12 +439,21 @@ require origin pre-binding stricter than the connection origin.
   deferral of mobility.)
 - **Not a host→server delivery contract.** §4's deferral: recipient-delivery semantics
   for `channels/publish` attachments deserve their own document.
+- **Not authenticated cross-origin fetching.** Declared reference origins — the manifest
+  field, canonical origin grammar, host matching rule, auth binding per transport, and
+  redirect relation — are deferred (§6.1). Revision 3 authenticates exactly one origin:
+  the one the connection was dialed to. A server whose references live elsewhere serves
+  them unauthenticated or waits for that RFC.
 - **Not a transport mandate, and not compression, chunking, ranges, or resumption.** HTTP
   has all four.
 
 ---
 
 ## 11. Conformance Vectors
+
+**Acceptance criterion:** before this RFC moves Draft→Accepted, these vectors freeze as
+executable vectors (the RFC-003 §3.1 precedent: `conformance/`) run against at least one
+strict schema/parser implementation and one host-treatment implementation.
 
 | # | Input | Expected |
 |---|---|---|
@@ -378,14 +465,18 @@ require origin pre-binding stricter than the connection origin.
 | 6 | `uri` containing an embedded credential from the emitting server | Emitter nonconformant (§6.1); host MAY refuse to dereference |
 | 7 | Reference block on a pre-RFC-005 host | Parses as ordinary §10.3 content; degradation limited to lost courtesy |
 | 8 | Push event: one text block + one `"never"` reference | Wake carries the text and a stub; wake size independent of `sizeBytes` |
-| 9 | Reference whose `uri` is a signed/query-capability URL | Stub shows reference id, `name`, type, size — never the URI, under any disposition, absent explicit host policy |
+| 9 | Reference whose `uri` is a signed/query-capability URL | Stub shows reference id, `name`, type, size. Under `never`: URI absent unconditionally. Under `ref`/absent disposition: URI absent unless explicit host policy includes it |
 | 10 | Stream exceeds claimed `sizeBytes` and continues | Fetcher aborts at the host's actual-byte ceiling; partial bytes are not presented |
 | 11 | `uri` scheme `file:` (or other non-allowlisted) | Fetch refused; fail closed |
 | 12 | Fetch redirects cross-origin | Credentials stripped at minimum; traversal MAY be refused; bound hop limit either way |
 | 13 | Fetched content sniffs as a different media type than `mimeType` | Host treats `mimeType` as false testimony where anything depends on it; record stores the observed type |
-| 14 | `name` of `"../../.ssh/authorized_keys"` | Sanitized to a basename before any filesystem use |
-| 15 | `sizeBytes` of `-1`, `3.5`, or `2^53` | Schema-invalid; block rejected or field ignored per host policy, never used in arithmetic |
+| 14 | `name` of `"../../.ssh/authorized_keys"` | Storage path/filename host-generated from the record (§7.3); the string appears at most as a bounded, sanitized display label |
+| 15 | `sizeBytes` of `-1`, `3.5`, or `2^53` | Field rejected, treated as absent; block remains valid; a `"never"` disposition remains in force; value never used in arithmetic |
 | 16 | Unparseable `expiresAt` | Treated as already expired (fail closed), never as immortal |
+| 17 | `name` (or `mimeType`) of 1 MB, past schema maxima | Emitter nonconformant; host truncates to display bounds before stub/wake assembly — wake size unchanged |
+| 18 | `name` containing control characters, bidi overrides, or a reserved device name | Storage unaffected (host-generated name); display label stripped of control/bidi characters |
+| 19 | Payload served with `Content-Encoding: gzip` | `sizeBytes` and `digest` describe the *decoded* identity octets; fetcher verifies against those, and the streaming ceiling applies to decoded bytes |
+| 20 | Lookup of an evicted or unknown reference id | Defined "unknown reference" error; the id never resolves to a different record within the session |
 
 ---
 

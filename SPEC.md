@@ -18,6 +18,8 @@ MCP Live (MCPL) is a backward-compatible extension to the Model Context Protocol
 5. **Feature Sets** — Named behavior bundles, derived from the grant
 6. **Event Tags** — Namespaced semantic labels letting hosts route attention portably
 7. **Manifest Changes** — Servers announce that their surface changed; hosts re-fetch and diff rather than trusting a payload
+8. **Endpoint URIs** — `mcpl://` names an MCPL endpoint as such; resolves deterministically to `wss://` and confers nothing
+9. **Bulk Content References** — Small testimony about large payloads; a server can veto context inclusion but never expand it
 
 MCPL enables servers to be active participants in the inference lifecycle rather than passive tool providers.
 
@@ -42,6 +44,8 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 15. [Examples](#15-examples)
 16. [Event Tags](#16-event-tags)
 17. [Server Manifest Changes](#17-server-manifest-changes)
+18. [Endpoint URIs](#18-endpoint-uris)
+19. [Bulk Content References](#19-bulk-content-references)
 
 ---
 
@@ -863,6 +867,10 @@ Push events allow servers to notify the host of external occurrences that may wa
 `push/event` params MAY carry `tags: string[]` (§16) — namespaced semantic labels the host
 may route attention on. Tags are descriptive claims and never authority (§16.6).
 
+`payload.content` MAY contain reference blocks (§19). Hosts MUST apply the §19.5 stub
+treatment *before* wake-text assembly, so an attached payload never inflates the cost of
+the wake that announces it (§19.4).
+
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -996,9 +1004,14 @@ Either `data`+`mimeType` or `uri` MAY be used for media types (hosts MAY choose 
 | Type | Description |
 |------|-------------|
 | `text` | Plain text content |
-| `image` | Image via `{ data, mimeType }` or `{ uri }` |
-| `audio` | Audio via `{ data, mimeType }` or `{ uri }` |
-| `resource` | URI reference to a resource |
+| `image` | Image via `{ data, mimeType }` or `{ uri }`; the `uri` form MAY carry the §19.3 reference fields |
+| `audio` | Audio via `{ data, mimeType }` or `{ uri }`; the `uri` form MAY carry the §19.3 reference fields |
+| `resource` | URI reference to a resource; MAY carry the §19.3 reference fields (`mimeType`, `sizeBytes`, `digest`, `expiresAt`, `name`, `disposition`) |
+
+Every `uri`-form block is server **testimony** about a payload the host does not hold.
+Receipt never triggers dereference, and host policy — not the block — decides what, if
+anything, reaches model context (§19). `disposition: "never"` is the one server-authored
+value that binds the host, and only subtractively (§19.3.1).
 
 For convenience, `content` MAY be a plain string (equivalent to a single text block):
 
@@ -1318,6 +1331,22 @@ Hosts MUST authorize each returned injection by its typed `position` at response
 > Earlier drafts stated only *"Servers MUST NOT inject content that attempts to override
 > system instructions"*. A MUST NOT addressed to the untrusted party is not a control. It is
 > retained as a conformance expectation for cooperative servers, and nothing more.
+
+### 13.5 Locators and References
+
+Two kinds of URI cross the protocol, and neither carries authority:
+
+- **Endpoint URIs** (§18). Possessing or resolving an `mcpl://` URI grants nothing; every
+  question of authority is answered after connection by the grant (§18.6). Resolution is
+  subject to host egress/SSRF policy, and a redirect that changes the canonical origin
+  MUST NOT be followed without a new authorization decision.
+- **Reference URIs in content blocks** (§19). Server-supplied metadata is testimony at a
+  security boundary. Receipt MUST NOT trigger a fetch; the fetcher allowlists schemes and
+  origins, bounds redirects, streams under an actual-byte ceiling, and verifies digests
+  before presenting (§19.7). The connection's credential is a host-private authentication
+  context applied only by a host-mediated fetcher and only to the dialed origin — never
+  forwarded cross-origin, never model-visible (§19.6.1). Under `disposition: "never"` the
+  raw URI never reaches model context (§19.5).
 
 ---
 
@@ -2317,6 +2346,694 @@ is not authored by the party that made it.
 
 ---
 
+## 18. Endpoint URIs
+
+MCPL servers are reached by a transport URL holding `ws://` or `wss://`, plus a transport
+selector. That says *how to dial*, not *what is there*. This section defines an
+**endpoint URI and nothing else** — not discovery, not identity, not trust, not mobility
+(§18.8). A `mcpl://` URI names a protocol rather than a socket; it is pasteable; and it lets
+introspection separate *what was configured* from *what was dialled* (§18.4).
+
+```text
+mcpl://example.com/path?hint=value
+        ↓ deterministic resolution
+wss://example.com/path?hint=value
+```
+
+It confers no authority and changes no grant; §5.4 remains the sole source of what a
+connected server may do (§18.6).
+
+### 18.1 Scheme
+
+```
+mcpl-URI = "mcpl://" authority path-abempty [ "?" query ]
+```
+
+- **`mcpl://` is secure by default.** It resolves to `wss://`, default port **443**.
+- There is **no `mcpls://`**. A second scheme differing only in security invites the mistake
+  of reaching for the shorter one.
+- **`mcpl://` never resolves to `ws://`.** Plaintext is reachable only by writing `ws://`
+  explicitly, which is deliberately more effort than writing `mcpl://`.
+- **`mcpl://localhost` is not special.** It resolves to `wss://localhost/` like any other
+  authority (port 443 implied and elided, §18.7 vector 9). Local development uses an
+  explicit `ws://localhost:PORT`. A scheme that silently weakens for one hostname is a scheme
+  whose security property cannot be stated in one sentence.
+
+#### 18.1.1 Rejected forms
+
+A host **MUST** reject each of the following, before any parsing or substitution (§18.2).
+Each is a string-level check on the input, and each exists because the alternative is a
+silent change of meaning rather than an error.
+
+| Form | Example | Why rejected |
+|---|---|---|
+| Fragment | `mcpl://h/x#frag` | No defined meaning. Ignoring one discards something the author believed significant. Reserved for a future revision. |
+| Userinfo | `mcpl://u:p@h/x` | RFC 3986 §3.2.1 deprecates the production; parsers and loggers handle it inconsistently enough that behaviour cannot be specified portably. A **syntax** rule, not a credential one — see §18.3. |
+| Empty authority | `mcpl:///x` | **Silently retargets.** See below. |
+| Dot segments | `mcpl://h/a/../b`, `mcpl://h/a/%2e%2e/b` | Cannot survive resolution intact; preserving them is unimplementable and unenforceable. See §18.2.2. |
+
+**Empty authority is the dangerous one.** `mcpl:///evil` looks like a path-only URI, but
+under §18.2 the scheme is substituted and the result is parsed as `wss:///evil` — and a
+WHATWG URL parser reinterprets the first path segment as the **host**, yielding
+`wss://evil/`. A URI that names no host would dial one. Reject at the string level, before
+substitution; the parser will not raise it for you.
+
+#### 18.1.2 Compatibility
+
+`ws://` and `wss://` remain fully accepted wherever a URL is accepted today. This section
+adds a spelling; it deprecates nothing and breaks no existing configuration.
+
+A host **MUST** accept all three forms. A host **SHOULD** preserve whichever the operator or
+agent wrote (§18.4).
+
+### 18.2 Resolution and canonicalization
+
+Resolution is a **pure syntactic rewrite**. No lookup, no negotiation, no probing.
+
+```
+1. Reject the forms in §18.1.1 — string-level checks on the input, before anything else.
+2. Substitute the scheme: mcpl: → wss:
+3. Parse the result with a WHATWG-URL-conformant parser.
+   That parsed value IS the resolved transport target.
+4. The canonical mcpl:// form is that same value with the scheme mapped back to mcpl:.
+```
+
+**Resolve first, then canonicalize.** This ordering is the whole design, and it is not
+arbitrary — see §18.2.1.
+
+Step 3 delivers, for free and identically in every conformant implementation: host
+lowercasing, IDNA/punycode conversion, elision of the default port 443, empty-path
+normalization to `/`, IPv6 literal lowercasing, and dot-segment removal (which cannot occur,
+having been rejected in step 1).
+
+The **query is preserved verbatim** — order kept, duplicates kept, nothing sorted. Query
+parameters are server-defined (`?world=abc` means something to the server and nothing to
+MCPL), so normalizing them would change their meaning. This is deliberately unlike the
+manifest digest of §17.2, which normalizes because it *hashes* the value rather than
+transmitting it. A WHATWG parser preserves query order and duplicates, so this needs no
+special handling — but an implementation that round-trips through `URLSearchParams` and
+re-serializes will break it.
+
+#### 18.2.1 Why not canonicalize the `mcpl://` form directly
+
+**`mcpl:` is a non-special scheme.** WHATWG URL applies host and path normalization only to
+its special schemes (`http`, `https`, `ws`, `wss`, `ftp`, `file`). Parsing an `mcpl://` URI
+directly therefore performs **almost none** of the normalization this section requires:
+
+| Input | Parsed as `mcpl:` (non-special) | Parsed as `wss:` (special) |
+|---|---|---|
+| `…//EIDOVERSE.Animalabs.AI:443/x` | host `EIDOVERSE.Animalabs.AI:443` — case kept, port kept | host `eidoverse.animalabs.ai` — lowercased, port elided |
+| `…//ünicode.example/x` | `%C3%BCnicode.example` — percent-encoded UTF-8 | `xn--nicode-2ya.example` — IDNA A-label |
+| `…///x` | host `""` — accepted | host `x` — first path segment promoted |
+
+The middle row is the one that forces the design: the same input yields **two different
+hosts** depending on which form an implementation normalizes. Not a formatting difference —
+a different endpoint. An implementation that canonicalizes `mcpl://` directly and one that
+resolves first would disagree about identity, deduplication, and what "already connected"
+means.
+
+So: **a host MUST NOT rely on a URL library's normalization of the `mcpl://` form.** Canonical
+identity is defined by the resolved `wss:` value, which every conformant parser computes the
+same way.
+
+#### 18.2.2 Dot segments are rejected, not preserved
+
+WHATWG URL removes dot segments even for non-special schemes: `mcpl://h/a/../b` parses to
+`mcpl://h/b`, and `%2e%2e` collapses identically. Preserving them literally would require
+every implementation to hand-roll a parser, and would still not hold — HTTP and WebSocket
+infrastructure between the host and the server may normalize again in transit. The spec
+would be promising something it cannot deliver past the first proxy.
+
+Rejecting instead gives the same security property — no silent retargeting — without
+depending on a guarantee nothing downstream honours. `.`, `..`, and their percent-encoded
+forms (`%2e`, `%2E`, in either position) **MUST** be rejected as complete path segments.
+Percent-encoded separators are *not* affected: `a%2fb` is one literal segment containing a
+slash and remains valid.
+
+### 18.3 Credentials
+
+**This section is deliberately unopinionated about credentials.** It defines no credential
+parameter, forbids none, and makes no claim about what may appear in a query string:
+
+- An invite token that resolves to a **new** principal is a thing you hand someone, and
+  handing someone a URI is how. A prohibition here would contradict that design.
+- Credential *policy* belongs to the host and to whatever identity mechanism a future
+  revision defines. A locator that legislated it would be claiming authority it does not
+  have — the same overreach this specification removed from feature sets and from
+  `scope.label`.
+
+What remains true regardless, and is stated in §18.6: **possessing or resolving an `mcpl://`
+URI grants nothing.**
+
+Hosts retain complete freedom to attach credentials out of band (resolving per-dial so
+nothing above the transport holds a credential), to redact whatever they choose when
+displaying or logging a URI, and to refuse URIs they consider unsafe. None of that requires
+this section's permission, and this section does not constrain it. (Contrast §19.6, where
+a *reference* URI carried in a content block is subject to a no-embedded-credential rule —
+that rule is about content blocks reaching model context, not about endpoint locators.)
+
+### 18.4 Three values, not one
+
+An endpoint has **three** distinct values. A host **MUST** retain all three and **MUST NOT**
+derive one by overwriting another:
+
+| Value | What it is | Used for |
+|---|---|---|
+| `configuredUri` | Exactly what the operator or agent wrote, byte for byte | Provenance — what was *intended* |
+| `canonicalUri` | The §18.2 normalized `mcpl://` form | Equality, deduplication, "already connected" |
+| `resolvedTransport` | The `wss://` target actually dialled | Debugging, logs, what the socket did |
+
+```jsonc
+{
+  "id": "eidoverse",
+  "configuredUri":    "mcpl://EIDOVERSE.Animalabs.AI?world=abc",
+  "canonicalUri":     "mcpl://eidoverse.animalabs.ai/?world=abc",
+  "resolvedTransport": "wss://eidoverse.animalabs.ai/?world=abc"
+}
+```
+
+Collapsing any pair loses something that cannot be recovered. Overwriting `configuredUri`
+with the canonical form destroys **intent** — a config that says `mcpl://` asserts "this is
+an MCPL endpoint, reached securely", and rewriting it makes that assertion look like an
+implementation detail to the next reader. Overwriting `canonicalUri` with the configured
+form destroys **identity** — two spellings of one endpoint stop comparing equal, and
+deduplication silently fails.
+
+Host introspection surfaces (e.g. a connection listing) **SHOULD** expose all three as
+separate fields, alongside advertised capabilities, the effective grant (§5.4), and manifest
+freshness (§17) — which are likewise distinct facts that have historically been shown as
+one.
+
+### 18.5 Connection semantics
+
+Resolution establishes a WebSocket. It does not establish that MCPL is present.
+
+- The peer **MUST** complete MCP `initialize` and advertise `experimental.mcpl` (§5.1).
+- If it does not, the host **MUST** either fail the connection or take the **explicit**
+  MCP-only fallback of §3.3 — as a recorded decision, surfaced to the operator.
+- A host **MUST NOT** infer MCPL support from successful resolution, from the scheme, or from
+  the socket opening. `mcpl://` states an *intent* about what should be there; only the
+  handshake establishes what is.
+
+Guessing here would make the scheme load-bearing for a fact it cannot carry, which is the
+failure mode §18.6 exists to prevent.
+
+### 18.6 Security
+
+**Possession of an `mcpl://` URI, and successful resolution of one, grant nothing.**
+
+The URI is a locator. Every question of authority is answered after connection, by the
+capability grant of §5.4. Specifically, connecting via `mcpl://`:
+
+- does not grant any capability, and does not pre-authorize any;
+- does not accept a producer tag ontology (§16.4) — acceptance stays explicit;
+- does not register or authorize any channel (§14.1);
+- does not establish wake policy;
+- does not confer identity on either party.
+
+**Redirects.** A redirect that changes the canonical origin (scheme-equivalent, host, or
+port) **MUST NOT** be followed without a new authorization decision. Following one silently
+would let the named endpoint hand the connection to an unnamed one, defeating the point of
+writing the URI down.
+
+**Egress policy applies.** Resolution is subject to whatever egress, SSRF, and
+private-network policy the host enforces. Adding a scheme does not add a guard, and a host
+**MUST NOT** treat `mcpl://` as evidence that a destination is safe to reach.
+
+### 18.7 Test vectors
+
+Implementations **MUST** reproduce these exactly. Every value below was produced by running
+the §18.2 algorithm, not written by hand.
+
+#### 18.7.1 Resolution
+
+| # | Input | `canonicalUri` | `resolvedTransport` |
+|---|---|---|---|
+| 1 | `mcpl://example.com` | `mcpl://example.com/` | `wss://example.com/` |
+| 2 | `mcpl://example.com/path` | `mcpl://example.com/path` | `wss://example.com/path` |
+| 3 | `mcpl://example.com:8443/x` | `mcpl://example.com:8443/x` | `wss://example.com:8443/x` |
+| 4 | `mcpl://eidoverse.animalabs.ai?world=abc` | `mcpl://eidoverse.animalabs.ai/?world=abc` | `wss://eidoverse.animalabs.ai/?world=abc` |
+| 5 | `MCPL://Example.COM/x` | `mcpl://example.com/x` | `wss://example.com/x` |
+| 6 | `mcpl://EIDOVERSE.Animalabs.AI:443/x` | `mcpl://eidoverse.animalabs.ai/x` | `wss://eidoverse.animalabs.ai/x` |
+| 7 | `mcpl://ünicode.example/x` | `mcpl://xn--nicode-2ya.example/x` | `wss://xn--nicode-2ya.example/x` |
+| 8 | `mcpl://[2001:DB8::1]:8443/x` | `mcpl://[2001:db8::1]:8443/x` | `wss://[2001:db8::1]:8443/x` |
+| 9 | `mcpl://localhost/x` | `mcpl://localhost/x` | `wss://localhost/x` |
+| 10 | `mcpl://h/p?b=2&a=1` | `mcpl://h/p?b=2&a=1` | `wss://h/p?b=2&a=1` |
+| 11 | `mcpl://h/x?a=1&a=2` | `mcpl://h/x?a=1&a=2` | `wss://h/x?a=1&a=2` |
+| 12 | `mcpl://h/a%2fb` | `mcpl://h/a%2fb` | `wss://h/a%2fb` |
+| 13 | `mcpl://h/%7Euser` | `mcpl://h/%7Euser` | `wss://h/%7Euser` |
+
+Note vector 13: percent-encoding is **not** normalized. `%7Euser` and `~user` are different
+paths, and an implementation that decodes unreserved characters is non-conforming.
+
+Vectors 10 and 11 exist because an implementation that round-trips the query through
+`URLSearchParams` and re-serializes will sort or deduplicate, and fail both silently.
+
+Vectors 6 and 7 are the ones that fail if canonicalization is applied to the `mcpl://` form
+directly rather than to the resolved form (§18.2.1): the port survives, the case survives,
+and `ünicode.example` becomes `%C3%BCnicode.example` instead of `xn--nicode-2ya.example`.
+
+#### 18.7.2 Rejection
+
+| # | Input | Rejected because |
+|---|---|---|
+| 14 | `mcpl:///x` | empty authority — would otherwise dial host `x` |
+| 15 | `mcpl://u:p@h/x` | userinfo |
+| 16 | `mcpl://h/x#frag` | fragment |
+| 17 | `mcpl://h/a/../b` | dot segment |
+| 18 | `mcpl://h/a/%2e%2e/b` | dot segment, percent-encoded |
+| 19 | `mcpl://h/a/./b` | dot segment (single) |
+| 20 | `mcpl://h:99999/x` | port out of range |
+
+Vectors 14 and 18 are the two that a string-level pre-check catches and a parser does not:
+`mcpl:///x` parses happily as a non-special URI with an empty host, and `%2e%2e` collapses
+silently into a shorter path.
+
+### 18.8 Out of scope
+
+Deferred, so parked rather than lost:
+
+- **Mobility** — `server/moved` with host write-back, and stable service hostnames.
+- **Structured refusal** — `server_full`, `retryAfter`, queued admission and `ready`.
+- **Discovery** — `.well-known`, SRV records, resolving one name across several transports.
+- **Multiple transports** — anything other than the direct WSS mapping.
+- **Signatures, attestation, capability hints in the URI.**
+- **Identity** — principals, enrollment, succession.
+
+Each turns a locator into service discovery or identity. If `mcpl://animalabs.ai/discord`
+should one day discover among transports, that is a separate discovery layer on top; this
+direct mapping stays valid underneath it and does not need to change.
+
+### 18.9 Backward compatibility
+
+- Purely additive. No existing configuration changes meaning, and `ws://`/`wss://` keep
+  working exactly as they do.
+- A host that does not implement this section simply rejects `mcpl://` as an unknown scheme,
+  which is the pre-0.5 behaviour.
+- No change to the grant, to feature sets, to channels, or to the manifest.
+
+---
+
+## 19. Bulk Content References
+
+Content blocks flow to model context — that is what they are for. But some tool results,
+push events, and channel messages are best understood as **small testimony about large
+payloads**: a rendered wav, a captured image, a dataset, a log archive. Without this
+section a server has two bad options: inline the payload as base64 (a context bomb the host
+cannot refuse until it has already parsed it) or ship an ad-hoc URL in prose (which no host
+can treat uniformly, and which quietly makes URLs — sometimes credential-bearing URLs —
+part of model context).
+
+This section standardizes the reference and the handling contract, and deliberately no
+storage system. A server describes a payload it holds; the host decides everything that
+happens next; the model sees only what host policy derives. The division of labor is the
+one MCPL already runs on (compare §16.6 and §5.4): the server testifies, the host disposes.
+
+It adds no capability path (§19.9); §5.4 remains the sole source of what a connected server
+may do. It amends the §10.3 / Appendix B.1 content-block shapes (§19.8) and reuses the
+§17.2 digest encoding.
+
+> **Status within the draft.** Merged from RFC-005 revision 3 (Draft). RFC-005 §11 makes
+> freezing the §19.11 vectors as executable vectors under `conformance/` — run against one
+> strict schema/parser implementation and one host-treatment implementation — a
+> precondition for Accepted status. That freeze has not happened yet; until it does, this
+> section carries Draft strength within the 0.5.0-draft.
+
+### 19.1 The three objects
+
+Everything in this section is one of these, and the boundaries between them are the
+normative content:
+
+**1. Server testimony** — the wire object (§19.3). A `resource` content block carrying:
+what the payload is (`mimeType`), how big the server claims it is (`sizeBytes`), how to
+verify it (`digest`), how long the server intends to serve it (`expiresAt`), what to call it
+(`name`), where the server serves it (`uri`), and the server's requested context
+disposition (`disposition`). Every field is a claim, not a fact.
+
+**2. Host-private reference record** — never on the wire, never model-visible (§19.5,
+§19.6, §19.7). The host's own bookkeeping for a received reference: the raw URI, the
+authentication context of the connection that delivered it, fetch state, and — after any
+fetch — the *verified* size, digest, and type of the actual octets. Connection credentials
+live here and nowhere else.
+
+**3. Model-visible stub** — what context gets (§19.5). A host-generated opaque reference id
+plus policy-safe metadata (`name`, `mimeType`, claimed size, provenance). The raw URI is
+not part of the stub by default.
+
+Nothing may flow from testimony into the stub except through host policy over the record.
+That single sentence is most of this section; the subsections below are its consequences.
+
+### 19.2 Why not a new `blob` type
+
+A distinct type would fork every consumer's content-block switch for zero expressive gain.
+The `resource` block already means "URI reference"; what it lacked was enough metadata to
+have a policy about, and that is additive.
+
+### 19.3 Server testimony: the reference block
+
+No new content type. The §10.3 `resource` block gains optional fields, and the media blocks
+(`image`, `audio`) **in `uri` form** MAY carry the same fields:
+
+```jsonc
+{
+  "type": "resource",
+  "uri": "https://render.example.ts.net/files?path=%2F…%2Fchord.wav",
+  "mimeType": "audio/wav",
+  "sizeBytes": 4233704,
+  "digest": "sha256:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU",
+  "expiresAt": "2026-09-07T00:00:00Z",
+  "name": "family_chord_cs80.wav",
+  "disposition": "never"
+}
+```
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `uri` | `string` | Yes | Where the server serves the payload. `https` expected; the *host* decides what it will ever dereference (§19.7). |
+| `mimeType` | `string` | SHOULD | Claimed media type. Testimony — verify or sniff where safety or provider compatibility depends on it; a digest authenticates bytes, not type. |
+| `sizeBytes` | `integer` | SHOULD | Claimed payload size: a non-negative integer within the JSON-safe range (0 ≤ n ≤ 2^53−1). An invalid value is rejected **as a field** — treated as absent — while the block and its `disposition` remain in force (§19.8, vector 15). Testimony — real fetch limits run on actual bytes (§19.7). |
+| `digest` | `string` | MAY | `sha256:` + base64url, the §17.2 *encoding*; the hash is SHA-256 over the exact payload octets — the representation with **no content coding applied**. `sizeBytes` and `digest` MUST describe the same octet sequence. |
+| `expiresAt` | `string` (ISO-8601) | MAY | Advisory availability horizon. An unparseable value fails closed: consumers treat the reference as already expired, never as immortal (§19.7.2). |
+| `name` | `string` | MAY | Display label, nothing more: never a path component — storage names are host-generated (§19.7.1) — and truncated to host display bounds in stubs (§19.5). |
+| `disposition` | `"never" \| "ref"` | MAY | Requested context disposition (§19.3.1). Only legal on URI-form blocks (§19.8). |
+
+A reference with neither `mimeType` nor `sizeBytes` is legal but self-defeating: it denies
+the host the two facts every disposition policy needs. Conformant emitters SHOULD treat
+both as required in spirit.
+
+#### 19.3.1 `disposition`, and the authority asymmetry
+
+| Value | Server's testimony |
+|---|---|
+| `"never"` | Neither the payload nor the access capability (the URI) may reach model context. Only a stub (§19.5) may represent this block. |
+| `"ref"` | Context should see the stub, not the payload. A host MAY additionally fetch and inline where the *verified* payload is within host policy. |
+| *(absent)* | No testimony. Host default policy applies; for inline `data` blocks this is the pre-existing behavior, unchanged. |
+
+The authority here is deliberately asymmetric, and the asymmetry is the point: **a server
+can veto context inclusion but can never expand it.** `"never"` binds the host (§19.5 — the
+strongest MUST in this section); nothing a server writes can compel inlining, compel a
+fetch, or add one byte to context that host policy would not have admitted. A server can
+only stop pretending its payload is context-sized. (Compare §16.6: tags are never
+authority. Disposition is the same species — testimony — with one binding value whose
+effect is only ever subtractive.)
+
+There is no `"inline-ok"` value: it would bind nobody, and absent-disposition host policy
+already expresses it.
+
+This field is unrelated to the change-receipt `disposition` of §17.6 (`applied` |
+`decision-needed` | `informational`); the two never appear on the same object.
+
+### 19.4 Scope: where reference blocks may appear
+
+Reference blocks are scoped to the **server→host `ContentBlock[]` lanes**, where context
+disposition is meaningful: **tool results** (`tools/call`), **push events** (`push/event`
+`payload.content`, §9.2), **incoming channel messages** (`channels/incoming`, §14.3), and
+**injections** (§10).
+
+Push events are the priority case: the one lane where the server chooses what enters
+context *unilaterally* — there is no tool-call moment where the host could intervene on
+size. Hosts MUST apply §19.5 *before* wake-text assembly, so an annotated attachment can
+never inflate the cost of the wake that announces it (vector 8).
+
+**Deferred: host→server.** `channels/publish` and tool arguments are not symmetric lanes:
+generic tool arguments are tool-defined JSON, not `ContentBlock[]`, so the protocol cannot
+silently impose this shape on them; and `channels/publish` is delivery to an *external
+recipient*, where "context disposition" answers nothing — the real contract there is
+upload-vs-link-vs-omit, which deserves its own specification. A tool MAY document that an
+argument accepts a §19.3 reference block; that is a tool contract, not protocol.
+
+### 19.5 The model-visible stub
+
+Where a block is withheld from context — always for `"never"`, by default for `"ref"` —
+the host represents it as at most:
+
+- a **host-generated reference id**: opaque, stable for the life of the session, unique
+  per record (e.g. `ref_7f3a`). This is the thing a model can safely name — mention to a
+  user, cite in reasoning, hand to the host's own facilities (a code-execution runtime's
+  host-mediated fetcher, §19.6). It is host-local naming, not a server-resolvable handle:
+  servers never see it and nothing here asks them to accept it. (Cross-server handle
+  interchange remains deferred, §19.10.)
+- `name`, `mimeType`, claimed `sizeBytes` — labeled as claimed, since none is verified at
+  stub time;
+- one line of provenance ("from tool `vst_render`" / "attachment on push event …").
+
+**The raw `uri` is not part of the stub by default, and under `disposition:"never"` it is
+removed unconditionally** — no host policy, capability classification, or user setting
+restores it; `never` limits payload and access-capability exposure both, always (vectors
+1, 9). Signed URLs and query capabilities are bearer credentials that look like locations;
+putting them in context recreates in one field the leak §19.6 closes in another. For `ref`
+or absent disposition only, a host MAY include the URI where its policy classifies the
+reference as non-capability-bearing (for example: an origin-bound URI that is unusable
+without the host-private auth context — precisely what §19.6.1's no-embedded-credential
+rule produces). The safe default everywhere is the opaque id.
+
+**Stub bounds.** Before stub or wake-text assembly the host truncates every
+server-supplied string (`name`, `mimeType`, provenance inputs) to its own display bounds,
+marking truncation, and bounds the total stub by its own policy. Stub and wake size are
+therefore independent of the length of *every* server-supplied field, not only of
+`sizeBytes` (vectors 8, 17).
+
+Reference ids are not reused within a session. Records MAY be evicted by host policy
+(quota, age, session shrink); a lookup of a stale or unknown id returns a defined
+"unknown reference" error and never resolves to a different record (vector 20).
+
+Hosts SHOULD render stubs uniformly so models learn one shape, and SHOULD retain an
+operator-visible receipt when policy drops a block entirely, so "missing attachment" is
+distinguishable from "nothing was sent".
+
+### 19.6 The host-private reference record and credentials
+
+#### 19.6.1 Authentication context, not a token
+
+The credential (or transport identity) of the connection that delivered a reference is a
+**host-private authentication context**. It is never exposed to the model, the user, or a
+code-execution namespace, and it never appears in a stub, a log line, or a URI — *because a
+content block named a location*, or for any other reason this section creates.
+
+A host MAY apply that authentication context **only**:
+
+- through a **host-mediated fetcher** (the host's own code; never by handing material to
+  the requester), and
+- to **exactly the origin the connection was dialed to.** An arbitrary URI in a content
+  block binds nothing, and no other origin is authenticated: every reference elsewhere is
+  fetched without the connection's authentication context. (A manifest mechanism for
+  declaring additional authenticated reference origins — field, canonical origin grammar,
+  matching rule, redirect relation, vectors — is deferred, §19.10.)
+
+Authentication context is **never forwarded cross-origin**: on any redirect that leaves
+the bound origin, credentials are stripped, and a host MAY simply refuse redirect
+traversal entirely (§19.7). References to third-party locations (a public CDN, another
+service) are fetched **without** the server's authentication context; that location's own
+auth applies and is out of scope.
+
+Server side, two requirements of different testability, stated separately:
+
+- A server that intends its references to be host-fetchable *with authentication* MUST
+  serve them at the connection's dialed origin, under an authentication mechanism
+  satisfiable by that connection's transport-native context — a per-transport requirement,
+  testable per transport (for the WebSocket bearer case: the reference endpoint accepts
+  the same token that opened the session). Where it cannot or does not, it serves them
+  unauthenticated or accepts that they are not host-fetchable.
+- Servers MUST NOT mint per-reference bearer credentials into the `uri` itself — testable
+  syntactically (vector 6). A URI with an embedded credential is a capability that looks
+  like a location; it gets pasted into channels, logged by proxies, and quoted in stubs.
+
+**Transports without a reusable credential** (stdio; host-managed access; short-lived
+session auth): the authentication context is whatever transport-native identity the
+host-mediated fetcher can present — and where that is nothing, only references the server
+chooses to serve unauthenticated are fetchable. A server on such a transport that wants
+fetchable references must serve them accordingly; the host invents no credential on its
+behalf.
+
+Credential lifetime and reference lifetime are independent: an `expiresAt` beyond the
+connection's credential does not promise the payload is fetchable, only that the server
+intends to keep serving it to a caller who can still authenticate.
+
+There is no host→server credential "inversion": the server holds no host credential under
+the current connection model, so there is nothing to specify.
+
+#### 19.6.2 What the record holds
+
+For each received reference the host keeps (privately): the raw URI; the connection/auth
+binding; fetch state; and, after any fetch, the **verified** byte count, digest outcome,
+and observed media type. Model-visible statements about a payload's actual properties come
+from the record's verified fields, never from testimony.
+
+### 19.7 Dereference policy: fail closed
+
+Receipt of a reference **MUST NOT itself trigger dereference.** A fetch happens only by
+explicit host policy or explicit host-mediated action (a user asks; a code-execution
+script asks the host's fetcher; host policy pre-fetches a class it has decided to trust to
+a bounded store). Every server-supplied field is testimony at a security boundary; the
+digest check happens after bytes arrive and protects integrity, not resources.
+
+A conformant host fetcher:
+
+1. **Allowlists schemes** — `https` by default; anything else (notably `file`, `ftp`,
+   link-local and internal-network targets) is refused unless host policy names it.
+   Fail closed (vector 11).
+2. **Allowlists origins** per §19.6.1's binding rule, and **bounds redirects**: a fixed
+   small hop limit, credentials stripped on any cross-origin hop, or redirect traversal
+   refused outright (vector 12).
+3. **Streams with a hard actual-byte ceiling** from host policy, aborting the transfer the
+   moment real octets exceed it — regardless of `sizeBytes`, which a mistaken or malicious
+   server can understate (vector 10). Declared size never allocates resources; at most it
+   *denies* early (a claim already over the ceiling is refused without a fetch, vector 4).
+4. **Verifies before presenting**: where `digest` is present, a fetched payload whose
+   octets do not match MUST NOT be presented as the described content (vector 5).
+   `mimeType` is verified or sniffed where anything safety- or compatibility-relevant
+   depends on it (vector 13).
+
+#### 19.7.1 Storage naming
+
+When a host materializes a fetched payload, **the host generates the storage path and
+filename** — from the reference record (e.g. the reference id plus an extension derived
+from the *verified* media type) — and the server-supplied `name` is never a path
+component, sanitized or otherwise. Basename-sanitizing a hostile string still leaves
+collisions, reserved/device names, control characters, and bidi/homoglyph surprises;
+generating the name leaves nothing. The display label, if kept alongside, is stripped of
+control and bidi-override characters and bounded per §19.5 (vectors 14, 18).
+
+#### 19.7.2 Lifetime
+
+`expiresAt` is advisory. A fetch after expiry failing is an ordinary error, not a protocol
+violation. An unparseable `expiresAt` fails closed — the reference is treated as already
+expired, never as immortal. Servers SHOULD keep references valid for a window they state
+(in the field or in tool documentation); nothing here creates a retention obligation, a
+garbage-collection protocol, or a way to ask for an extension.
+
+### 19.8 Schema
+
+Appendix B.1 carries the normative schema. In summary: the `resource` variant gains the
+six optional properties of §19.3 with emitter-side maxima (`uri` ≤ 4096, `mimeType` and
+`name` ≤ 255, `expiresAt` ≤ 64, `sizeBytes` within `[0, 2^53−1]`, `digest` matching
+`^sha256:[A-Za-z0-9_-]{43}$`, `disposition` ∈ {`never`, `ref`}); the `image` and `audio`
+variants gain the same properties **on their `uri`-form branch only** — `disposition`
+alongside inline `data` is schema-invalid; the `text` variant is unchanged and carries no
+`disposition` (a text block *is* context-sized by construction).
+
+The maxima are emitter conformance bounds, and they are the *outer* fence, not the
+guarantee: the guarantee is host-side (§19.5) — every server-supplied string is truncated
+to host display bounds before stub/wake assembly, so a nonconforming emitter still cannot
+move mass into metadata (vector 17).
+
+**One invalid-field rule** for every optional property: a value that violates its schema
+constraint is rejected **as a field** and treated as absent; the block remains valid, and
+a subtractive `disposition` remains in force. Field invalidity never widens exposure —
+there is no reading of a malformed `sizeBytes` under which the payload becomes
+context-eligible (vector 15). (`uri` is the one required property; a block whose `uri`
+violates the schema is rejected whole.)
+
+Field placement: `disposition` is a top-level property of the block variants that can
+carry it, not a member of a generic `annotations` object — MCP already defines an
+`annotations` vocabulary on content blocks (`audience`, `priority`, …), and colliding with
+it, or with `_meta`, buys nothing.
+
+Handling rules the schema cannot express:
+
+- An emitter that sends inline `data` purporting bulk disposition through any channel the
+  schema misses is nonconformant; the receiving host still **fails closed** (withholds the
+  `data` from context, MAY log) (vector 2).
+- Unknown additional properties on content blocks are ignored (existing behavior), which
+  is also the degradation story: an annotated block parses on a pre-§19 host as an
+  ordinary §10.3 block, and the only loss is the courtesy (vector 7).
+
+#### 19.8.1 MCP interoperability
+
+MCP's own vocabulary has a nested `EmbeddedResource` (inline content — under this section
+an ordinary inline block, nothing new) and a distinct `ResourceLink`. MCPL keeps its
+direct `resource: {uri}` shape; a host or bridge translating MCP→MCPL maps a
+`ResourceLink` onto this testimony record field-for-field (`uri`→`uri`, `name`→`name`,
+`mimeType`→`mimeType`, `size`→`sizeBytes`, `annotations` dropped or host-mapped) with no
+`disposition` — absent testimony, host default policy, exactly as for any unannotated
+reference. There is one reference vocabulary here, not two; `ResourceLink` is an import
+path into it.
+
+### 19.9 No new capability
+
+Emitting a reference block inside a message the server was already authorized to send adds
+no authority: the block moves strictly less into context than the same bytes inlined would
+have, and §19.6/§19.7 give the server no new reach into the host. There is therefore no
+`uses` entry, no grant, and nothing for §5.4 to gate. Conversely, nothing here bypasses
+§5.4: a server that cannot push cannot push a reference either. There is no manifest
+touch: declared reference origins are deferred with the rest of cross-origin
+authentication (§19.10).
+
+### 19.10 What this deliberately is not
+
+- **Not a blob store.** MCPL moves no payload bytes under this section; it moves
+  descriptions.
+- **Not handle interchange.** The powerful version — an opaque handle minted by one
+  server, passed by the agent to another, bytes streamed host-side between them — is real
+  and deliberately deferred; the §19.5 reference id is host-local naming and expressly
+  *not* that handle. (Same posture as §18.8's deferral of mobility.)
+- **Not a host→server delivery contract.** §19.4's deferral: recipient-delivery semantics
+  for `channels/publish` attachments deserve their own document.
+- **Not authenticated cross-origin fetching.** Declared reference origins — the manifest
+  field, canonical origin grammar, host matching rule, auth binding per transport, and
+  redirect relation — are deferred (§19.6.1). Exactly one origin is authenticated: the one
+  the connection was dialed to. A server whose references live elsewhere serves them
+  unauthenticated or waits for that revision.
+- **Not a transport mandate, and not compression, chunking, ranges, or resumption.** HTTP
+  has all four.
+
+### 19.11 Conformance vectors
+
+Not yet frozen as executable vectors (see the status note at the top of this section).
+
+| # | Input | Expected |
+|---|---|---|
+| 1 | `resource` block, `disposition:"never"`, host assembles context | At most a §19.5 stub appears; neither payload bytes nor `uri` appear model-visible |
+| 2 | Inline `data` presented with bulk disposition through any gap in schema enforcement | Emitter nonconformant; host fails closed — `data` withheld, MAY log |
+| 3 | `disposition:"ref"`, verified payload within host inline policy | Host MAY inline; stub otherwise. No violation either way |
+| 4 | `sizeBytes` claim exceeds host ceiling | Host refuses the fetch without dialing; stub unaffected |
+| 5 | Fetched octets' digest ≠ `digest` | Host MUST NOT present them as the described content |
+| 6 | `uri` containing an embedded credential from the emitting server | Emitter nonconformant (§19.6.1); host MAY refuse to dereference |
+| 7 | Reference block on a pre-§19 host | Parses as ordinary §10.3 content; degradation limited to lost courtesy |
+| 8 | Push event: one text block + one `"never"` reference | Wake carries the text and a stub; wake size independent of `sizeBytes` |
+| 9 | Reference whose `uri` is a signed/query-capability URL | Stub shows reference id, `name`, type, size. Under `never`: URI absent unconditionally. Under `ref`/absent disposition: URI absent unless explicit host policy includes it |
+| 10 | Stream exceeds claimed `sizeBytes` and continues | Fetcher aborts at the host's actual-byte ceiling; partial bytes are not presented |
+| 11 | `uri` scheme `file:` (or other non-allowlisted) | Fetch refused; fail closed |
+| 12 | Fetch redirects cross-origin | Credentials stripped at minimum; traversal MAY be refused; bound hop limit either way |
+| 13 | Fetched content sniffs as a different media type than `mimeType` | Host treats `mimeType` as false testimony where anything depends on it; record stores the observed type |
+| 14 | `name` of `"../../.ssh/authorized_keys"` | Storage path/filename host-generated from the record (§19.7.1); the string appears at most as a bounded, sanitized display label |
+| 15 | `sizeBytes` of `-1`, `3.5`, or `2^53` | Field rejected, treated as absent; block remains valid; a `"never"` disposition remains in force; value never used in arithmetic |
+| 16 | Unparseable `expiresAt` | Treated as already expired (fail closed), never as immortal |
+| 17 | `name` (or `mimeType`) of 1 MB, past schema maxima | Emitter nonconformant; host truncates to display bounds before stub/wake assembly — wake size unchanged |
+| 18 | `name` containing control characters, bidi overrides, or a reserved device name | Storage unaffected (host-generated name); display label stripped of control/bidi characters |
+| 19 | Payload served with `Content-Encoding: gzip` | `sizeBytes` and `digest` describe the *decoded* identity octets; fetcher verifies against those, and the streaming ceiling applies to decoded bytes |
+| 20 | Lookup of an evicted or unknown reference id | Defined "unknown reference" error; the id never resolves to a different record within the session |
+
+### 19.12 Example (non-normative)
+
+A render server whose tool results reference multi-megabyte wav files on a machine its
+callers cannot shell into. Before, inside a `text` block:
+
+```jsonc
+{ "path": "/render/vst_out/chord.wav", "peak": 0.605,
+  "download_url": "https://…/files?path=…", "download_note": "append &token=<your token> to fetch" }
+```
+
+The same result as a reference:
+
+```jsonc
+"content": [
+  { "type": "text", "text": "{\"path\":\"…\",\"peak\":0.605,\"rms\":0.18,\"render_ms\":676}" },
+  { "type": "resource",
+    "uri": "https://render.example.ts.net/files?path=%2F…%2Fchord.wav",
+    "mimeType": "audio/wav", "sizeBytes": 4233704, "name": "chord.wav",
+    "disposition": "never" }
+]
+```
+
+`download_note` disappears because §19.6.1 makes credential handling the host's business;
+the model sees `ref_… chord.wav (audio/wav, ~4.2MB, from tool vst_render)`; and the host
+can fetch (origin-bound, ceiling-bounded, digest-checked), stage, or hand the wav to a
+code-execution script as a path — none of which it could do with prose, and none of which
+puts a URI or a token anywhere a model could quote it.
+
+---
+
 ## Appendix A: Error Codes
 
 | Code | Message | Description |
@@ -2351,11 +3068,16 @@ is not authored by the party that made it.
       "properties": {
         "type": { "const": "image" },
         "data": { "type": "string" },
-        "mimeType": { "type": "string" },
-        "uri": { "type": "string" }
+        "mimeType": { "type": "string", "maxLength": 255 },
+        "uri": { "type": "string", "maxLength": 4096 },
+        "sizeBytes": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "digest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
+        "expiresAt": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 255 },
+        "disposition": { "enum": ["never", "ref"] }
       },
       "oneOf": [
-        { "required": ["type", "data", "mimeType"] },
+        { "required": ["type", "data", "mimeType"], "not": { "required": ["disposition"] } },
         { "required": ["type", "uri"] }
       ]
     },
@@ -2364,11 +3086,16 @@ is not authored by the party that made it.
       "properties": {
         "type": { "const": "audio" },
         "data": { "type": "string" },
-        "mimeType": { "type": "string" },
-        "uri": { "type": "string" }
+        "mimeType": { "type": "string", "maxLength": 255 },
+        "uri": { "type": "string", "maxLength": 4096 },
+        "sizeBytes": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "digest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
+        "expiresAt": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 255 },
+        "disposition": { "enum": ["never", "ref"] }
       },
       "oneOf": [
-        { "required": ["type", "data", "mimeType"] },
+        { "required": ["type", "data", "mimeType"], "not": { "required": ["disposition"] } },
         { "required": ["type", "uri"] }
       ]
     },
@@ -2377,12 +3104,26 @@ is not authored by the party that made it.
       "required": ["type", "uri"],
       "properties": {
         "type": { "const": "resource" },
-        "uri": { "type": "string" }
+        "uri": { "type": "string", "maxLength": 4096 },
+        "mimeType": { "type": "string", "maxLength": 255 },
+        "sizeBytes": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "digest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
+        "expiresAt": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 255 },
+        "disposition": { "enum": ["never", "ref"] }
       }
     }
   ]
 }
 ```
+
+The `sizeBytes`, `digest`, `expiresAt`, `name`, and `disposition` properties are the §19.3
+reference fields. On `image` and `audio` they are meaningful only in `uri` form; the
+existing `oneOf` still rejects a block carrying both `data` and `uri`, and the `data`
+branch additionally rejects `disposition`. The maxima are emitter conformance bounds
+(§19.8); a host applies the one invalid-field rule — reject the field, keep the block and
+its `disposition` — rather than rejecting the block, except for an invalid `uri`. Unknown
+additional properties are ignored.
 
 ### B.2 FeatureSet
 
@@ -2469,7 +3210,9 @@ is not authored by the party that made it.
 
 **ChangeImpact:** `"capability-revoked" | "capability-expansion-pending" | "feature-degraded" | "feature-restored" | "ontology-acceptance-invalidated" | "ontology-reference-undeclared" | "surface-changed"`
 
-**Disposition:** `"applied" | "decision-needed" | "informational"`
+**Disposition** (change-receipt impact, §17.6)**:** `"applied" | "decision-needed" | "informational"`
+
+**ContentDisposition** (reference block `disposition`, §19.3.1)**:** `"never" | "ref"`
 
 ---
 
@@ -2477,9 +3220,10 @@ is not authored by the party that made it.
 
 ### 0.5.0-draft (August 2026)
 
-Merges RFC-002 (capability grants), RFC-001 rev 2 (event tags), and RFC-003 (server manifest
-changes). Grounded in AUDIT-001, an implementation audit of 15 trees; every removal below is
-backed by evidence from it rather than by taste.
+Merges RFC-002 (capability grants), RFC-001 rev 2 (event tags), RFC-003 (server manifest
+changes), RFC-004 (the `mcpl://` URI scheme), and RFC-005 rev 3 (bulk content references).
+Grounded in AUDIT-001, an implementation audit of 15 trees; every removal below is backed by
+evidence from it rather than by taste.
 
 **Authorization**
 - Advertisement is now **recursive**, mirroring the capability paths, and
@@ -2564,7 +3308,45 @@ backed by evidence from it rather than by taste.
 - This is a **trigger for existing machinery**, not new policy: all consequences route
   through §6.7. It is cooperative-only and explicitly **not** a security mechanism (§17.9).
 
-**Security**
+**Endpoint URIs (§18)** — from RFC-004 (Accepted 2026-08-02)
+- Added the **`mcpl://` scheme**: resolves to `wss://` (default port 443) by a pure
+  syntactic rewrite; no `mcpls://`, never `ws://`, `localhost` not special. `ws://`/`wss://`
+  remain accepted everywhere.
+- **Resolve first, then canonicalize** (§18.2): `mcpl:` is a WHATWG non-special scheme, so
+  canonical identity is defined by the resolved `wss:` value; a host MUST NOT rely on a URL
+  library's normalization of the `mcpl://` form. Query preserved verbatim.
+- Hosts MUST reject fragments, userinfo, empty authority (`mcpl:///x` would otherwise dial
+  host `x`), and dot segments — string-level, before substitution (§18.1.1).
+- An endpoint has **three values** — `configuredUri`, `canonicalUri`, `resolvedTransport`
+  — and a host MUST NOT collapse them (§18.4).
+- Resolution proves nothing about MCPL presence; only the handshake does (§18.5).
+  **Possessing or resolving a URI grants nothing** (§18.6, §13.5). Twenty test vectors
+  (§18.7).
+
+**Bulk content references (§19)** — from RFC-005 rev 3 (Draft; vectors not yet frozen)
+- The `resource` block, and `image`/`audio` in `uri` form, gain optional
+  **`mimeType`, `sizeBytes`, `digest`, `expiresAt`, `name`, `disposition`** (§19.3, App.
+  B.1). No new content type; no new capability path (§19.9).
+- Three explicitly separate objects: server **testimony** (wire), the **host-private
+  reference record** (never wire, holds the auth context), and the **model-visible stub**
+  (host-generated opaque id + bounded metadata). Nothing flows testimony→stub except through
+  host policy over the record (§19.1).
+- **Authority asymmetry**: `disposition: "never"` binds the host — no payload, no URI in
+  context, unconditionally; `"ref"` requests a stub; nothing a server writes can compel
+  inlining or a fetch (§19.3.1, §19.5).
+- **Dereference fails closed** (§19.7): receipt never triggers a fetch; scheme/origin
+  allowlists, bounded redirects, an actual-byte streaming ceiling independent of
+  `sizeBytes`, digest verified before presenting.
+- Connection credentials are a **host-private authentication context**, applied only by a
+  host-mediated fetcher and only to the dialed origin; servers MUST NOT mint credentials
+  into `uri` (§19.6.1). Declared cross-origin reference origins deferred (§19.10).
+- Metadata is bounded emitter-side and truncated host-side, so stub and wake size are
+  independent of every server-supplied field; storage names are host-generated, `name` is
+  a display label only (§19.5, §19.7.1). One invalid-field rule: reject the field, keep the
+  block and its subtractive `disposition` (§19.8).
+- Push events MUST be stubbed before wake-text assembly (§9.2, §19.4).
+
+**Security
 - §13.1 risk table rewritten per capability path; §13.4 replaced a MUST NOT aimed at the
   untrusted party with an actual control (deny `inject.system` by default).
 - Added `-32002 Capability denied`.

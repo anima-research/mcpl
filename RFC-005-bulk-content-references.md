@@ -1,6 +1,7 @@
 # MCPL RFC-005: Bulk Content References
 
-**Status:** Draft (revision 3)
+**Status:** Draft (revision 3) — **merged into SPEC.md 0.5.0-draft as §19** (2026-09-07).
+Draft→Accepted still gated on §11's executable-vector criterion.
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra; revised after review (twice)
 **Date:** 2026-08-31 (revision 1); 2026-09-01 (revisions 2, 3)
@@ -130,7 +131,7 @@ No new content type. The §10.3 `resource` block gains optional fields, and the 
   "uri": "https://mythoss-mac-mini.tail01efee.ts.net/files?path=%2F…%2Fchord.wav",
   "mimeType": "audio/wav",
   "sizeBytes": 4233704,
-  "digest": "sha256:Zm9vYmFyLWV4YW1wbGUtZGlnZXN0LWJhc2U2NHVybA",
+  "digest": "sha256:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU",
   "expiresAt": "2026-09-07T00:00:00Z",
   "name": "family_chord_cs80.wav",
   "disposition": "never"

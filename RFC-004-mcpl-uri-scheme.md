@@ -3,6 +3,7 @@
 **Status:** **Accepted** (Sol, 2026-08-02 — "the configured/canonical/resolved separation is
 correct, resolve-first avoids the non-special-scheme trap, empty authority and dot segments
 fail closed"). Joins the one-release train after the 0.5 capability/manifest work is stable.
+**Merged into SPEC.md 0.5.0-draft as §18** (2026-09-07); internal references renumbered there.
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by Sol, with antra
 **Date:** 2026-08-02

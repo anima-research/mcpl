@@ -1,15 +1,34 @@
 # MCPL RFC-006: Event Coalescing
 
-**Status:** Draft (revision 3)
+**Status:** Draft (revision 4)
 **Targets:** MCPL Protocol Specification 0.5
-**Authors:** Claude Code, from a scope proposed by antra; revised after review
-**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3)
+**Authors:** Claude Code, from a scope proposed by antra; revised after review (twice)
+**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4)
 **Depends on:** nothing for authority — RFC-002 / SPEC §5.4 remains the sole source of what
 a connected server may do, and this RFC adds no `uses` path (§10). Amends SPEC §9
 (`push/event` params and result; new `push/render` method), §9.4 (idempotency), §14.3
 (`channels/incoming` message and per-message result). Interacts with §10.6 (hook
 timeouts), §10.7 (loop prevention), §13.2 (audit), §13.3 (hook failure policy), §14.5
 (channel scoping), §16 (tags), Appendix A (error codes).
+
+> **Revision 4 note.** Review of revision 3 (antra, PR #5) found two protocol gaps and one
+> wrong example:
+>
+> - **`eventId` is REQUIRED on a coalesced `channels/incoming` message (§3.1).** Revision 3
+>   left it optional with dedup falling back to `messageId`, so a coalesced edit that omitted
+>   it collided with its own create and was dropped as a duplicate. Legacy messages without
+>   `coalesce` keep the optional field; omission with `coalesce` is a per-message
+>   `coalesce_invalid`.
+> - **Retract and plain replacement during an in-flight render (§5.4 rules 6–7).** Revision
+>   3 specified a *notice* arriving mid-render but not a retract or a plain occurrence. A
+>   frozen render's late completion could resurrect withdrawn content or overwrite a
+>   replacement. Now a frozen batch that is withdrawn or superseded before materialization is
+>   *cancelled*: its result, when it arrives, is discarded, and no fallback is materialized
+>   for it. If materialization already won the race, the normal consumed/history rules
+>   apply. The boundary is atomic.
+> - **§9.2's alternate timeline was wrong.** Inference after edit 1 sees edit 1 alone (the
+>   original was *replaced*), so create → edit 1 → inference → edit 2 → delete yields
+>   `first, replaced, appended, noted`, and the final history is edit 1 + the deletion notice.
 
 > **Revision 3 note.** Review of revision 2 (antra, PR #5) found three structural holes and
 > two under-specified areas; all are addressed here, keeping plain coalescing and deferred
@@ -132,12 +151,18 @@ is host-private state; the mechanism has to live where the state is.
 |---|---|---|---|
 | `messageId` | *which message* | `channels/incoming` | Stable across the message's life: creates, edits, and deletes of one platform message share it. Reply/quote targets refer to it. |
 | `coalesce.key` | *which subject's pending updates collapse* | both | Stable for the subject. For chat, RECOMMENDED `message:<messageId>`. For a document, per document or region. |
-| `eventId` | *which occurrence* | both (NEW as OPTIONAL on `channels/incoming` messages) | Fresh per occurrence. Reused **only** when retrying that same occurrence. |
+| `eventId` | *which occurrence* | both (NEW on `channels/incoming` messages: OPTIONAL without `coalesce`, **REQUIRED** with it) | Fresh per occurrence. Reused **only** when retrying that same occurrence. |
 
 **Idempotency (amends §9.4).** Hosts deduplicate by occurrence: `eventId` when present,
 else `messageId`. A `channels/incoming` message whose `messageId` the host has seen but
 whose `eventId` is new is a **new occurrence of an existing message** — an edit — not a
 duplicate. A retry (same `eventId`) SHOULD receive the same result as the original.
+
+A `channels/incoming` message that carries `coalesce` **MUST** carry a non-empty `eventId`.
+Without it the `messageId` fallback would make an edit a duplicate of its own create, and
+the newest state would be the one discarded. Omission is a per-message validation failure
+(`coalesce_invalid`, §13); the message is not admitted and its subject is untouched.
+Messages without `coalesce` keep today's behaviour.
 
 > Deterministic occurrence ids that omit the occurrence — `discord_edit_<messageId>` — are
 > a defect this table makes visible: the second edit of a message collides with the first
@@ -224,7 +249,7 @@ untouched —
 | Occupant of subject | Host action | `outcome` |
 |---|---|---|
 | none | Append. Record as occupant. | `"first"` |
-| unconsumed | **Replace** (§4.1). Record new occurrence as occupant. | `"replaced"` |
+| unconsumed (incl. a pending or rendering batch, §5.4 rule 6) | **Replace** (§4.1). Record new occurrence as occupant. | `"replaced"` |
 | consumed, or history `unknown` | Append. Record new occurrence as occupant. | `"appended"` |
 
 The server does the same thing in every row: nothing.
@@ -383,14 +408,16 @@ Per subject:
                         │ assembly begins        │
                         ▼                        │
                     RENDERING ── notice ──► RENDERING + PENDING'
-                        │
-        ┌───────────────┼───────────────────┐
-        ▼               ▼                   ▼
+                        │  │
+                        │  └── retract / plain occurrence ──► CANCELLED
+                        │                                        │ result / timeout:
+        ┌───────────────┼───────────────────┐                    │ materialize NOTHING
+        ▼               ▼                   ▼                    │ (discard, audit)
    result ok        empty result       timeout / error / disconnect
-   materialize      materialize        materialize FALLBACK
-   result           nothing
-        └───────────────┴───────────────────┘
-                        ▼
+   materialize      materialize        materialize FALLBACK      │
+   result           nothing                                      │
+        └───────────────┴───────────────────┘                    │
+                        ▼                                        ▼
                    batch CLOSED  (PENDING', if any, becomes PENDING)
 ```
 
@@ -411,6 +438,24 @@ Normative rules:
    lapsed *before* assembly is dropped without calling `push/render`.
 5. **Rendered content is admitted as content.** The result passes the checks of §5.2
    regardless of what the notices' fallbacks passed.
+6. **Retraction or plain replacement during a render cancels the frozen batch.** A
+   `retract` (§6) or a plain occurrence (§4) for the subject that arrives while its batch
+   is RENDERING acts on the subject as if the frozen batch were an unconsumed occupant:
+   retraction removes it; a plain occurrence displaces it and becomes the occupant. The
+   batch enters CANCELLED. When the render then completes — with a result, empty, or by
+   timeout/error — the host materializes **nothing** for it: the result is discarded and
+   audit-logged, and no fallback is materialized. The cancelling operation's own effect
+   (nothing, or the plain occurrence, or the deletion notice per §6) is what the model sees.
+   A pending batch opened by a notice that arrived after the render started (rule 1) is
+   removed by the retraction and left in place by a plain occurrence.
+7. **The race is decided at materialization, atomically.** If the host has materialized
+   the frozen batch (result or fallback) before the retraction or plain occurrence is
+   admitted, the materialized occurrence is an ordinary occupant: unconsumed → it is
+   replaced or removed as §4/§6 say; consumed → history is `some` and §4/§6 apply. The
+   check "is this batch still pending, rendering, or materialized?" and the resulting
+   action MUST be one atomic step with respect to the render completion path, so that a
+   result and a cancellation cannot both take effect. Servers see nothing of the race:
+   their render response is acknowledged either way.
 
 ### 5.5 Scope
 
@@ -437,9 +482,9 @@ version of the subject*. It MAY be empty for pure withdrawal (a discarded transc
 has nothing to announce). For chat deletions it **MUST** be non-empty: a model that read a
 message must learn it is gone.
 
-The host removes any unconsumed occupant or pending batch of the subject from every context
-it was delivered to (no trace, §4.1), then decides on the notice by the subject's consumed
-history (§3.3):
+The host removes any unconsumed occupant, pending batch, or **rendering batch** (which
+becomes CANCELLED, §5.4 rule 6) of the subject from every context it was delivered to (no
+trace, §4.1), then decides on the notice by the subject's consumed history (§3.3):
 
 | Consumed history | Pending version | Host action | `outcome` |
 |---|---|---|---|
@@ -558,10 +603,12 @@ delete   push/event        { eventId: d123,  coalesce: { channelId, key, retract
                              content: "Message 123 by Alice was deleted." }                       → retracted
 ```
 
-The model never sees anything: history is `none`. Had the agent run after edit 1, the same
-four requests yield `first`, `first`(consumed → appended), `replaced`, `noted`: the model
-saw the original and edit 1, edit 2 vanishes unread, and the deletion notice lands. The
-server sent identical requests in both timelines.
+The model never sees anything: history is `none`. Had the agent run **after edit 1**, the
+same four requests yield `first`, `replaced`, `appended`, `noted`: edit 1 had already
+replaced the unread original, so the model saw edit 1 alone; edit 2 is appended as a new
+unconsumed occupant, then removed unread by the retraction; and the deletion notice lands
+because history is `some`. Final model-visible history: edit 1, then the notice. The server
+sent identical requests in both timelines.
 
 Channel **closed**: the create arrives via `push/event` with `coalesce.channelId`; the
 tuple is the same, so the edits and delete address the same subject. If the channel closes
@@ -693,7 +740,7 @@ interface PushRenderResult { content: ContentBlock[]; timestamp?: string }
 
 // push/event params            += coalesce?: Coalesce
 // push/event result            += coalesce?: CoalesceResult
-// channels/incoming message    += eventId?: string            (occurrence id; §3.1)
+// channels/incoming message    += eventId?: string            (occurrence id; §3.1 — REQUIRED when coalesce present)
 //                              += coalesce?: Coalesce          (channelId, deferred MUST be absent)
 // channels/incoming result[i]  += coalesce?: CoalesceResult
 // host experimental.mcpl       += eventCoalescing?: boolean
@@ -703,8 +750,9 @@ interface PushRenderResult { content: ContentBlock[]; timestamp?: string }
 
 **Malformed `coalesce`** — missing or oversized `key`; `retract` with `deferred`; `data`
 without `deferred` or over 4 KiB; `deferred` or `channelId` on a `channels/incoming`
-message; `channelId` or `deferred` sent to a host that does not advertise the corresponding
-leaf — is a request error, never a silent append:
+message; a `channels/incoming` message with `coalesce` but no non-empty `eventId`;
+`channelId` or `deferred` sent to a host that does not advertise the corresponding leaf —
+is a request error, never a silent append:
 
 - On `push/event`: JSON-RPC error `-32602 Invalid params`, `data: { field, reason }`. The
   event is not admitted; no subject is touched.
@@ -751,6 +799,11 @@ Identity and scope:
     `coalesce.channelId`, key K → feature-set scope; does not touch channel-scoped (C, K).
 15. **Unadvertised leaf.** `coalesce.channelId` to a host without `channelScopedPush` →
     `-32602`; nothing appended.
+15a. **Coalesced channel message without `eventId`.** `channels/incoming` message with
+    `coalesce` and no `eventId` (or empty) → `{ accepted: false, reason: "coalesce_invalid" }`;
+    subject untouched; siblings in the batch processed. The same message with a fresh
+    `eventId` and a previously seen `messageId` → admitted as an edit, `"replaced"` or
+    `"appended"`.
 
 Deferred:
 16. **One batch.** N1(K), N2(K), N3(K), no inference → exactly one `push/render` at next
@@ -778,6 +831,23 @@ Deferred:
     is refused (§10.7).
 27. **Dropped coverage.** `dropped > 0` → a notice-only conformance server's result content
     mentions the count.
+27a. **Retract during render, late result.** N1(K); render starts; retract K with notice
+    (history `none`) → `"retracted"`; result arrives → discarded, audit-logged; next request
+    contains nothing from K — neither rendered content nor fallback nor notice.
+27b. **Retract during render, timeout.** As 27a but the render times out → no fallback
+    materialized; next request contains nothing from K.
+27c. **Plain replacement during render, late result.** N1(K); render starts; plain E(K) →
+    `"replaced"`; result arrives → discarded; next request contains E's content and no byte
+    of the render result or fallback.
+27d. **Plain replacement during render, timeout.** As 27c but the render times out → the
+    request contains E's content only; no fallback.
+27e. **Materialization wins.** N1(K); render completes and is materialized (unconsumed);
+    retract K → `"retracted"`, materialized occurrence removed. Same but materialized and
+    consumed before the retract → `"noted"`, materialized occurrence retained, notice
+    appended.
+27f. **Cancel and new pending.** N1(K); render starts; N2(K) (`"first"`, new pending
+    batch); retract K → both the frozen and the pending batch are removed; result arrives →
+    discarded; next assembly issues no `push/render` for K.
 
 Retraction:
 28. **Never consumed.** Create, edit (pending), retract with notice → `"retracted"`; next
@@ -823,8 +893,8 @@ Both:
   unconsumed until the hook flushes them; plain replacement is a keyed overwrite of the
   held queue, rendering happens in the flush, and anything already emitted as a
   `<channel>` block is consumed.
-- **discord-mcpl / portal-mcpl.** Add `coalesce.key = "message:<id>"` on creates (both
-  paths), `coalesce.channelId` + fresh occurrence ids on edits (fixing the
+- **discord-mcpl / portal-mcpl.** Add `coalesce.key = "message:<id>"` and an `eventId` on
+  creates (both paths), `coalesce.channelId` + fresh occurrence ids on edits (fixing the
   `discord_edit_<id>` collision), and `retract` + notice on deletes. Portal's
   `[message deleted]` push becomes the retraction's content unchanged.
 - **First deferred servers.** A Google Docs server (edits keyed per document, comments per

@@ -904,16 +904,16 @@ Both:
 
 ## 15. Implementation notes (non-normative)
 
-- **agent-framework.** `PushHandler` owns `eventId` dedup and is the natural home for the
-  subject index `(serverId, scope, key) → { occupant, batch, history }`. The context manager
-  has `removeMessage` / `addMessage`. Missing pieces: a per-message *consumed* watermark set
-  at request assembly (agent inference **and** compression); a pre-assembly step that
-  freezes and renders pending batches — adjacent to `HookOrchestrator`'s `beforeInference`
-  and able to share its timeout plumbing; re-admission at render response;
-  `ChannelRegistry` lookups for §3.2 channel checks on pushes. The cache rule — mutate only
-  beyond the last cache marker — is implied by "unconsumed" but worth asserting. The index
-  is in-memory today, so vectors 7 and 31 (fail toward today) are the behaviour to
-  implement; if the host can persist one bit per recent subject, `history` should be it.
+- **agent-framework.** [PR #196](https://github.com/anima-research/agent-framework/pull/196)
+  implements the feature-set-scoped `pushEvents` / `deferred` profile. Pending content
+  stays outside context managers until activation assembly, when it is materialized and
+  conservatively sealed before compilation. Chronicle records the audit trail and pending
+  fallbacks; recovery rechecks current authority without repeating a source-backed render.
+  Host support explicitly leaves `channelsIncoming` and `channelScopedPush` false. Channel
+  and mixed-delivery vectors therefore remain follow-up work, as does delivery at live tool
+  continuation boundaries. The companion's state-machine, gate, and WebSocket tests cover
+  its advertised profile, including revision 5's mode transitions. This is a proposed host
+  implementation, not evidence that the whole RFC is deployed.
 - **mcpl-cc-bridge.** Deliveries held by the wake policy (the `<held>` block) are
   unconsumed until the hook flushes them; plain replacement is a keyed overwrite of the
   held queue, rendering happens in the flush, and anything already emitted as a

@@ -11,12 +11,16 @@ MCPL is a backward-compatible extension to the [Model Context Protocol (MCP)](ht
 - **Feature Sets** — Named behavior bundles derived from the capability grant
 - **Event Tags** — Semantic labels for host-controlled event treatment
 - **Manifest Changes** — Hosts re-fetch and compare announced server changes
+- **WebSocket Transport** — Persistent bidirectional connections with the same capability negotiation as other transports
 - **Endpoint URIs** — `mcpl://` locators resolve to secure WebSocket endpoints
 - **Bulk Content References** — Bounded references to large payloads, with host-controlled fetching and context inclusion
 
 ## Specification
 
 See [SPEC.md](./SPEC.md) for the full protocol specification.
+
+[WebSocket transport](./SPEC.md#42-websocket-transport) is adopted separately from the
+state/branches proposal; see the [accepted transport proposal](./proposals/001-websocket-transport.md).
 
 ## Status
 

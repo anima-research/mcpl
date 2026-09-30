@@ -31,6 +31,7 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 2. [Design Goals](#2-design-goals)
 3. [Compatibility](#3-compatibility)
 4. [Protocol Overview](#4-protocol-overview)
+   - [WebSocket Transport](#42-websocket-transport)
 5. [Capability Negotiation](#5-capability-negotiation)
 6. [Feature Sets](#6-feature-sets)
 7. [Scoped Access — removed in 0.5.0](#7-scoped-access--removed-in-050)
@@ -188,6 +189,99 @@ Per JSON-RPC 2.0:
 | `channels/outgoing/complete` | Notification | Host → Server |
 | `channels/publish` | Notification or Request | Host → Server |
 | `channels/incoming` | Request | Server → Host |
+
+### 4.2 WebSocket Transport
+
+MCPL defines WebSocket as an additional transport alongside
+[MCP's stdio and Streamable HTTP transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
+It carries requests, responses, and notifications in both directions on
+one persistent connection. The methods, capability grants, and policy ordering are the
+same regardless of transport. Servers MAY offer more than one transport.
+
+#### 4.2.1 Endpoints
+
+The host is the WebSocket client and connects to the server's configured endpoint, for
+example `wss://example.com/mcpl`. The endpoint path is server-defined; `/mcpl` is an
+example, not a required path. Endpoint selection and host configuration formats are
+operational concerns, not protocol fields.
+
+`wss://` provides TLS; `ws://` remains available when explicitly configured, for example
+`ws://localhost:3000/mcpl` for local development. An `mcpl://` locator resolves to
+`wss://` according to §18, never to plaintext `ws://`. Opening the socket does not establish
+MCPL support or grant any capability (§18.5, §5.4).
+
+#### 4.2.2 Message framing
+
+Each WebSocket **text message** MUST contain exactly one JSON-RPC 2.0 object: a request,
+response, or notification. Senders MUST serialize the object on a single line, with
+newlines within string values escaped. No newline delimiter is needed; receivers MAY
+tolerate trailing whitespace for compatibility with stream adapters. Senders MUST NOT
+batch multiple JSON-RPC objects into one WebSocket message.
+
+The boundary is a complete WebSocket message, not an individual frame. The WebSocket
+implementation reassembles any fragments before delivering the message to the JSON-RPC
+parser, as specified by [RFC 6455 §5.4](https://www.rfc-editor.org/rfc/rfc6455.html#section-5.4).
+Both peers can send messages without waiting for the other to initiate a request; response
+IDs match the corresponding requests as in §4.1.
+
+Binary messages have no defined MCPL meaning. Senders MUST use text messages for MCPL
+JSON-RPC traffic. WebSocket control frames (Ping, Pong, Close) belong to the transport
+and are not JSON-RPC messages.
+
+#### 4.2.3 Initialization and policy
+
+1. The host opens the WebSocket connection, satisfying the endpoint's authentication
+   requirements (§4.2.6).
+2. The host sends the MCP `initialize` request with its capabilities (§5.2).
+3. The server returns the initialize result with its capabilities (§5.1).
+4. The **host** sends `notifications/initialized` (a notification, without an `id`).
+5. For an MCPL connection, the host sends `featureSets/update` as a Request carrying the
+   effective grant, and waits for the server's receipt (§5.3, §6.7).
+6. Privileged MCPL traffic proceeds under the resulting policy. Until the initial policy
+   exchange completes, capability-dependent behavior remains unavailable and the host
+   rejects inbound privileged methods (§5.3).
+7. Either peer may close the WebSocket to end the connection.
+
+An endpoint lacking `experimental.mcpl` is an MCP-only peer (§3.3); when reached through
+an `mcpl://` locator, the host MUST apply §18.5's explicit fallback-or-failure rule.
+Transport selection never substitutes for capability negotiation.
+
+#### 4.2.4 Connection lifetime and reconnection
+
+One WebSocket connection carries one protocol session; this transport defines neither
+session multiplexing nor a resumable `sessionId`. On connection loss, outstanding requests
+fail locally. A reconnect MUST open a new connection and repeat initialization and the
+initial policy exchange in §4.2.3. A previous connection's grant MUST NOT become effective
+on the new connection without that exchange.
+
+Servers re-register connection-bound channels under the new grant before delivering
+channel content (§14.5). Application data may persist across connections, but persistence
+does not restore connection authority or channel registration. Retry and backoff are host
+policy; reconnecting does not itself replay requests or imply that an interrupted operation
+did not execute.
+
+#### 4.2.5 Liveness
+
+Implementations SHOULD use WebSocket Ping/Pong for liveness where their API permits it.
+Control-frame handling follows [RFC 6455 §5.5](https://www.rfc-editor.org/rfc/rfc6455.html#section-5.5),
+including Pong responses to Ping. Keepalive intervals and connection timeouts are
+deployment policy; MCPL defines no fixed heartbeat interval or application-level heartbeat
+method. Either peer MAY close an unresponsive connection. Transport liveness does not
+replace request timeouts or the hook timeout policy (§10.6).
+
+#### 4.2.6 Authentication
+
+Authentication is endpoint-defined. Servers SHOULD document the mechanism and hosts must
+use a compatible client API. Existing deployments use a token in the upgrade URL's query;
+other deployments may authenticate the HTTP upgrade through headers or a transport-native
+identity. This section mandates no query parameter, WebSocket subprotocol, or authentication
+message before `initialize`.
+
+Transport authentication does not grant MCPL capabilities: the host still computes and
+negotiates the effective grant (§5.4, §6.7). Endpoint credential policy remains as described
+in §18.3. Authentication used to fetch content references remains host-private and subject
+to the dialed-origin binding in §19.6.1; adopting WebSocket creates no additional reference
+access.
 
 ---
 
@@ -2526,7 +2620,8 @@ one.
 
 ### 18.5 Connection semantics
 
-Resolution establishes a WebSocket. It does not establish that MCPL is present.
+Resolution supplies the WebSocket target; connection and initialization follow §4.2.
+Resolution does not establish that MCPL is present.
 
 - The peer **MUST** complete MCP `initialize` and advertise `experimental.mcpl` (§5.1).
 - If it does not, the host **MUST** either fail the connection or take the **explicit**
@@ -3224,6 +3319,15 @@ Merges RFC-002 (capability grants), RFC-001 rev 2 (event tags), RFC-003 (server 
 changes), RFC-004 (the `mcpl://` URI scheme), and RFC-005 rev 3 (bulk content references).
 Grounded in AUDIT-001, an implementation audit of 15 trees; every removal below is backed by
 evidence from it rather than by taste.
+
+**WebSocket transport (§4.2)** — extracted from the March 2026 state/branches proposal
+- Adopted one JSON-RPC object per WebSocket text message, bidirectional exchange, and
+  connection-scoped sessions, as used by the core library, editor, and host.
+- Initialization and every reconnect include the current §5.3/§6.7 policy exchange;
+  transport authentication and persisted application data never restore a previous grant.
+- Endpoint authentication and keepalive timing remain deployment policy. No session
+  resumption extension, `state/update`, `state/get`, or `branches/*` methods are adopted
+  with this transport.
 
 **Authorization**
 - Advertisement is now **recursive**, mirroring the capability paths, and

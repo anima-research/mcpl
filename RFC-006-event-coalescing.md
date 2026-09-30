@@ -174,7 +174,8 @@ duplicate. A retry (same `eventId`) SHOULD receive the same result as the origin
 is scoped to the server binding, not the transport epoch: reconnecting cannot turn a retry
 into a new occurrence. Producers MUST use distinct occurrence IDs across their own restarts
 as well. Host cache eviction alone MUST NOT turn a recorded occurrence into new work; a
-host with a bounded in-memory cache can retain receipts in its durable audit/index.
+host with a bounded in-memory cache can retain receipts in a durable journal and rebuild
+its lookup index by replay.
 
 A `channels/incoming` message that carries `coalesce` **MUST** carry a non-empty `eventId`.
 Without it the `messageId` fallback would make an edit a duplicate of its own create, and
@@ -958,10 +959,19 @@ Recovery and treatment:
   Pending content stays outside context managers until safe activation assembly. Shared
   contexts wait for other readers' live turns; conversation forks receive their own events.
   Both channel lanes enforce the same registration, grant, and optional channel allow-list.
-  Chronicle stores pending state, subject history, audit records, and durable occurrence
-  receipts. Recovery retains mutable subject identity but waits for new authority; endpoint
-  or command reassignment changes the binding namespace. Tests exercise mixed-lane updates,
-  stable reply identity, permission changes, recovery, and wake cancellation. This remains
+  A single append-only Chronicle operation journal is authoritative: acceptance,
+  replacement, retraction, render decisions, and delivery receipts are appends. A pure
+  reducer reconstructs pending work, subject history, and the occurrence index without
+  issuing RPCs, writing context, or waking a model. Assembly appends a publication intent
+  before writing context, then appends completion. The intent seals the occurrence against
+  replacement; its stable delivery ID makes an interrupted publication idempotent.
+  Recovery records its decisions as new appends, uses admitted fallbacks for unfinished
+  renders, and waits for fresh authority. Endpoint or command reassignment changes the
+  binding namespace. Older experimental snapshots/receipt stores are imported once;
+  uncertain pending deliveries are sealed conservatively and deduplicated against legacy
+  context markers. Full replay and the in-memory receipt-position index currently grow
+  with journal history. Tests exercise mixed-lane updates, stable reply identity,
+  permission changes, replay, interrupted appends/publication, and wake cancellation. This remains
   a proposed implementation, not a claim of production deployment. Live tool-continuation
   injection is not part of this implementation.
 - **mcpl-cc-bridge.** Deliveries held by the wake policy (the `<held>` block) are

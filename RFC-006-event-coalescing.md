@@ -1,15 +1,34 @@
 # MCPL RFC-006: Event Coalescing
 
-**Status:** Draft (revision 6)
+**Status:** Draft (revision 7)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra; revised after review
-**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revisions 5, 6)
+**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revisions 5, 6, 7)
 **Depends on:** nothing for authority — RFC-002 / SPEC §5.4 remains the sole source of what
 a connected server may do, and this RFC adds no `uses` path (§10). Amends SPEC §9
 (`push/event` params and result; new `push/render` method), §9.4 (idempotency), §14.3
 (`channels/incoming` message and per-message result). Interacts with §10.6 (hook
 timeouts), §10.7 (loop prevention), §13.2 (audit), §13.3 (hook failure policy), §14.5
 (channel scoping), §16 (tags), Appendix A (error codes).
+
+> **Revision 7 note.** Two kinds of change, from reading revision 6 with channels as the
+> primary lane.
+>
+> *Contract, not mechanism.* Several revision-6 requirements described how a host should be
+> built rather than what a server or a model can observe. They are restated as outcomes:
+> accepted work is never silently lost, but whether it stays replaceable across an
+> interruption is the host's choice (§3.2); retries are recognised for a stated window, not
+> forever (§3.1), including across host restarts; consumption may be tracked per context
+> (§3.3); wake requirements describe observable treatment, not timer architecture (§4.2);
+> audit retention follows the host's ordinary policy (§11). Registration lifetime remains
+> governed by SPEC §14; this RFC adds no registration step (§3.2). Recovery vectors permit
+> both preserved replaceability and conservative append-only delivery (§14).
+>
+> *Channel gaps.* `coalesce.initial` lets a server mark the birth of a subject, so a host can
+> claim `none` without having held every subject forever (§3.3, §6). A host never refuses an otherwise admissible
+> occurrence solely for lack of coalescing capacity (§11). Channel scope is not only chat messages:
+> keys may span messages, and pure withdrawal is allowed (§3.1, §6). Where a replacement sits
+> is the host's choice (§4.1). §8 and §9.5 add ambient channel activity.
 
 > **Revision 6 note.** Channel and push delivery use the same subject and occurrence
 > identities. A reconnect changes transport authority, not the identity of the configured
@@ -100,14 +119,15 @@ This RFC adds an OPTIONAL **`coalesce`** member to `push/event` params and
 withdrawal form:
 
 - **Plain** — for *self-contained* content (a value, a full message, a transcript
-  hypothesis). A new event replaces the previous event under the same key **iff no model
-  has consumed it**; otherwise it appends. Stateless for the server.
+  hypothesis). A new event replaces the previous event under the same key **where it is
+  still unread**; otherwise it appends. Hosts may make this decision per context or use a
+  conservative shared boundary (§3.3). Stateless for the server.
 - **Deferred** — for *delta* content ("what changed since you last looked"). The server
   pushes a keyed notice; the host calls **`push/render`** when it is about to show the event
   to a model, and the server describes everything since its previous render. Repeated
   notices under one key collapse into one pending slot.
 - **Retract** — the subject ceased to exist. The host removes any pending version and
-  appends the server's deletion notice only if a model ever saw a version.
+  appends the supplied deletion notice where a model saw a version or history is unknown.
 
 One rule governs all three:
 
@@ -146,14 +166,15 @@ is host-private state; the mechanism has to live where the state is.
    both follow from this one rule. An unconsumed event has never been in a request, so
    replacing it invalidates nothing.
 2. **Servers stay simple.** A server adopting this RFC keeps no state it does not already
-   keep, never resends, and never branches on what the host did.
+   keep, never resends based on a coalescing outcome, and never branches on what the host
+   did. Transport retries follow the bounded idempotency contract (§3.1).
 3. **Stateless key, not an event chain.** The server names the subject, not the prior
    event.
 4. **Fail toward today.** On any uncertainty — unknown key, restart, eviction, mixed
    delivery — the host behaves as an append-only host would: it appends, and it keeps the
    deletion notice. The worst outcome is current behaviour.
-5. **No new authority.** A server may only touch its own events, only before anyone has
-   read them, within a scope it is currently authorized for, and everything it supplies
+5. **No new authority.** A server may only touch its own unread deliveries, within a
+   scope it is currently authorized for, and everything it supplies
    passes the checks a fresh event would (§10, §11).
 6. **Additive.** Absent `coalesce`, nothing changes.
 
@@ -164,18 +185,33 @@ is host-private state; the mechanism has to live where the state is.
 | Field | Answers | Where | Stability |
 |---|---|---|---|
 | `messageId` | *which message* | `channels/incoming` | Stable across the message's life: creates, edits, and deletes of one platform message share it. Reply/quote targets refer to it. |
-| `coalesce.key` | *which subject's pending updates collapse* | both | Stable for the subject. For chat, RECOMMENDED `message:<messageId>`. For a document, per document or region. |
+| `coalesce.key` | *which subject's pending updates collapse* | both | Stable for the subject. For a chat message, RECOMMENDED `message:<messageId>`. For a participant's state in a channel, per participant. For a document, per document or region. |
 | `eventId` | *which occurrence* | both (NEW on `channels/incoming` messages: OPTIONAL without `coalesce`, **REQUIRED** with it) | Fresh per occurrence. Reused **only** when retrying that same occurrence. |
 
 **Idempotency (amends §9.4).** Hosts deduplicate by occurrence: `eventId` when present,
 else `messageId`. A `channels/incoming` message whose `messageId` the host has seen but
 whose `eventId` is new is a **new occurrence of an existing message** — an edit — not a
-duplicate. A retry (same `eventId`) SHOULD receive the same result as the original. Occurrence identity
-is scoped to the server binding, not the transport epoch: reconnecting cannot turn a retry
-into a new occurrence. Producers MUST use distinct occurrence IDs across their own restarts
-as well. Host cache eviction alone MUST NOT turn a recorded occurrence into new work; a
-host with a bounded in-memory cache can retain receipts in a durable journal and rebuild
-its lookup index by replay.
+duplicate. Occurrence identity is scoped to the server binding, not the transport epoch.
+Producers MUST use distinct occurrence IDs across their own restarts as well.
+
+**Retry window for coalesced occurrences.** Hosts MUST recognize admitted occurrences
+carrying `coalesce` and return their original
+result, without repeating their effects, for at least 3,600,000 milliseconds after first
+admission. This guarantee MUST survive reconnects and host restarts. Current admission
+checks still apply; a retry cannot restore revoked authority. A host MAY advertise a
+longer guaranteed window as `eventCoalescing.retryWindowMs` (§10); omission, including
+boolean `true`, means 3,600,000 milliseconds. The value MUST be an integer at least that
+large. The host MUST honor the window advertised when it admitted an occurrence, even if
+a later initialization advertises a shorter one.
+
+Producers MUST stop retrying when the applicable window has elapsed since their **first
+send attempt**, measured by elapsed time, not `timestamp`. If initialization changes while
+acceptance is uncertain, the producer uses the shortest window advertised during those
+attempts. A producer unable to bound the elapsed time after its own restart MUST NOT retry
+the old occurrence. Retrying does not extend the window. An `eventId` repeated after its
+window MAY be treated as a new occurrence, so producers cannot rely on deduplication then.
+Hosts may retain receipts longer; their storage and retention mechanism is not specified.
+This window does not change the base specification's treatment of ordinary traffic.
 
 A `channels/incoming` message that carries `coalesce` **MUST** carry a non-empty `eventId`.
 Without it the `messageId` fallback would make an edit a duplicate of its own create, and
@@ -187,6 +223,11 @@ Messages without `coalesce` keep today's behaviour.
 > a defect this table makes visible: the second edit of a message collides with the first
 > and is dropped as a duplicate by any §9.4-conformant host. Occurrence ids MUST
 > distinguish occurrences (a counter, revision id, or edit timestamp suffices).
+
+**A channel-scoped key need not name a message.** Presence, position, or status reported
+in a channel is a subject too, keyed per participant or per gauge. Successive
+`channels/incoming` occurrences under one such key MAY carry different `messageId`s; the
+host delivers the unread occupant's own `messageId`, author, and thread.
 
 ### 3.2 Key scope
 
@@ -209,11 +250,21 @@ different server/principal; producers cannot choose that identity through messag
 For example, the host may bind a configured server ID to its endpoint/command, and require
 a new configured ID when credentials select a different principal at the same endpoint.
 
-Every reconnect still repeats initialization and policy negotiation (SPEC §4.2), and
-channel registration must be re-established. Stable subject identity never restores an old
-grant. Unread work MUST NOT be discarded solely because a transport temporarily disconnects;
-hosts retain its fallback and re-admit it against current authority when the peer returns.
-An interrupted render is not replayed to advance a source-backed baseline a second time.
+Every reconnect still repeats initialization and policy negotiation (SPEC §4.2). Stable
+subject identity never restores an old grant. This RFC does not change when a channel
+registration begins or ends; that remains as SPEC §14 has it, for coalesced and ordinary
+traffic alike.
+
+**Accepted work is never silently lost.** An occurrence the host answered `accepted: true`
+MUST remain available for delivery under host policy until delivered, replaced or
+retracted by its sender (including an empty render result), or dropped because its
+authority lapsed (§5.4 rule 4). A disconnect, a restart, or exhaustion of coalescing slots
+is not a reason to discard it. This preservation rule does not force a wake for work that
+host policy deliberately keeps pending (§4.2). Whether the occurrence **stays replaceable** across
+such an interruption is the host's choice: a host MAY instead deliver the pending content
+as an ordinary occurrence at that point and treat the subject's history as `unknown`
+(principle 4). An interrupted render is not replayed to advance a source-backed baseline a
+second time; its batch falls back (§5.3).
 
 Two servers, two feature sets, or two channels can never address each other's subjects.
 A `channel`-scoped push and a `channels/incoming` message with the same `channelId` and
@@ -224,9 +275,9 @@ edited or deleted by the other without the server remembering which method it us
 carrying `coalesce.channelId` MUST pass ordinary push admission (feature set enabled,
 `pushEvents` granted) **and** the checks a `channels/incoming` message for that channel
 would pass at this moment: the channel is registered by this server, and `channels.incoming`
-is granted and not narrowed away from it (§14.5). An outbound routing placeholder inferred
-from `origin` does not establish inbound registration. Registration comes from an authorized
-server declaration or a validated descriptor returned by a host-authorized `channels/open`.
+is granted and not narrowed away from it (§14.5). "Registered" means exactly what it means
+for `channels/incoming` on that host; a channel id that appears only in a push's `origin`
+is not registered by that appearance.
 Closing a channel does not by itself revoke its registration. A push that fails the channel checks is
 refused with `-32017 Channel not permitted` or `-32023 Unknown channel` (§14.6), and no
 subject is touched. Hosts MUST NOT derive scope from `origin`, `metadata`, or any other
@@ -249,9 +300,10 @@ mode never removes consumed history.
 
 ### 3.3 Consumption
 
-An occurrence is **consumed** once its content has been included in the assembly of any
-request to any model — agent inference, a subagent, summarization/compression, or a
-server-initiated `inference/request`. Consumption is determined **at context assembly**, not
+An occurrence is **consumed in a context** once its content has been included in the
+assembly of any request from that context to any model — agent inference, a subagent,
+summarization/compression, or a server-initiated `inference/request`. Hosts may apply the
+conservative cross-context rule below. Consumption is determined **at context assembly**, not
 at response: an occurrence in a request that later fails, is refused, or is aborted is still
 consumed. Consumption is **permanent**; there is no un-consume (§16).
 
@@ -259,11 +311,44 @@ A **subject** has *consumed history* if any occurrence under it was ever consume
 MUST track this per subject as a tri-state — `none` / `some` / `unknown` — for as long as
 they track the subject, and MUST degrade it to `unknown`, never to `none`, on eviction,
 restart without durable state, or operator intervention. `none` is a positive claim; the
-host makes it only when it has held the subject's complete history.
+host makes it only when it can establish the subject's complete history, including through
+an `initial` claim as below.
 
-The consumed-check and any replacement or removal MUST be atomic with respect to context
-assembly. If a prior occurrence was delivered into several contexts, it is consumed if
-consumed in **any**; the host MUST NOT replace in some and append in others.
+**Birth of a subject.** A host can only know it holds a subject's complete history if it
+knows where that history starts. The server does: it knows a create from an edit. An
+occurrence MAY carry `coalesce.initial: true`, asserting that no earlier occurrence of this
+subject was ever sent under this binding. On an `initial` occurrence for a subject the host
+is not tracking, the host MAY start the subject at `none`. Without `initial`, an untracked
+subject starts at `unknown` unless the host can independently establish its complete
+history (for example, from an intact record covering the binding's lifetime). If the host
+is already tracking the subject, `initial` has no effect: it never lowers `some` or
+`unknown`. A retraction never carries `initial` (§13).
+
+> `initial` is a claim, like a tag, and grants nothing. A server that sets it falsely can
+> only cause its own later deletion notice to be omitted, which it could achieve more simply
+> by never sending the deletion. After history is lost, a host cannot distinguish a new
+> subject from an old one merely by looking up its key. `initial` lets the producer make
+> that distinction. Restart with complete durable history does not itself lose knowledge.
+> A participant returning under a previously used presence key is not a new subject and
+> MUST NOT assert `initial`; a producer may instead use a fresh key for each visit.
+
+**Per context.** The consumed-check and any replacement or removal MUST be atomic with
+respect to the assembly of each context the occurrence was delivered to. A host MAY decide
+per context: replace where the prior occurrence is unread, append where it was read. In a
+retraction with a notice, each context with `some` or `unknown` history receives it, and
+each with known `none` receives nothing. A host that cannot track contexts separately
+treats the occurrence as consumed everywhere once it is consumed anywhere. When contexts differ, the reported
+`outcome` is the most conservative among them (`appended` over `replaced`, `noted` over
+`retracted`; `consumed` over `retracted` when the withdrawal has no notice). Any reported
+`priorEventId` MUST identify an occurrence actually displaced or found consumed; it may be
+omitted if the contexts have different predecessors.
+
+This flexibility MUST NOT break a deferred renderer's shared baseline. Once a rendered
+occurrence is consumed in one context, its materialized content is preserved in every
+recipient context (§5.2), including recipients that have not yet read it. Subsequent
+rendered deltas cannot replace that prerequisite in an unread context. Per-context
+replacement is useful for complete plain occurrences; it does not authorize dropping a
+rendered delta that a later delta depends on.
 
 ## 4. Plain coalescing
 
@@ -285,7 +370,7 @@ untouched —
 
 | Occupant of subject | Host action | `outcome` |
 |---|---|---|
-| none | Append. Record as occupant. | `"first"` |
+| none, with history known `none` | Append. Record as occupant. | `"first"` |
 | unconsumed (incl. a pending or rendering batch, §5.4 rule 6) | **Replace** (§4.1). Record new occurrence as occupant. | `"replaced"` |
 | consumed, or history `unknown` | Append. Record new occurrence as occupant. | `"appended"` |
 
@@ -296,12 +381,20 @@ The server does the same thing in every row: nothing.
 
 ### 4.1 Replacement
 
-The host removes the prior occurrence from every context it was delivered to and inserts
-the new one, within the audience rule of §3.2. The replacement SHOULD be positioned where a
-fresh event arriving now would go (normally the tail), not in the prior occurrence's slot:
-its content is true as of its own `timestamp`.
+For each context where the host treats the prior occurrence as replaceable (§3.3), it
+removes that occurrence and inserts the new one, within the audience rule of §3.2.
+Contexts where the occurrence is consumed or conservatively sealed retain it and append
+the new occurrence.
 
-The model-visible context MUST NOT contain any trace of the replaced occurrence — no
+**Position is the host's choice, under one constraint:** the replacement MUST NOT be placed
+before any content a model has consumed in that context. Within the unread region the host
+orders it as it orders any other content. Two placements are common and both conform: where
+a fresh event arriving now would go (natural for a gauge or a document, whose content is
+true as of its own `timestamp`), and where the replaced occurrence sat (natural for a chat
+message, which otherwise moves after the replies to it).
+
+In each context where replacement takes place, the model-visible context MUST NOT contain
+any trace of the replaced occurrence — no
 tombstone, no "(edited)" marker, no collapse count. If the server wants the model to know
 changes were folded, it says so in the content.
 
@@ -309,16 +402,23 @@ changes were folded, it says so in the content.
 
 Replacement is a correction of an occurrence that is still pending, not a second occurrence.
 
-- The host evaluates wake policy (including tags, §16) on the new occurrence as on any
-  event. If the replaced occurrence had not qualified for a wake and the replacement does,
-  the host wakes.
-- If a wake attributable to the replaced occurrence is already pending, the host MUST NOT
-  schedule another. A replacement that no longer qualifies MUST cancel an unstarted wake
-  attributable solely to the prior occurrence. This does not undo an inference already begun.
-- A host that debounces wakes MUST bound how far replacements can postpone a pending wake:
-  a continuously changing subject must not starve the agent of ever hearing about it.
-  This bound MUST NOT shorten an unrelated event's configured debounce interval; hosts can
-  keep subject-specific timers separate from ordinary quiet-period batches.
+Whether an occurrence qualifies for a wake is host policy (§16.6). Coalescing MUST apply
+that policy to the replacement as it would to a fresh occurrence. These are behavioral
+requirements; hosts may implement them with shared timers, separate timers, or no timers:
+
+- A replacement that now qualifies for a wake MUST receive the host's normal wake
+  treatment, even if its predecessor did not qualify. It MUST NOT create a second wake
+  solely because it replaced an occurrence with an already pending wake for the subject.
+- The host MUST NOT start an inference whose sole pending cause has been replaced by a
+  non-qualifying occurrence or retracted unread. Other causes can still start inference;
+  this does not undo one already begun or prevent eligible content from entering it.
+- **No starvation.** For a subject eligible for wake under the current policy, continued
+  replacements MUST NOT postpone delivery without bound; the host MUST set a finite
+  bound. A deliberate `skip`, revoked authority, or operator pause does not create an
+  obligation to wake. The bound constrains postponement caused by replacement, not
+  unrelated resource outages.
+- Coalescing MUST NOT shorten or extend an unrelated event's configured debounce interval
+  solely to implement that bound. Internal timer layout is not part of this contract.
 
 ## 5. Deferred events
 
@@ -406,7 +506,7 @@ server for the content:
   to recover them, and silence would misreport coverage.
 
 **Host contract.** The host **materializes** the result as an ordinary, durable occurrence —
-positioned as a fresh event (§4.1), carrying the batch's `tags` and latest `origin`,
+positioned per §4.1, carrying the batch's `tags` and latest `origin`,
 delivered to the batch's contexts (§3.2 audience) — and proceeds with assembly. The
 materialized occurrence is consumed by that request. If the batch was delivered to several
 contexts, one render serves all of them at the first consumption by any.
@@ -434,8 +534,8 @@ limits, content-block validation).
   changed and how to look, and the truth remains readable at the source. Accepted.
 - A *notice-only* server loses nothing on a failed render — the host still holds the
   notices — but the host has materialized the fallback and closed the batch, so those
-  notices are consumed unrendered. Their `data` remains in the audit record only. A server
-  whose stream is unrecoverable and for whom that matters SHOULD carry enough in the
+  notices are consumed unrendered. Their `data` never enters model context; audit retention
+  follows §11. A server whose stream is unrecoverable and for whom that matters SHOULD carry enough in the
   fallback to be useful on its own.
 
 An opt-in render cursor that would close the source-backed gap is deferred (§16).
@@ -454,7 +554,7 @@ Per subject:
                         │  └── retract / plain occurrence ──► CANCELLED
                         │                                        │ result / timeout:
         ┌───────────────┼───────────────────┐                    │ materialize NOTHING
-        ▼               ▼                   ▼                    │ (discard, audit)
+        ▼               ▼                   ▼                    │ (discard; audit per §11)
    result ok        empty result       timeout / error / disconnect
    materialize      materialize        materialize FALLBACK      │
    result           nothing                                      │
@@ -471,7 +571,7 @@ Normative rules:
 2. **Completing a render closes only its frozen batch.** A new pending batch, if one
    opened meanwhile, stays pending and renders at the next assembly.
 3. **Exactly one materialization per batch.** A result arriving after the host has
-   materialized the fallback is discarded and audit-logged; it MUST NOT replace or amend
+   materialized the fallback is discarded (audit per §11); it MUST NOT replace or amend
    the fallback, even if the fallback is still unconsumed.
 4. **Authorization is re-checked at response.** Before materializing a result (or a
    fallback), the host re-runs the batch's admission: feature set still enabled,
@@ -486,12 +586,12 @@ Normative rules:
    retraction removes it; a plain occurrence displaces it and becomes the occupant. The
    batch enters CANCELLED. When the render then completes — with a result, empty, or by
    timeout/error — the host materializes **nothing** for it: the result is discarded and
-   audit-logged, and no fallback is materialized. The cancelling operation's own effect
-   (nothing, or the plain occurrence, or the deletion notice per §6) is what the model sees.
+   handled under the audit policy (§11), and no fallback is materialized. The cancelling
+   operation's own effect (nothing, or the plain occurrence, or the deletion notice per §6) is what the model sees.
    A pending batch opened by a notice that arrived after the render started (rule 1) is
    removed by **either** operation: a newer plain occurrence is a complete snapshot and
    supersedes all earlier unconsumed notices, not just the frozen batch. Removed notices
-   remain in the audit record. A notice admitted **after** the plain occurrence is new
+   follow the audit policy (§11). A notice admitted **after** the plain occurrence is new
    work and follows §5.1; cancellation cannot discard that later notice.
 7. **The race is decided at materialization, atomically.** If the host has materialized
    the frozen batch (result or fallback) before the retraction or plain occurrence is
@@ -523,9 +623,12 @@ never inspects the outcome.
 ```
 
 `payload.content` is the **deletion notice**: what the model should see *if it ever saw a
-version of the subject*. It MAY be empty for pure withdrawal (a discarded transcript partial
-has nothing to announce). For chat deletions it **MUST** be non-empty: a model that read a
-message must learn it is gone.
+version of the subject*. It MAY be empty for pure withdrawal (a discarded transcript partial,
+an offer withdrawn before use, or activity the producer intentionally does not correct).
+Empty withdrawal cannot inform a model that already read a state that the state changed.
+For a deleted chat message it **SHOULD** be non-empty: a model that read a message should
+learn it is gone. The host cannot tell a message from any other channel-scoped subject, so it does
+not enforce this (§13).
 
 The host removes any unconsumed occupant, pending batch, or **rendering batch** (which
 becomes CANCELLED, §5.4 rule 6) of the subject from every context it was delivered to (no
@@ -534,7 +637,7 @@ trace, §4.1), then decides on the notice by the subject's consumed history (§3
 | Consumed history | Pending version | Host action | `outcome` |
 |---|---|---|---|
 | `none` (positively known) | any / none | Remove pending; append **nothing** | `"retracted"` |
-| `some` | any / none | Remove pending; **append the notice** as an ordinary occurrence (tail) | `"noted"` |
+| `some` | any / none | Remove pending; **append the notice** as an ordinary occurrence (§4.1) | `"noted"` |
 | `unknown` (evicted, restarted, never tracked) | any / none | Remove pending if any; **append the notice** | `"noted"` |
 | `some` or `unknown`, and `content` is empty | any / none | Remove pending; append nothing | `"consumed"` |
 
@@ -544,12 +647,14 @@ the notice. Revision 2 got this wrong.
 
 A subject the host has never heard of is `unknown`, not `none`: the host cannot distinguish
 "never sent" from "evicted", and the conservative result — the notice appears, as it does
-today — costs one line of context.
+today — costs one line of context. A subject whose first tracked occurrence carried
+`initial` (§3.3) can start at `none`, which makes `"retracted"` reachable for a
+message created, edited and deleted after the host last evicted or restarted.
 
 A retraction is `accepted: true` whenever it passes admission (which, for channel-scoped
-retractions, includes §3.2's channel checks). A host MAY cancel a pending wake attributable
-solely to a removed occupant; it MUST evaluate wake policy on an appended notice as on any
-event. After a retraction the subject's slot is empty; its consumed-history bit persists per
+retractions, includes §3.2's channel checks). Wake handling follows §4.2: a removed
+occupant cannot remain the sole cause of an unstarted inference, and an appended notice
+receives the host's normal wake-policy treatment. After a retraction the subject's slot is empty; its consumed-history bit persists per
 §3.3.
 
 ## 7. Response
@@ -577,7 +682,9 @@ deferred. Subject gone → retract, with a notice if a reader would need one.
 |---|---|---|---|
 | Battery, presence, pose, spend gauge | plain | featureSet | per gauge |
 | Transcript hypothesis for an utterance | plain; `retract` (empty) for discarded partials | featureSet | per utterance |
-| Chat message: create, edit, delete | plain; `retract` (with notice) | channel | `message:<messageId>` |
+| Chat message: create, edit, delete | plain (`initial` on create); `retract` (with notice) | channel | `message:<messageId>` |
+| Participant presence / position / status in a channel | plain; `retract` with a departure notice when prior readers need a correction | channel | per participant or visit |
+| Ambient channel activity (movement, emotes, joins) | deferred, one digest per channel | channel | per channel |
 | Document edits, comment-thread activity, "N new commits" | deferred | featureSet | per document / thread / repo |
 
 **The whole of a deferred server:**
@@ -600,7 +707,7 @@ on push/render(key, notices):    return summarize(notices.map(n => n.data), drop
 
 ```
 on create:  deliver as today (channels/incoming if open, else push/event with coalesce.channelId)
-            + coalesce.key = "message:" + id
+            + coalesce: { key: "message:" + id, initial: true }
 on edit:    push { eventId: fresh, coalesce: { channelId, key }, tags: ["chat:edited"],
                    content: edited text }
 on delete:  push { eventId: fresh, coalesce: { channelId, key, retract: true }, tags: ["chat:deleted"],
@@ -641,14 +748,18 @@ Channel `discord:general` is **open**. Alice posts, edits twice, then deletes �
 the agent runs:
 
 ```
-create   channels/incoming { messageId: 123, eventId: c123,   coalesce: { key: "message:123" } }  → first
+create   channels/incoming { messageId: 123, eventId: c123,   coalesce: { key: "message:123", initial: true } }  → first
 edit 1   push/event        { eventId: e123a, coalesce: { channelId, key } }                     → replaced
 edit 2   push/event        { eventId: e123b, coalesce: { channelId, key } }                     → replaced
 delete   push/event        { eventId: d123,  coalesce: { channelId, key, retract: true },
                              content: "Message 123 by Alice was deleted." }                       → retracted
 ```
 
-The model never sees anything: history is `none`. Had the agent run **after edit 1**, the
+For a host that uses `initial` to establish `none`, the model never sees anything, even if
+the host restarted or evicted this channel's subjects before message 123 existed. Without
+`initial`, a host lacking complete history conservatively yields `noted`, and the model
+sees a deletion notice for a message it never saw. A host may retain this conservative
+behavior even with `initial`. Had the agent run **after edit 1**, the
 same four requests yield `first`, `replaced`, `appended`, `noted`: edit 1 had already
 replaced the unread original, so the model saw edit 1 alone; edit 2 is appended as a new
 unconsumed occupant, then removed unread by the retraction; and the deletion notice lands
@@ -664,7 +775,7 @@ admitted, replaces the pending create in the contexts it reached — not in any 
 
 Portal already tags deletions `chat:deleted` and pushes `[message deleted] <id>` — today
 unconditionally. With `coalesce: { channelId, key: "message:<id>", retract: true }` and the
-same content, that line appears only when the model saw the message. Portal's wake policy
+same content, that line appears when the model saw the message or its history is unknown. Portal's wake policy
 (`chat:deleted → mute`) is unchanged: the appended notice is evaluated by it like any event.
 
 ### 9.4 Read original → unread edit → delete (the revision-2 defect)
@@ -677,6 +788,38 @@ delete   → noted        edit REMOVED (unconsumed); notice APPENDED (history is
 
 Model-visible: original, then "Message 123 by Alice was deleted." Revision 2 produced
 original alone, uncorrected.
+
+### 9.5 Ambient channel activity (deferred, channel scope)
+
+A virtual-world or presence server relays a channel where most traffic is state churn:
+participants move, emote, join and leave. Each change is true only until the next one, and
+the agent needs the current picture when it looks, not the series. The server keeps one
+subject per channel for the churn and one per participant for their state:
+
+```
+t0  Bob moves          → notice { channelId, key: "activity", deferred: true }         → first (wake per policy)
+t1  Bob moves again    → notice { channelId, key: "activity", deferred: true }         → replaced (joins batch)
+t2  Cara joins         → plain  { channelId, key: "presence:cara:visit1", initial: true } → first
+t3  Cara says "hi"     → channels/incoming { messageId: 9, eventId: "create:9",
+                          coalesce: { key: "message:9", initial: true } }              → first
+t4  agent assembles    ← push/render { channelId, key: "activity" }
+                        → "Bob moved from the fountain to the gate."
+                          (the intermediate position vanished; Cara's presence and greeting
+                           are separate occurrences and are delivered as themselves)
+t5  Cara leaves        → retract { channelId, key: "presence:cara:visit1" },
+                          content: "Cara left the channel."                         → noted
+```
+
+Every push in this timeline also carries its own fresh `eventId`, `featureSet`,
+`timestamp`, and payload; the abbreviated notice/plain/retract lines show only coalescing
+fields and relevant content. The host in this example uses `initial` to establish `none`.
+If Cara left before any assembly, the departure would retract her unread presence without
+a notice. After t4 the departure notice corrects what the model read; empty withdrawal
+would leave that knowledge unchanged. A later visit uses a fresh visit key, or reuses the
+participant key without `initial`.
+
+Messages are never folded into the digest: only the churn is. Nothing here requires the
+host to know what a "channel message" is; it sees three subjects in one channel scope.
 
 ## 10. No new capability
 
@@ -695,12 +838,16 @@ Host support is a **new top-level member** of the host's `capabilities.experimen
 "eventCoalescing": true
 // or, partially:
 "eventCoalescing": { "pushEvents": true, "channelsIncoming": true,
-                     "deferred": false, "channelScopedPush": true }
+                     "deferred": false, "channelScopedPush": true,
+                     "retryWindowMs": 3600000 }
 ```
 
 It is deliberately *not* a leaf under `pushEvents` or `channels`: §5.1 defines boolean
 `true` as "every leaf beneath this node", so every existing host advertising
-`"pushEvents": true` would be read as claiming support it lacks.
+`"pushEvents": true` would be read as claiming support it lacks. `retryWindowMs` is a
+numeric guarantee, not a capability-grant leaf. Boolean `true` enables all coalescing
+features with the default one-hour retry window; an object may advertise a longer window
+(§3.1). The retry guarantee applies to whichever delivery lanes the host supports.
 
 ## 11. Security considerations
 
@@ -715,15 +862,16 @@ It is deliberately *not* a leaf under `pushEvents` or `channels`: §5.1 defines 
   pending deliveries; it never delivers to a context the prior occurrence did not reach.
 - **Nothing a model saw can be altered.** A server cannot gaslight an agent about its own
   past: by construction the agent has no past with a replaced occurrence, and a retraction
-  appends a notice rather than deleting anything read.
+  preserves anything read and appends the supplied correction notice when required.
 - **Deletion cannot hide a read message.** The consumed-history bit degrades only toward
-  `unknown`, which yields the notice. A host that cannot remember whether the model saw
+  `unknown`, which yields any supplied notice. A host that cannot remember whether the model saw
   something behaves as though it did.
-- **Humans and logs are not models.** The host MUST retain replaced and removed
-  occurrences, folded notices with their `data`, both rendered and fallback content, and
-  discarded late render results in its durable/audit record (§13.2), linked by `eventId`.
-  Only the model-visible context is rewritten. Operator surfaces SHOULD show displaced
-  occurrences as displaced.
+- **Humans and logs are not models.** Only the model-visible context is rewritten. A host
+  that keeps an audit record (§13.2) SHOULD record replaced and removed occurrences, folded
+  notices, and discarded late render results in it, linked by `eventId`, under the same
+  retention policy as its other audit entries. Operator surfaces SHOULD show displaced
+  occurrences as displaced. Nothing in this RFC requires retaining content its author
+  withdrew before anyone read it beyond what the host's audit policy already keeps.
 - **Late binding.** With deferred mode the content is chosen at consumption time. The
   server learns that an inference is imminent and nothing else — no content, no
   conversation identity; `push/render` carries only its own subject. `inference/lifecycle`
@@ -733,10 +881,21 @@ It is deliberately *not* a leaf under `pushEvents` or `channels`: §5.1 defines 
   model-visible, bounded (4 KiB × retained notices per batch).
 - **Wake shaping.** A server could wake with an urgent tag and render something bland. It
   could equally have pushed the bland event with the urgent tag; tags are claims, never
-  authority (§16.6). The audit record shows both.
+  authority (§16.6). Hosts keeping an audit record SHOULD show both under their policy.
 - **Resource use.** Keys are bounded; hosts MAY bound tracked subjects per server and evict
-  (an evicted occupant is treated as consumed; an evicted batch is materialized as its
-  fallback; an evicted history bit becomes `unknown`). Render is bounded by timeout.
+  (an evicted occupant is delivered as an ordinary occurrence and thereafter treated as
+  consumed; an evicted batch is materialized as its fallback; an evicted history bit becomes
+  `unknown`). Render is bounded by timeout. **Coalescing capacity alone is never a reason to refuse.** A host
+  unable to allocate a coalescing slot admits the occurrence and degrades to appending (`"appended"`, or
+  `"noted"` for a retraction) exactly as a host without coalescing would; it MUST NOT
+  return an error solely for lack of coalescing slots on an occurrence it would otherwise
+  accept. Ordinary admission, backpressure, storage limits, and operator policy still
+  apply; this is not a promise of unbounded buffering. Overflow deferred occurrences use
+  their admitted fallback without invoking `push/render`. Tracked subjects still obey
+  replacement/retraction rules; an unknown empty withdrawal returns `"consumed"`.
+  In a busy
+  channel the number of unread subjects is the size of the backlog, and a refusal there
+  would drop the message that mattered.
 
 ## 12. Alternatives considered
 
@@ -772,6 +931,7 @@ interface Coalesce {
   channelId?: string;     // push/event only: select channel scope (§3.2). Requires channelScopedPush.
   deferred?: boolean;     // push/event only. Default false.
   retract?: boolean;      // Default false. Exclusive with deferred.
+  initial?: boolean;      // Default false. "No earlier occurrence of this subject was sent" (§3.3). Exclusive with retract.
   data?: unknown;         // deferred only; ≤ 4 KiB serialized; server-private
 }
 interface Notice        { eventId: string; timestamp: string; data?: unknown }
@@ -789,12 +949,14 @@ interface PushRenderResult { content: ContentBlock[]; timestamp?: string }
 //                              += coalesce?: Coalesce          (channelId, deferred MUST be absent)
 // channels/incoming result[i]  += coalesce?: CoalesceResult
 // host experimental.mcpl       += eventCoalescing?: boolean
-//     | { pushEvents?: boolean; channelsIncoming?: boolean; deferred?: boolean; channelScopedPush?: boolean }
+//     | { pushEvents?: boolean; channelsIncoming?: boolean; deferred?: boolean;
+//         channelScopedPush?: boolean; retryWindowMs?: number } // integer >= 3600000; default 3600000
 // new method                      push/render  (Host → Server, Request)
 ```
 
-**Malformed `coalesce`** — missing or oversized `key`; `retract` with `deferred`; `data`
-without `deferred` or over 4 KiB; `deferred` or `channelId` on a `channels/incoming`
+**Malformed `coalesce`** — missing or oversized `key`; non-boolean `initial`, `deferred`,
+or `retract`; `retract` with `deferred` or with
+`initial`; `data` without `deferred` or over 4 KiB; `deferred` or `channelId` on a `channels/incoming`
 message; a `channels/incoming` message with `coalesce` but no non-empty `eventId`;
 `channelId` or `deferred` sent to a host that does not advertise the corresponding leaf —
 is a request error, never a silent append:
@@ -810,8 +972,17 @@ is a request error, never a silent append:
 
 ## 14. Conformance vectors
 
+Unless a vector says otherwise, delivery is authorized and eligible under host policy,
+capacity is available, retries are within the advertised window, and a subject described
+as a create has `initial: true`. Vectors requiring known `none` apply when the host uses
+that claim or independently establishes complete history. Hosts that conservatively keep
+`unknown` append a supplied deletion notice instead. Timer, index, and storage layout are
+not inspected by these vectors.
+
 Plain:
-1. **First.** Unseen subject → appended; `"first"`.
+1. **First.** Unseen subject with history established as `none` → appended; `"first"`.
+1a. **Unknown first occurrence.** Untracked subject without `initial` or complete history
+    → appended; `"appended"`.
 2. **Replace.** E1(K), no inference, E2(K) → next request contains E2's content and no byte
    of E1's; `"replaced"`.
 3. **Consumed.** E1(K), inference, E2(K) → history holds E1 unchanged, then E2; `"appended"`.
@@ -821,7 +992,9 @@ Plain:
    `"appended"`.
 6. **Repeated edits.** Create, edit₁, edit₂, edit₃, no inference → one occurrence in the
    next request, edit₃'s content, `"replaced"` ×3.
-7. **Restart.** E1(K); host restarts without a durable index; E2(K) → `"appended"`.
+7. **Restart with conservative delivery.** E1(K); host restarts, preserving E1 as an
+   ordinary occurrence rather than replaceable work; E2(K) → `"appended"`, and the next
+   request contains E1 then E2 (vector 40). Retry deduplication still holds (§3.1).
 
 Identity and scope:
 8. **Occurrence dedup.** `channels/incoming` with (`messageId` M, `eventId` a) then
@@ -866,7 +1039,7 @@ Deferred:
     params contain N1 only; result materialized; next assembly renders a batch containing
     N2 only.
 23. **Late result.** Render times out, fallback materialized (still unconsumed); result
-    arrives → discarded, audit-logged; model-visible content is the fallback.
+    arrives → discarded (audit per §11); model-visible content is the fallback.
 24. **Authority re-checked at response.** Feature set disabled (or channel authority
     revoked, for a channel-scoped batch) while render in flight → result discarded; nothing
     materialized; batch dropped. Disabled *before* assembly → no `push/render`.
@@ -877,7 +1050,7 @@ Deferred:
 27. **Dropped coverage.** `dropped > 0` → a notice-only conformance server's result content
     mentions the count.
 27a. **Retract during render, late result.** N1(K); render starts; retract K with notice
-    (history `none`) → `"retracted"`; result arrives → discarded, audit-logged; next request
+    (history `none`) → `"retracted"`; result arrives → discarded (audit per §11); next request
     contains nothing from K — neither rendered content nor fallback nor notice.
 27b. **Retract during render, timeout.** As 27a but the render times out → no fallback
     materialized; next request contains nothing from K.
@@ -916,46 +1089,91 @@ Retraction:
 31. **Restart before deletion.** Create; inference or not; host restarts without durable
     history; retract with notice → `"noted"` (history `unknown`).
 32. **Unknown subject.** Retract with notice for a key never seen → `"noted"`.
-33. **Chat notice required.** Retract on a channel-scoped subject with empty content →
-    `-32602`.
+33. **Pure withdrawal in channel scope.** Retract on a channel-scoped subject with empty
+    content and history `some` → `"consumed"`; nothing appended. (Revision 6 rejected this
+    with `-32602`.) Earlier consumed content remains unchanged; this operation makes no
+    claim that the model learned the subject disappeared.
 34. **History persists past slot.** Create; inference; retract (`"noted"`); new create
     under the same K; retract → `"noted"` (bit is `some`, not reset by the empty slot).
+34a. **Initial after loss of history.** A host using `initial` has evicted history or
+    restarted without it; create with `initial: true` under a fresh key; edit; retract with
+    notice → `"retracted"`; the next request contains nothing from K. Without `initial`
+    or independent complete history, the same sequence → `"noted"`.
+34b. **Initial cannot lower history.** Create; inference; a second occurrence with
+    `initial: true` under the same K; retract with notice → `"noted"`.
+34c. **Capacity degrades, never refuses.** With the host at its subject limit, a new
+    channel-scoped create → `accepted: true`, `"appended"`; the content reaches the next
+    request. A retract for an untracked subject with notice at the limit → `"noted"`,
+    notice delivered. A deferred occurrence at the limit → `"appended"`, fallback delivered
+    without rendering. These outcomes assume ordinary admission would accept the event.
 
 Both:
 35. **Idempotent retry.** Same `eventId` twice → one effect; equal results.
-36. **No second wake / no starvation.** Replacement before a pending wake fires → exactly
-    one inference; replacements arriving faster than the debounce, forever → inference
-    still occurs within the host's bound.
-37. **Audit.** After vectors 2, 16, 23 and 29 the durable record contains E1; N1–N3 with
-    rendered and fallback content; the discarded late result; and the removed edit — each
-    marked displaced/folded/discarded.
+36. **No starvation.** With delivery available and wake eligibility maintained,
+    replacements arrive faster than the host's quiet period → the subject's current content
+    reaches a request within the host's stated bound. A subject deliberately matching
+    `skip` is not forced to wake by this vector.
+37. **Audit** (illustrative; host policy). After vectors 2, 16, 23 and 29 a host that keeps
+    an audit record shows E1; N1–N3 with rendered and fallback content; the discarded late
+    result; and the removed edit — each marked displaced/folded/discarded.
 38. **Malformed, per lane.** 257-byte key on `push/event` → `-32602`. In a
     `channels/incoming` batch of three where the second has `deferred: true` → results
     `[accepted, {accepted:false, reason:"coalesce_invalid"}, accepted]`.
 
-Recovery and treatment:
+Recovery:
 39. **Reconnect retry.** E1 accepted; receipt lost; transport reconnects and policy completes;
-    retry E1 → original receipt, no second occurrence or wake.
-40. **Recovered unread subject.** Persist pending E1; restart; current policy restored;
-    E2 for the same binding/scope/key replaces it, or a retract removes it. Retain known
-    consumed history when durable; missing history remains `unknown`.
-41. **Offline at host restart.** Restore pending fallback while the producer is offline;
-    reconnect and re-establish authority → reconsider its wake under current host policy.
+    retry E1 within the retry window → original receipt; the next request contains E1's
+    content exactly once.
+40. **Nothing accepted is lost.** E1 accepted; transport drops, or the host restarts, before
+    any inference; the producer returns → the next request contains E1's content (as the
+    pending occupant or as an ordinary occurrence — either conforms). E2 for the same
+    subject after recovery but before the next assembly has two conforming outcomes:
+    if E1 remains replaceable, `"replaced"` and only E2 reaches the request; if recovery
+    sealed E1 as an ordinary occurrence, `"appended"` and E1 then E2 both reach it. Neither
+    outcome duplicates an occurrence. Revocation and later sender retraction/replacement
+    still apply; the preservation guarantee does not override them.
+41. **Ordinary traffic unaffected by reconnect.** A registered channel; transport drops and
+    reconnects; a `channels/incoming` message without `coalesce` → accepted exactly as it
+    would have been under SPEC §14 before this RFC. This RFC adds no registration step.
 42. **Binding reassignment.** Reuse a configured label for another endpoint/principal;
     its events cannot replace, retract, or deduplicate the old binding's occurrences.
-43. **Current wake treatment.** A pending immediate/debounced wake is replaced by an event
-    that matches `skip` → no obsolete unstarted wake remains.
-44. **Independent debounce.** A coalesced subject and unrelated ordinary event match the
-    same debounce policy → the subject keeps its bounded deadline; the unrelated event
-    retains its own quiet period.
+43. **Current wake treatment.** Under a policy where `skip` is non-qualifying, replace
+    the sole cause of an unstarted inference with a `skip` occurrence (or retract it
+    unread) → no inference starts solely for the displaced cause. Another eligible cause
+    may still start one. Reverse the transition → normal qualifying wake treatment.
+44. **Unrelated debounce.** A coalesced subject reaches its postponement bound while an
+    unrelated ordinary event is awaiting its configured quiet period → coalescing does
+    not shorten or extend the ordinary event's deadline. Timer layout is unrestricted.
 45. **Stable reply target across lanes.** Create M via `channels/incoming`; edit via a
     channel-scoped push without a new platform message identity → M remains the reply
     target, regardless of whether the create was already consumed.
+46. **Per-context replacement** (only for hosts that track contexts separately). E1
+    delivered to contexts A and B; A consumes it; E2 → A holds E1 then E2, B holds E2 only;
+    `outcome` is `"appended"`.
+
+47. **Host-restart retry.** E1 accepted, reply lost; host restarts; current policy restored;
+    retry E1 within the advertised window → original receipt, no second occurrence.
+48. **Window changes.** E1 admitted and acknowledged under a two-hour advertised window;
+    reconnect advertises one hour; retry E1 after 90 minutes → still deduplicated. A producer
+    uncertain which session admitted E1 uses the shorter advertised window and stops its retries earlier.
+49. **Shared render baseline.** Deferred R1 is materialized for contexts A and B; A consumes
+    R1, B has not. R2 is rendered relative to R1 → B retains R1 before R2. Optional
+    per-context replacement cannot discard R1 from B and strand R2 without its baseline.
+
+Revision 6's wake vectors are retained as behavioral checks 43–44; no vector requires a
+particular scheduler data structure. Audit vector 37 remains illustrative under host policy.
 
 ## 15. Implementation notes (non-normative)
 
 - **agent-framework.** [PR #196](https://github.com/anima-research/agent-framework/pull/196)
-  implements both delivery lanes, channel-scoped pushes, and deferred push rendering.
+  at `6352d47` implements revision 6 across both delivery lanes, channel-scoped pushes,
+  and deferred push rendering. Revision 7 alignment still requires handling `initial`,
+  accepting empty channel-scoped withdrawal, and ordinary-delivery fallback at coalescing
+  capacity. Cross-message subjects also need a reply-provenance regression case: the
+  latest incoming message supplies its own identity; omitted fields on edits of that
+  same message should continue to inherit its existing identity. Its durable receipts already exceed the default retry guarantee; it can keep
+  the one-hour advertisement default. Conservative cross-context consumption and tail
+  placement remain conforming choices. This note does not claim revision 7 conformance.
   Pending content stays outside context managers until safe activation assembly. Shared
   contexts wait for other readers' live turns; conversation forks receive their own events.
   Both channel lanes enforce the same registration, grant, and optional channel allow-list.
@@ -978,8 +1196,8 @@ Recovery and treatment:
   unconsumed until the hook flushes them; plain replacement is a keyed overwrite of the
   held queue, rendering happens in the flush, and anything already emitted as a
   `<channel>` block is consumed.
-- **discord-mcpl / portal-mcpl.** Add `coalesce.key = "message:<id>"` and an `eventId` on
-  creates (both paths), `coalesce.channelId` + fresh occurrence ids on edits (fixing the
+- **discord-mcpl / portal-mcpl.** Add `coalesce: { key: "message:<id>", initial: true }`
+  and an `eventId` on creates (both paths), `coalesce.channelId` + fresh occurrence ids on edits (fixing the
   `discord_edit_<id>` collision), and `retract` + notice on deletes. Portal's
   `[message deleted]` push becomes the retraction's content unchanged.
 - **First deferred servers.** A Google Docs server (edits keyed per document, comments per
@@ -991,9 +1209,18 @@ Recovery and treatment:
    across lanes, and the mixed-delivery cases (§9.2) are the point; splitting would leave
    chat servers with half a mechanism. Hosts that cannot replace inside a batched user turn
    advertise `channelsIncoming: false`.
-2. **Tail positioning is SHOULD.** A replacement's content is true as of its own
-   timestamp; placing it where the stale occurrence sat would misorder it against anything
-   that arrived between.
+2. **Positioning is the host's, above the consumed boundary.** Revisions 2–6 recommended
+   the tail because a gauge's content is true as of its own timestamp. For a chat message
+   the same rule moves an edited message after its replies. Both placements keep the
+   consumed prefix intact, which is the only property a server or a model can rely on, so
+   the RFC states that constraint and no preference (§4.1).
+2a. **The RFC specifies outcomes, not host mechanisms.** Accepted work survives interruption
+   through replacement, withdrawal, ordinary delivery, or authority-based rejection.
+   Retrying within the advertised window does not duplicate an occurrence, including across
+   restart. Wake eligibility and unrelated delivery timing remain observable guarantees;
+   timer layout does not. The RFC requires no particular journal, index, snapshot, or
+   retention architecture. Audit follows host policy. Our journal implementation remains
+   one way to provide these guarantees.
 3. **Consumption is permanent.** No un-consume after a traceless request; with deferred
    mode the materialized occurrence is history either way, and refusal-rewind's marker is
    an ordinary event.

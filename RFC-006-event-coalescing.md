@@ -1,15 +1,22 @@
 # MCPL RFC-006: Event Coalescing
 
-**Status:** Draft (revision 5)
+**Status:** Draft (revision 6)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra; revised after review
-**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revision 5)
+**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revisions 5, 6)
 **Depends on:** nothing for authority — RFC-002 / SPEC §5.4 remains the sole source of what
 a connected server may do, and this RFC adds no `uses` path (§10). Amends SPEC §9
 (`push/event` params and result; new `push/render` method), §9.4 (idempotency), §14.3
 (`channels/incoming` message and per-message result). Interacts with §10.6 (hook
 timeouts), §10.7 (loop prevention), §13.2 (audit), §13.3 (hook failure policy), §14.5
 (channel scoping), §16 (tags), Appendix A (error codes).
+
+> **Revision 6 note.** Channel and push delivery use the same subject and occurrence
+> identities. A reconnect changes transport authority, not the identity of the configured
+> server binding. Pending work and retry receipts survive reconnect/recovery, while current
+> grants and channel registration must be re-established before use. Wake policy is evaluated
+> on each replacement; unrelated debounce traffic retains its own quiet period. The companion
+> host implementation now covers both delivery lanes and conversation routing.
 
 > **Revision 5 note.** A plain occurrence supersedes **all older unconsumed work** for its
 > subject, including both a frozen render and a batch opened during that render. Revision
@@ -163,7 +170,11 @@ is host-private state; the mechanism has to live where the state is.
 **Idempotency (amends §9.4).** Hosts deduplicate by occurrence: `eventId` when present,
 else `messageId`. A `channels/incoming` message whose `messageId` the host has seen but
 whose `eventId` is new is a **new occurrence of an existing message** — an edit — not a
-duplicate. A retry (same `eventId`) SHOULD receive the same result as the original.
+duplicate. A retry (same `eventId`) SHOULD receive the same result as the original. Occurrence identity
+is scoped to the server binding, not the transport epoch: reconnecting cannot turn a retry
+into a new occurrence. Producers MUST use distinct occurrence IDs across their own restarts
+as well. Host cache eviction alone MUST NOT turn a recorded occurrence into new work; a
+host with a bounded in-memory cache can retain receipts in its durable audit/index.
 
 A `channels/incoming` message that carries `coalesce` **MUST** carry a non-empty `eventId`.
 Without it the `messageId` fallback would make an edit a duplicate of its own create, and
@@ -181,7 +192,7 @@ Messages without `coalesce` keep today's behaviour.
 A key lives in exactly one **scope**, and the full subject identity is the tuple
 
 ```
-(server connection identity, scope kind, scope id, key)
+(server binding identity, scope kind, scope id, key)
 ```
 
 | Delivery | Scope kind | Scope id |
@@ -189,6 +200,19 @@ A key lives in exactly one **scope**, and the full subject identity is the tuple
 | `channels/incoming` message | `channel` | the message's `channelId` |
 | `push/event` without `coalesce.channelId` | `featureSet` | the event's `featureSet` |
 | `push/event` with `coalesce.channelId` | `channel` | `coalesce.channelId` |
+
+The binding identity is **host-owned** and survives reconnects to the same configured
+server. A transport epoch is an authorization boundary, not a new coalescing namespace.
+Hosts MUST allocate a different binding identity when a configuration is reassigned to a
+different server/principal; producers cannot choose that identity through message fields.
+For example, the host may bind a configured server ID to its endpoint/command, and require
+a new configured ID when credentials select a different principal at the same endpoint.
+
+Every reconnect still repeats initialization and policy negotiation (SPEC §4.2), and
+channel registration must be re-established. Stable subject identity never restores an old
+grant. Unread work MUST NOT be discarded solely because a transport temporarily disconnects;
+hosts retain its fallback and re-admit it against current authority when the peer returns.
+An interrupted render is not replayed to advance a source-backed baseline a second time.
 
 Two servers, two feature sets, or two channels can never address each other's subjects.
 A `channel`-scoped push and a `channels/incoming` message with the same `channelId` and
@@ -199,7 +223,10 @@ edited or deleted by the other without the server remembering which method it us
 carrying `coalesce.channelId` MUST pass ordinary push admission (feature set enabled,
 `pushEvents` granted) **and** the checks a `channels/incoming` message for that channel
 would pass at this moment: the channel is registered by this server, and `channels.incoming`
-is granted and not narrowed away from it (§14.5). A push that fails the channel checks is
+is granted and not narrowed away from it (§14.5). An outbound routing placeholder inferred
+from `origin` does not establish inbound registration. Registration comes from an authorized
+server declaration or a validated descriptor returned by a host-authorized `channels/open`.
+Closing a channel does not by itself revoke its registration. A push that fails the channel checks is
 refused with `-32017 Channel not permitted` or `-32023 Unknown channel` (§14.6), and no
 subject is touched. Hosts MUST NOT derive scope from `origin`, `metadata`, or any other
 untrusted field; only `coalesce.channelId` selects channel scope, and only when the host
@@ -285,9 +312,12 @@ Replacement is a correction of an occurrence that is still pending, not a second
   event. If the replaced occurrence had not qualified for a wake and the replacement does,
   the host wakes.
 - If a wake attributable to the replaced occurrence is already pending, the host MUST NOT
-  schedule another.
+  schedule another. A replacement that no longer qualifies MUST cancel an unstarted wake
+  attributable solely to the prior occurrence. This does not undo an inference already begun.
 - A host that debounces wakes MUST bound how far replacements can postpone a pending wake:
   a continuously changing subject must not starve the agent of ever hearing about it.
+  This bound MUST NOT shorten an unrelated event's configured debounce interval; hosts can
+  keep subject-specific timers separate from ordinary quiet-period batches.
 
 ## 5. Deferred events
 
@@ -902,18 +932,38 @@ Both:
     `channels/incoming` batch of three where the second has `deferred: true` → results
     `[accepted, {accepted:false, reason:"coalesce_invalid"}, accepted]`.
 
+Recovery and treatment:
+39. **Reconnect retry.** E1 accepted; receipt lost; transport reconnects and policy completes;
+    retry E1 → original receipt, no second occurrence or wake.
+40. **Recovered unread subject.** Persist pending E1; restart; current policy restored;
+    E2 for the same binding/scope/key replaces it, or a retract removes it. Retain known
+    consumed history when durable; missing history remains `unknown`.
+41. **Offline at host restart.** Restore pending fallback while the producer is offline;
+    reconnect and re-establish authority → reconsider its wake under current host policy.
+42. **Binding reassignment.** Reuse a configured label for another endpoint/principal;
+    its events cannot replace, retract, or deduplicate the old binding's occurrences.
+43. **Current wake treatment.** A pending immediate/debounced wake is replaced by an event
+    that matches `skip` → no obsolete unstarted wake remains.
+44. **Independent debounce.** A coalesced subject and unrelated ordinary event match the
+    same debounce policy → the subject keeps its bounded deadline; the unrelated event
+    retains its own quiet period.
+45. **Stable reply target across lanes.** Create M via `channels/incoming`; edit via a
+    channel-scoped push without a new platform message identity → M remains the reply
+    target, regardless of whether the create was already consumed.
+
 ## 15. Implementation notes (non-normative)
 
 - **agent-framework.** [PR #196](https://github.com/anima-research/agent-framework/pull/196)
-  implements the feature-set-scoped `pushEvents` / `deferred` profile. Pending content
-  stays outside context managers until activation assembly, when it is materialized and
-  conservatively sealed before compilation. Chronicle records the audit trail and pending
-  fallbacks; recovery rechecks current authority without repeating a source-backed render.
-  Host support explicitly leaves `channelsIncoming` and `channelScopedPush` false. Channel
-  and mixed-delivery vectors therefore remain follow-up work, as does delivery at live tool
-  continuation boundaries. The companion's state-machine, gate, and WebSocket tests cover
-  its advertised profile, including revision 5's mode transitions. This is a proposed host
-  implementation, not evidence that the whole RFC is deployed.
+  implements both delivery lanes, channel-scoped pushes, and deferred push rendering.
+  Pending content stays outside context managers until safe activation assembly. Shared
+  contexts wait for other readers' live turns; conversation forks receive their own events.
+  Both channel lanes enforce the same registration, grant, and optional channel allow-list.
+  Chronicle stores pending state, subject history, audit records, and durable occurrence
+  receipts. Recovery retains mutable subject identity but waits for new authority; endpoint
+  or command reassignment changes the binding namespace. Tests exercise mixed-lane updates,
+  stable reply identity, permission changes, recovery, and wake cancellation. This remains
+  a proposed implementation, not a claim of production deployment. Live tool-continuation
+  injection is not part of this implementation.
 - **mcpl-cc-bridge.** Deliveries held by the wake policy (the `<held>` block) are
   unconsumed until the hook flushes them; plain replacement is a keyed overwrite of the
   held queue, rendering happens in the flush, and anything already emitted as a

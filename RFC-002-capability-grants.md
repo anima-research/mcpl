@@ -1,10 +1,12 @@
 # MCPL RFC-002: Capability Grants and Negotiated Policy
 
-**Status:** Accepted — not yet applied to SPEC.md
+**Status:** Accepted — incorporated into SPEC.md 0.5.0-draft, including [§5.4 Capability Grants](./SPEC.md#54-capability-grants), [§6.7 Negotiated policy](./SPEC.md#67-negotiated-policy), and [§14 Channels](./SPEC.md#14-channels-of-communication).
 **Targets:** MCPL Protocol Specification ≥ 0.5
 **Authors:** Claude Code and Sol, with antra and imago
 **Date:** 2026-08-02
 **Companion:** AUDIT-001 (spec vs. implementations) — every empirical claim here is anchored there.
+
+This RFC preserves the proposal and its review history. SPEC.md is authoritative for the current protocol.
 
 **Review history.** Reviewed end-to-end by Sol across three passes. Blockers raised and
 resolved: `§5.1` unimplementable for a Notification-only `channels/changed`; undefined

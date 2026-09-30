@@ -3,7 +3,7 @@
 **Version:** 0.5.0-draft  
 **Status:** Draft  
 **Authors:** Antra  
-**Date:** August 2026
+**Date:** September 2026
 
 ---
 
@@ -3077,8 +3077,8 @@ puts a URI or a token anywhere a model could quote it.
         "disposition": { "enum": ["never", "ref"] }
       },
       "oneOf": [
-        { "required": ["type", "data", "mimeType"], "not": { "required": ["disposition"] } },
-        { "required": ["type", "uri"] }
+        { "required": ["type", "data", "mimeType"], "not": { "anyOf": [{ "required": ["uri"] }, { "required": ["disposition"] }] } },
+        { "required": ["type", "uri"], "not": { "required": ["data"] } }
       ]
     },
     {
@@ -3095,8 +3095,8 @@ puts a URI or a token anywhere a model could quote it.
         "disposition": { "enum": ["never", "ref"] }
       },
       "oneOf": [
-        { "required": ["type", "data", "mimeType"], "not": { "required": ["disposition"] } },
-        { "required": ["type", "uri"] }
+        { "required": ["type", "data", "mimeType"], "not": { "anyOf": [{ "required": ["uri"] }, { "required": ["disposition"] }] } },
+        { "required": ["type", "uri"], "not": { "required": ["data"] } }
       ]
     },
     {
@@ -3218,7 +3218,7 @@ additional properties are ignored.
 
 ## Changelog
 
-### 0.5.0-draft (August 2026)
+### 0.5.0-draft (August–September 2026)
 
 Merges RFC-002 (capability grants), RFC-001 rev 2 (event tags), RFC-003 (server manifest
 changes), RFC-004 (the `mcpl://` URI scheme), and RFC-005 rev 3 (bulk content references).
@@ -3346,7 +3346,7 @@ evidence from it rather than by taste.
   block and its subtractive `disposition` (§19.8).
 - Push events MUST be stubbed before wake-text assembly (§9.2, §19.4).
 
-**Security
+**Security**
 - §13.1 risk table rewritten per capability path; §13.4 replaced a MUST NOT aimed at the
   untrusted party with an actual control (deny `inject.system` by default).
 - Added `-32002 Capability denied`.

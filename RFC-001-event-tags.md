@@ -1,10 +1,12 @@
 # MCPL RFC-001: Event Tags
 
-**Status:** Draft (revision 2)
+**Status:** Accepted (revision 2) — incorporated into [SPEC.md 0.5.0-draft §16](./SPEC.md#16-event-tags).
 **Targets:** MCPL Protocol Specification ≥ 0.5
 **Authors:** Antra (with Claude); revised by Claude Code and Sol
 **Date:** June 2026; revised 2026-08-02
 **Depends on:** RFC-002 (capability grants) for the admission boundary — see §7.
+
+This RFC preserves the proposal and its review history. SPEC.md is authoritative for the current protocol.
 
 > **Revision 2 note.** The original RFC was written before any of it shipped. Since then
 > `tags`, `tagOntology`, and consumer matching have all been implemented, while three

@@ -1,12 +1,15 @@
 # MCPL RFC-005: Bulk Content References
 
-**Status:** Draft (revision 3)
+**Status:** Draft (revision 3) — incorporated into [SPEC.md 0.5.0-draft §19](./SPEC.md#19-bulk-content-references).
+Incorporation does not imply acceptance: Draft→Accepted remains gated on [§11's executable-vector criterion](#11-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra; revised after review (twice)
 **Date:** 2026-08-31 (revision 1); 2026-09-01 (revisions 2, 3)
 **Depends on:** nothing for authority — RFC-002 / SPEC §5.4 remains the sole source of what a
 connected server may do, and this RFC adds no capability path (§9). Amends the SPEC §10.3 /
 Appendix B.1 content-block shapes (§8); reuses the RFC-003 digest encoding.
+
+This RFC preserves the proposal and its review history. SPEC.md carries the current integrated draft, including the pending acceptance criterion.
 
 > **Revision 3 note.** The `e9edc31` re-review confirmed the revision-2 architecture and
 > found three normative contradictions/holes, all fixed here without structural change:
@@ -130,7 +133,7 @@ No new content type. The §10.3 `resource` block gains optional fields, and the 
   "uri": "https://mythoss-mac-mini.tail01efee.ts.net/files?path=%2F…%2Fchord.wav",
   "mimeType": "audio/wav",
   "sizeBytes": 4233704,
-  "digest": "sha256:Zm9vYmFyLWV4YW1wbGUtZGlnZXN0LWJhc2U2NHVybA",
+  "digest": "sha256:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU",
   "expiresAt": "2026-09-07T00:00:00Z",
   "name": "family_chord_cs80.wav",
   "disposition": "never"
@@ -382,7 +385,7 @@ there is no reading of a malformed `sizeBytes` under which the payload becomes
 context-eligible (vector 15). (`uri` is the one required property; a block whose `uri`
 violates the schema is rejected whole.)
 
-The `image` and `audio` variants gain the same seven optional properties **on their
+The `image` and `audio` variants gain the same six optional properties **on their
 `uri`-form branch only**; their existing `oneOf` (which already rejects a block carrying
 both `data` and `uri`) is retained, and `disposition` is added only to the `uri` branch,
 so `disposition` alongside inline `data` is schema-invalid. The `text` variant is

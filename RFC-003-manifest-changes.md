@@ -1,6 +1,6 @@
 # MCPL RFC-003: Server Manifest Changes
 
-**Status:** Accepted — **merged into SPEC.md 0.5.0-draft as §17**
+**Status:** Accepted — incorporated into [SPEC.md 0.5.0-draft §17](./SPEC.md#17-server-manifest-changes).
 **Targets:** MCPL Protocol Specification 0.5 *(originally drafted against ≥ 0.6; antra's
 call on 2026-08-02 was to ship the rollout as one release, which pulled this into 0.5. That
 also keeps the §3.1 test vector valid, since it hashes a manifest containing `"version":"0.5"`
@@ -8,6 +8,8 @@ also keeps the §3.1 test vector valid, since it hashes a manifest containing `"
 **Authors:** Sol and Claude Code, with antra
 **Date:** 2026-08-02
 **Depends on:** RFC-002 / SPEC §5.4, §6.7 — every consequence here routes through the existing grant and receipt machinery.
+
+This RFC preserves the proposal and its review history. SPEC.md is authoritative for the current protocol.
 
 **Review history.** Reviewed by Sol across three passes. Objections raised and resolved:
 an uninteroperable "canonical content digest" (no normalization, algorithm, encoding, or

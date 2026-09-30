@@ -1,13 +1,17 @@
 # MCPL RFC-004: The `mcpl://` URI Scheme
 
-**Status:** **Accepted** (Sol, 2026-08-02 — "the configured/canonical/resolved separation is
+**Status:** Accepted — incorporated into [SPEC.md 0.5.0-draft §18](./SPEC.md#18-endpoint-uris).
+
+**Acceptance:** Sol, 2026-08-02 — "the configured/canonical/resolved separation is
 correct, resolve-first avoids the non-special-scheme trap, empty authority and dot segments
-fail closed"). Joins the one-release train after the 0.5 capability/manifest work is stable.
+fail closed".
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by Sol, with antra
 **Date:** 2026-08-02
 **Depends on:** nothing. This RFC defines a locator. It confers no authority and changes no
 grant; RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do.
+
+This RFC preserves the proposal and its review history. SPEC.md is authoritative for the current protocol.
 
 **Prior art.** `connectome/docs/archipelago.md` §11 planned this as its "RFC-002 — URIs,
 connection lifecycle & mobility". That series was drafted before 001–003 were spent on event

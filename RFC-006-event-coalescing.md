@@ -1,15 +1,22 @@
 # MCPL RFC-006: Event Coalescing
 
-**Status:** Draft (revision 4)
+**Status:** Draft (revision 5)
 **Targets:** MCPL Protocol Specification 0.5
-**Authors:** Claude Code, from a scope proposed by antra; revised after review (twice)
-**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4)
+**Authors:** Claude Code, from a scope proposed by antra; revised after review
+**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revision 5)
 **Depends on:** nothing for authority — RFC-002 / SPEC §5.4 remains the sole source of what
 a connected server may do, and this RFC adds no `uses` path (§10). Amends SPEC §9
 (`push/event` params and result; new `push/render` method), §9.4 (idempotency), §14.3
 (`channels/incoming` message and per-message result). Interacts with §10.6 (hook
 timeouts), §10.7 (loop prevention), §13.2 (audit), §13.3 (hook failure policy), §14.5
 (channel scoping), §16 (tags), Appendix A (error codes).
+
+> **Revision 5 note.** A plain occurrence supersedes **all older unconsumed work** for its
+> subject, including both a frozen render and a batch opened during that render. Revision
+> 4 cancelled the frozen batch but kept the second batch, contradicting latest-mode-wins
+> and allowing old notice data to reappear after a newer complete snapshot. The reverse
+> transition (plain → deferred) now explicitly displaces the unread plain occurrence.
+> Vectors 27g–27j cover both transitions and notices arriving after the replacement.
 
 > **Revision 4 note.** Review of revision 3 (antra, PR #5) found two protocol gaps and one
 > wrong example:
@@ -208,7 +215,9 @@ delivers it to the prior occurrence's contexts only. If it would reach *none* of
 current policy, the host removes the prior pending content and appends nothing.
 
 Plain and deferred occupants of one subject share its single slot: a subject has at most one
-unconsumed occupant, of whichever mode was sent last.
+unconsumed occupant, of whichever mode was sent last. A rendering batch may additionally
+have a newer pending batch (§5.4); a subsequent plain occurrence supersedes both. Changing
+mode never removes consumed history.
 
 ### 3.3 Consumption
 
@@ -303,8 +312,10 @@ MUST be self-contained and SHOULD say how to get the detail by other means.
 
 The host keeps at most one **pending batch** per subject. A notice for a subject with a
 pending batch joins it and updates the batch's fallback, `tags`, `timestamp` and latest
-`eventId` (`outcome: "replaced"`); otherwise it opens a batch (`"first"`). A batch is not
-model-visible. Wake is as §4.2.
+`eventId` (`outcome: "replaced"`). If an unread plain occurrence occupies the subject,
+the notice removes that occurrence and opens a batch (`"replaced"`), retaining only the
+prior audience as §3.2 requires. Otherwise it opens a batch (`"first"`). Consumed plain
+occurrences remain history. A batch is not model-visible. Wake is as §4.2.
 
 Servers send a notice whenever the subject changes (debounced). They do not compute a diff
 at that point and do not need to know whether a batch is open.
@@ -447,7 +458,10 @@ Normative rules:
    audit-logged, and no fallback is materialized. The cancelling operation's own effect
    (nothing, or the plain occurrence, or the deletion notice per §6) is what the model sees.
    A pending batch opened by a notice that arrived after the render started (rule 1) is
-   removed by the retraction and left in place by a plain occurrence.
+   removed by **either** operation: a newer plain occurrence is a complete snapshot and
+   supersedes all earlier unconsumed notices, not just the frozen batch. Removed notices
+   remain in the audit record. A notice admitted **after** the plain occurrence is new
+   work and follows §5.1; cancellation cannot discard that later notice.
 7. **The race is decided at materialization, atomically.** If the host has materialized
    the frozen batch (result or fallback) before the retraction or plain occurrence is
    admitted, the materialized occurrence is an ordinary occupant: unconsumed → it is
@@ -848,6 +862,17 @@ Deferred:
 27f. **Cancel and new pending.** N1(K); render starts; N2(K) (`"first"`, new pending
     batch); retract K → both the frozen and the pending batch are removed; result arrives →
     discarded; next assembly issues no `push/render` for K.
+27g. **Plain supersedes frozen and pending, late result.** N1(K); render starts; N2(K)
+    opens a new pending batch; plain E(K) → `"replaced"`. Both batches are superseded.
+    The late result is discarded; assembly contains E only and issues no render for N2.
+27h. **Plain supersedes frozen and pending, timeout.** As 27g, but the first render
+    times out. Neither batch's fallback appears; assembly contains E only.
+27i. **Plain → deferred before consumption.** Plain E(K); N(K) with `deferred: true`
+    → `"replaced"`. E is removed unread; the next assembly renders N and contains only
+    its result (or its fallback), not E. If E was consumed first, it remains history.
+27j. **New notice after replacement.** N1(K); render starts; N2(K); plain E(K); N3(K).
+    N1 and N2 stay cancelled; N3 displaces E if unread and opens a fresh batch. Completing
+    or timing out N1 cannot discard N3. Its render receives N3 only.
 
 Retraction:
 28. **Never consumed.** Create, edit (pending), retract with notice → `"retracted"`; next

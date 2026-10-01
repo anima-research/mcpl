@@ -1039,9 +1039,12 @@ suite, but those tests are not the frozen set.
   filter, excludes the recipient's own tools, selects fields, bounds `input`, and sends
   through the same notification path it uses for `inference/lifecycle`.
 - **agent-framework (PR #199)** is the reference host for this revision.
-  - It sends `started` at the one dispatch point for model-issued calls, keyed by (agent,
-    model call id) and carrying the inference's id.
-  - Calls it will refuse before executing (provider gone, host tool policy) send nothing.
+  - It records each model-issued call at the one dispatch point, keyed by (agent, model
+    call id) and carrying the inference's id, and sends `started` once dispatch returns.
+  - Its refusal sites (provider gone, host tool policy, a conversation-bound agent reaching
+    outside its channel) mark the call synchronously inside dispatch, so a refused call
+    sends nothing. Mirroring each refusal in a separate check would duplicate the guard
+    logic and drift from it.
   - `failed` comes only from dispatch catch blocks that mark the call; every other result
     is `completed` with `isError`.
   - A stream's end aborts only calls under the inference ids that stream minted, and

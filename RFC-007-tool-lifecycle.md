@@ -39,6 +39,9 @@ prevention), §13.2 (audit), §14.5 (narrowing, delivery).
 >   conversation's hooks to every connection, where "participating" means everything.
 > - **Acceptance criterion** (RFC §14): the vectors freeze as executable before
 >   Draft→Accepted, following RFC-005 §11.
+> - **Unknown `tools/observe` params members are rejected** (RFC §6.1, §6.6, vector 54), from
+>   review of the host implementation: a misspelled `rules` read as "no rules" and cleared a
+>   restrictive filter.
 
 > **Revision 2 note.** Review of revision 1 found three holes and a gap in its privacy
 > story. All fixed here without changing the two-method, two-path shape:
@@ -463,7 +466,9 @@ Result: `{}`.
 
 `rules: null` (or `params` without `rules`) **clears** the filter and restores the default:
 every call the grant allows, metadata only (RFC §5.1). `rules: []` is valid and reports
-nothing, which pauses observation without changing the grant.
+nothing, which pauses observation without changing the grant. Any other `params` member
+(MCP's `_meta` aside) is an error (RFC §6.6), so a misspelled `rules` can never read as a
+clear.
 
 ### 6.2 Patterns
 
@@ -527,6 +532,9 @@ are never sent, and are marked `inputWithheld` when requested (RFC §5.1).
 - Hosts SHOULD accept at least 64 rules, 64 field paths per rule, and patterns and paths of
   256 characters. A request over the host's limits fails with `-32602` (Invalid params) and
   `data: { "limit": "<which>" }`.
+- An unknown member of `params` other than MCP's `_meta` fails with `-32602`. Without
+  this, `{ "ruless": [...] }` would read as "no rules" and silently clear a restrictive
+  filter.
 - An unknown member in `match`, a non-string pattern, a `class` that is not a `ToolClass`,
   a non-boolean `report`, or an `input` that is not a boolean or an array of non-empty
   strings fails with `-32602`. Unknown `match` members are rejected, not ignored, because
@@ -851,6 +859,7 @@ identity fields only.
 {
   "type": "object",
   "properties": {
+    "_meta": { "type": "object" },
     "rules": {
       "oneOf": [
         { "type": "null" },
@@ -882,7 +891,8 @@ identity fields only.
           } }
       ]
     }
-  }
+  },
+  "additionalProperties": false
 }
 // Result: {}
 ```
@@ -1009,11 +1019,14 @@ Revision 3:
 53. **Subagent attribution.** A subagent running in its own context calls `x--run` → the
     events carry the subagent's `conversationId`; an `observe` narrowing to the parent's
     conversation excludes them.
+54. **Misspelled `rules`.** A filter is in force; `tools/observe {"ruless": [...]}` →
+    `-32602`, and the previous filter stays in force. `{"rules": [], "_meta": {…}}` →
+    accepted.
 
 **Acceptance criterion:** before this RFC moves Draft→Accepted, these vectors freeze as
 executable vectors under `conformance/` (the RFC-003 §3.1 precedent, as RFC-005 §11 also
 requires) and run against at least one host implementation; the `tools/observe` parsing
-vectors (43–45, and the RFC §13 schema) also run against a strict parser. agent-framework
+vectors (43–45, 54, and the RFC §13 schema) also run against a strict parser. agent-framework
 PR #199 implements this revision's host side and tests most of these vectors in its own
 suite, but those tests are not the frozen set.
 
@@ -1025,14 +1038,23 @@ suite, but those tests are not the frozen set.
   connection grant and narrowing, applies the class exclusions, applies the connection's
   filter, excludes the recipient's own tools, selects fields, bounds `input`, and sends
   through the same notification path it uses for `inference/lifecycle`.
-- **agent-framework (PR #199)** is the reference host for this revision. It registers each
-  model-issued call at dispatch (so the call carries its inference's id), sends `started`
-  on the `tool:started` trace, treats a `tool:failed` with no prior start as a refusal (no
-  events), takes the terminal from the tool-result event (`isError` from the result), and
-  marks calls still open when the turn's stream ends as `aborted`. Known limits: it never
-  emits `pending` (it has no approval gates); calls made from inside a code-execution
-  script are not reported (the script's own call is, as `shell`); and it approximates the
-  provider-uniqueness test of RFC §3 by identifier length plus a recent-repeat window.
+- **agent-framework (PR #199)** is the reference host for this revision.
+  - It sends `started` at the one dispatch point for model-issued calls, keyed by (agent,
+    model call id) and carrying the inference's id.
+  - Calls it will refuse before executing (provider gone, host tool policy) send nothing.
+  - `failed` comes only from dispatch catch blocks that mark the call; every other result
+    is `completed` with `isError`.
+  - A stream's end aborts only calls under the inference ids that stream minted, and
+    terminals go only to the transport epoch the opening went to.
+  - It reuses Anthropic `toolu_…` ids and mints every other format.
+  - Known limits: it never emits `pending` (no approval gates), and calls made from inside
+    a code-execution script are not reported (the script's own call is, as `shell`).
+- **Don't derive lifecycle from a generic trace stream.** The first agent-framework version
+  did, and review found it unsound. That host's trace events carry no agent identity, some
+  dispatch paths emit none, and some emit a failure event for an ordinary error result.
+  The result was calls paired across agents that reused an id, never-executed calls
+  reported as started, and error results reported as `failed`. Hook the dispatch point and
+  the result path directly, and mark dispatch failures where they happen.
 - **Class comes from `tools/list`.** A host that already caches tool definitions per
   connection reads `_meta["mcpl/class"]` from the cache and applies overrides once per
   re-list (RFC-008 §5). Built-ins are classed in the host's own tool table.

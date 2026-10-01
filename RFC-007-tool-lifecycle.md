@@ -1,17 +1,44 @@
 # MCPL RFC-007: Tool Lifecycle
 
-**Status:** Draft (revision 2)
+**Status:** Draft (revision 3). Draft→Accepted is gated on [RFC §14's executable-vector
+criterion](#14-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
-**Authors:** Claude Code, from a scope proposed by antra; revised after review
-**Date:** 2026-09-29 (revision 1); 2026-09-30 (revision 2)
+**Authors:** Claude Code, from a scope proposed by antra; revised after review and after a
+host implementation
+**Date:** 2026-09-29 (revision 1); 2026-09-30 (revisions 2, 3)
 **Depends on:** RFC-002 / SPEC §5.4 for authority; **RFC-008** (tool classes) for the
 class vocabulary used in narrowing, filtering, and the `comms` exclusion. Adds two methods,
 `tools/lifecycle` (Host → Server, Notification) and `tools/observe` (Server → Host,
 Request), and two capability paths, `toolLifecycle.observe` and `toolLifecycle.inputs`.
 Amends SPEC §4 (message flow), §5.1–5.2 (advertisement), §6.2 (`uses` vocabulary), §10
-(new §10.9), §13.1 (trust model), §14.5 (clarification only), Appendix B.4 (enums),
-Changelog. Interacts with §5.3 (initial policy), §10.5 (`inference/lifecycle`), §10.7 (loop
+(new §10.9), §13.1 (trust model), §13.4 (deny by default), §14.5 (clarification only),
+Appendix B.4 (enums), Changelog. Interacts with §5.3 (initial policy), §10.5 (`inference/lifecycle`), §10.7 (loop
 prevention), §13.2 (audit), §14.5 (narrowing, delivery).
+
+> **Revision 3 note.** Implementing revision 2 in a host (agent-framework, PR #199) found
+> four places where two conforming hosts could read the text and diverge, plus two
+> statements that were false for that host. No change to the methods, paths, or wire shape:
+>
+> - **Both paths are denied by default, normatively** (RFC §4.1, §12). Revision 2 said
+>   "deny by default" only in its summary and risk table, where SPEC §13.1 uses the same
+>   words for capabilities hosts do grant by default. It is now a §13.4-style rule.
+> - **The default `inputs` policy is selected, never a fallback** (RFC §4.3). Revision 2
+>   asked hosts to ship a default class policy and also said an unnarrowed `inputs` grant
+>   delivers nothing, without saying which wins. The operator's explicit selection is now
+>   required; a host MUST NOT apply its default to a grant the operator did not narrow.
+> - **`toolCallId` uniqueness is implementable** (RFC §3). Revision 2 required uniqueness
+>   "for the lifetime of the connection" while recommending the model's own id, which a
+>   host can only guarantee by unbounded tracking. Now: mint, or reuse the model's id only
+>   where the provider guarantees it unique.
+> - **Narrowing patterns use the RFC §6.2 grammar** (RFC §4.3, §6.2), closing open
+>   question 2. **Subagent attribution is `conversationId`**, closing open question 1
+>   (RFC §7.1, §17).
+> - **Ordering text corrected** (RFC §7.2). Hosts whose `inferenceId` spans a whole turn,
+>   tool rounds included, report calls *inside* the inference, not between inferences.
+> - **Conversation scoping caveat extended** (RFC §7.1) to hosts that deliver every
+>   conversation's hooks to every connection, where "participating" means everything.
+> - **Acceptance criterion** (RFC §14): the vectors freeze as executable before
+>   Draft→Accepted, following RFC-005 §11.
 
 > **Revision 2 note.** Review of revision 1 found three holes and a gap in its privacy
 > story. All fixed here without changing the two-method, two-path shape:
@@ -178,12 +205,22 @@ defined against it." This is such a surface.
 | `isError` | `boolean` | `completed` | OPTIONAL. The tool returned a result marked as an error. |
 | `durationMs` | `integer` | terminal | OPTIONAL. Host-measured wall time from `started` to terminal. Excludes time spent `pending`. |
 
-**`toolCallId` is the host's.** The host MUST ensure that no two calls it reports on a
-connection share a `toolCallId` for the lifetime of the connection. Where the model's own
-call identifier (the `tool_use` id) is unique, the host SHOULD use it as is; where it is not
-(models that number calls per response), the host MUST mint one. A host that reports the
-same call on other surfaces (approval prompts, hook events, audit) SHOULD use the same
-identifier there, so that a server can correlate. Consumers key on `toolCallId` alone.
+**`toolCallId` is the host's.** No two calls a host reports on a connection may share a
+`toolCallId`. A host meets this in one of two ways, per call:
+
+- **Mint.** The host assigns its own identifier, unique for the life of the connection. A
+  per-connection or per-process counter is enough.
+- **Reuse the model's identifier** (the `tool_use` id), **but only where the provider
+  guarantees it unique**: a random identifier of at least 64 bits, such as a `toolu_…` id.
+  Per-response counters (`call_0`, `call_1`) and other sequential or short identifiers MUST
+  be minted over; they repeat across responses, and across the tool rounds of one turn.
+  A host that reuses provider identifiers SHOULD also mint over any identifier it has
+  already reported recently on the connection.
+
+Reusing a qualifying model identifier is RECOMMENDED, because it lets a server correlate
+the call with other surfaces that show it. A host that reports the same call on other
+surfaces (approval prompts, hook events, audit) SHOULD use the same identifier there.
+Consumers key on `toolCallId` alone.
 
 **Phases.**
 
@@ -228,8 +265,16 @@ toolLifecycle.inputs
   `inputs` without `observe` delivers nothing, and hosts SHOULD emit a diagnostic when
   computing such a grant.
 
+**Both paths are denied by default.** A host MUST NOT grant `toolLifecycle.observe` or
+`toolLifecycle.inputs` because a server advertised it, or under a policy that admits
+advertised capabilities wholesale. Each requires an explicit operator decision that names
+the path: an allowlist entry matching it, or a narrowing stated for it. This is SPEC §13.4's
+rule for `contextHooks.beforeInference.inject.system`, applied to observing other servers'
+activity. A host SHOULD log, at grant computation, a path that was advertised and denied
+under this rule.
+
 Per §5.4, the bare parent `toolLifecycle` grants neither leaf, and `toolLifecycle.*` grants
-both paths — but see RFC §4.3: an `inputs` entry the host has not narrowed delivers no
+both paths — but see RFC §4.3: an `inputs` entry the operator has not narrowed delivers no
 arguments.
 
 ### 4.2 Advertisement
@@ -250,12 +295,14 @@ policy. A narrowing for either leaf is a set of terms over three keys; a call is
 narrowing when it satisfies every key the narrowing states:
 
 - **tool name**: patterns over the model-facing `tool` name (`computer--*`,
-  `workbench--bash`). Pattern syntax is host-defined, as for channels (RFC §17, open
-  question 2).
+  `workbench--bash`). Patterns SHOULD use the RFC §6.2 grammar, so that an operator can
+  copy a server's filter patterns into its grant (RFC §17, decision 7). Channel narrowing
+  syntax is not changed by this RFC.
 - **class**: a set of RFC-008 classes the tool's effective class must intersect
   (`["computer", "shell"]`).
-- **conversation**: patterns over `conversationId`, or a host-defined selector such as
-  "conversations this connection participates in" (RFC §7.1).
+- **conversation**: patterns over `conversationId` (RFC §6.2 grammar, SHOULD), or a
+  host-defined selector such as "conversations this connection participates in"
+  (RFC §7.1).
 
 Effects:
 
@@ -277,9 +324,13 @@ by omission.
   the agent's messages to, or what it read from, other people (RFC §10).
 - An **unclassed** tool never carries `input` (RFC-008 §5.2).
 
-Hosts SHOULD ship a default `inputs` policy that names the classes whose arguments are
-ordinarily safe to observe (`computer`, `shell`, `files`, `web`, `media`, `body`) and leaves
-`memory`, `notes`, and `control` to explicit operator choice. `comms` is not a choice.
+Hosts SHOULD ship a **named** default `inputs` policy that admits the classes whose
+arguments are ordinarily safe to observe (`computer`, `shell`, `files`, `web`, `media`,
+`body`) and leaves `memory`, `notes`, and `control` to explicit operator choice. `comms` is
+not a choice. **The default is something an operator selects for a grant entry, never a
+fallback:** a host MUST NOT apply it to an `inputs` grant the operator did not narrow.
+Otherwise a wildcard grant would reach arguments by omission, which is what this subsection
+forbids. (agent-framework spells the selection `inputs: { classes: "default" }`.)
 
 Narrowing is evaluated per call, at emission, against the grant current at that moment
 (RFC §4.5). A server's own filter (RFC §6) narrows further; it never widens.
@@ -422,7 +473,8 @@ Filter patterns are portable, so their grammar is fixed here:
 - Every other character matches itself. There is no escape and no other metacharacter.
 - Matching is against the whole string, and case-sensitive.
 
-Hosts MAY use the same grammar for their own narrowing (RFC §17, open question 2).
+Hosts SHOULD use the same grammar for their own tool and conversation narrowing (RFC §4.3,
+RFC §17 decision 7).
 
 ### 6.3 Field paths
 
@@ -502,19 +554,28 @@ tools the host implements itself.
   Conversation scoping is the host's; a server MAY additionally match on `conversationId`
   in its filter, but that is interest, not the boundary. Hosts whose agents live in a
   single conversation spanning every surface get nothing from conversation scoping; for
-  them, class (RFC §4.3) is the control.
-- **Subagents.** A host that runs subagents reports their calls under the subagent's own
-  `inferenceId` and `conversationId`, and conversation narrowing applies. See RFC §17,
-  open question 1.
+  them, class (RFC §4.3) is the control. The same holds for hosts that deliver every
+  conversation's hooks and lifecycle to every connection: there, each connection
+  participates in every conversation and the default narrows nothing. Operators of such
+  hosts narrow by conversation explicitly where it matters.
+- **Subagents.** `conversationId` is the attribution key. A host that runs a subagent in
+  its own context reports the subagent's calls under that context's own `inferenceId` and
+  `conversationId`, and conversation narrowing applies to them as to any conversation. A
+  host whose subagents act inside the parent's context reports their calls as the
+  parent's: to an observer, they are. No agent identifier is added (RFC §17, decision 6).
 
 ### 7.2 Ordering
 
 - For one `toolCallId`, `pending` (if any) precedes `started`, which precedes the terminal.
 - Parallel calls interleave freely. Consumers key state by `toolCallId`.
-- A call's events usually fall between its inference's `completed` and the next
-  `started` (§10.5). Hosts that execute tools while the response is still streaming MAY
-  emit an opening phase before the inference's terminal. **Consumers MUST NOT assume
-  ordering between `tools/lifecycle` and `inference/lifecycle`.**
+- Where a call's events fall relative to `inference/lifecycle` depends on the host. A host
+  that runs one inference per model response reports a call between that inference's
+  `completed` and the next `started` (§10.5). A host whose `inferenceId` spans a whole
+  turn, tool rounds included (agent-framework does this), reports every call of the turn
+  between that inference's `started` and its terminal. A host that executes tools while a
+  response is still streaming MAY emit an opening phase before the response ends.
+  **Consumers MUST NOT assume ordering between `tools/lifecycle` and
+  `inference/lifecycle`.**
 
 ### 7.3 Pairing, best-effort
 
@@ -573,9 +634,9 @@ adds:
 }
 ```
 
-The operator grants `toolLifecycle.observe` with no narrowing, and `toolLifecycle.inputs`
-under the host's default class policy, which admits `computer` and `shell` arguments and
-never `comms`.
+The operator grants `toolLifecycle.observe` with no narrowing, and grants
+`toolLifecycle.inputs` selecting the host's default class policy for it, which admits
+`computer` and `shell` arguments and never `comms`.
 
 After the initial policy exchange, the avatar sends its filter: coordinates for clicks,
 code for the 3D tool, nothing at all for messaging, and metadata for everything else.
@@ -741,6 +802,8 @@ full access to the host's event stream.
    values.
 4. **§10.9 (new) Tool lifecycle:** RFC §3 through RFC §7.
 5. **§13.1:** add the two rows of RFC §10.
+   **§13.4:** extend the deny-by-default rule to `toolLifecycle.observe` and
+   `toolLifecycle.inputs` (RFC §4.1).
 6. **§14.5:** after "Delivery is never a side effect of a lifecycle event", add: "Reflecting
    granted activity metadata (`tools/lifecycle`, `inference/lifecycle`) on a server's own
    surface is presentation, not delivery of agent content."
@@ -842,9 +905,10 @@ Grant:
    `conv_2` → no events; a call in `conv_1` → events.
 8. **Inputs without observe.** Grant `toolLifecycle.inputs` only → no events; the host
    emits a diagnostic at grant computation.
-9. **Inputs unnarrowed.** Grant `toolLifecycle.*` with no `inputs` policy; filter requests
-   all. Call `x--run {a: 1}` → no `input`, `inputWithheld: true`; diagnostic at grant
-   computation.
+9. **Inputs unnarrowed.** Grant `toolLifecycle.*` with no `inputs` policy, on a host that
+   ships a default class policy; filter requests all. Call to a `computer` tool `{a: 1}` →
+   no `input`, `inputWithheld: true`; diagnostic at grant computation. (The default is not
+   applied by omission — RFC §4.3.)
 10. **Bare parent.** Grant `toolLifecycle` → nothing delivered (§5.4).
 11. **Unknown leaf.** Feature set `uses: ["toolLifecycle.results"]` → disabled with
     `invalid_uses` (§6.4).
@@ -866,8 +930,9 @@ Coverage:
     `serverTool`, with the host-assigned class.
 17. **Parallel.** Calls A and B started together → two `started`, two terminals, keyed by
     `toolCallId`, in any interleaving.
-18. **Host-unique ids.** Two inferences whose model output both name a call `call_0` →
-    the two calls' events carry distinct `toolCallId`s.
+18. **Host-unique ids.** Two model responses that both name a call `call_0`, whether in
+    two inferences or in two tool rounds of one turn-spanning inference → the two calls'
+    events carry distinct `toolCallId`s.
 
 Phases:
 19. **Error result.** Tool returns an error result → `completed`, `isError: true`.
@@ -929,6 +994,29 @@ Revocation:
 48. **Inputs revoked mid-call.** `started` delivered with `input`; `inputs` revoked; call
     completes → terminal delivered (it carries no `input`).
 
+Revision 3:
+49. **Deny by default.** A server advertises `toolLifecycle: true`; the operator's policy
+    names neither path → neither is granted, no `tools/lifecycle` is sent, and
+    `tools/observe` → `-32002`.
+50. **Explicit grant.** As 49, but the operator's policy names `toolLifecycle.observe` →
+    `observe` granted, `inputs` not.
+51. **Selected default.** `inputs` granted with the host's default class policy selected;
+    filter requests all. A call to a `computer` tool → `input` sent; a call to a `memory`
+    tool → no `input`, `inputWithheld: true`.
+52. **Provider ids.** A host that reuses provider identifiers reports a call whose model id
+    is a random `toolu_…` id → `toolCallId` equals it (RECOMMENDED); a second call with
+    the same model id on the connection → a different `toolCallId` (MUST).
+53. **Subagent attribution.** A subagent running in its own context calls `x--run` → the
+    events carry the subagent's `conversationId`; an `observe` narrowing to the parent's
+    conversation excludes them.
+
+**Acceptance criterion:** before this RFC moves Draft→Accepted, these vectors freeze as
+executable vectors under `conformance/` (the RFC-003 §3.1 precedent, as RFC-005 §11 also
+requires) and run against at least one host implementation; the `tools/observe` parsing
+vectors (43–45, and the RFC §13 schema) also run against a strict parser. agent-framework
+PR #199 implements this revision's host side and tests most of these vectors in its own
+suite, but those tests are not the frozen set.
+
 ## 15. Implementation notes (non-normative)
 
 - **Hosts with an internal event stream** already have most of the data. agent-framework's
@@ -936,10 +1024,15 @@ Revocation:
   `durationMs`), and `tool:failed` (`callId`, `error`). A host implementation filters by
   connection grant and narrowing, applies the class exclusions, applies the connection's
   filter, excludes the recipient's own tools, selects fields, bounds `input`, and sends
-  through the same notification path it uses for `inference/lifecycle`. Three gaps to
-  close on that stream: `aborted` has no trace event; error *results* must be told apart
-  from dispatch failures, so that they map to `completed` with `isError` and to `failed`
-  respectively (RFC §3); and `pending` needs a hook at the approval gate.
+  through the same notification path it uses for `inference/lifecycle`.
+- **agent-framework (PR #199)** is the reference host for this revision. It registers each
+  model-issued call at dispatch (so the call carries its inference's id), sends `started`
+  on the `tool:started` trace, treats a `tool:failed` with no prior start as a refusal (no
+  events), takes the terminal from the tool-result event (`isError` from the result), and
+  marks calls still open when the turn's stream ends as `aborted`. Known limits: it never
+  emits `pending` (it has no approval gates); calls made from inside a code-execution
+  script are not reported (the script's own call is, as `shell`); and it approximates the
+  provider-uniqueness test of RFC §3 by identifier length plus a recent-repeat window.
 - **Class comes from `tools/list`.** A host that already caches tool definitions per
   connection reads `_meta["mcpl/class"]` from the cache and applies overrides once per
   re-list (RFC-008 §5). Built-ins are classed in the host's own tool table.
@@ -977,11 +1070,17 @@ Decided:
    the host mints when the model's id is not.
 5. **Privacy is the host's, keyed on class** (revision 2). `comms` and unclassed arguments
    are never sent; `inputs` is never unconditional; conversation is a narrowing key.
+6. **Subagent attribution is `conversationId`** (revision 3, formerly open question 1). A
+   subagent with its own context has its own `conversationId`; one acting inside its
+   parent's context is, to an observer, the parent. An agent identifier would need agent
+   identity at `initialize`, which MCPL does not have; it is not added here.
+7. **Narrowing patterns use the RFC §6.2 grammar** (revision 3, formerly open question 2):
+   SHOULD for tool and conversation narrowing, so filters and grants share one syntax.
+   Channel narrowing is left to the SPEC.
+8. **Both paths are denied by default, normatively** (revision 3, RFC §4.1).
+9. **A default `inputs` policy is selected, never applied by omission** (revision 3,
+   RFC §4.3).
+10. **Provider ids are reused only where the provider guarantees uniqueness** (revision 3,
+    RFC §3); otherwise the host mints.
 
-Open:
-
-1. **Subagent attribution.** Conversation narrowing (RFC §4.3, §7.1) covers hosts that give
-   subagents their own `conversationId`. For hosts that do not, should the notification
-   carry an agent identifier? `initialize` carries no agent identity today.
-2. **Narrowing syntax.** Channel and tool narrowing are host-defined. RFC §6.2 fixes a
-   grammar for server filters. Should MCPL make it the grammar for host narrowing too?
+Open: none. Acceptance waits on the executable vectors (RFC §14).

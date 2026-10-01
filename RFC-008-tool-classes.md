@@ -1,15 +1,23 @@
 # MCPL RFC-008: Tool Classes
 
-**Status:** Draft (revision 1)
+**Status:** Draft (revision 2). Draft→Accepted is gated on [RFC §10's executable-vector
+criterion](#10-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra
-**Date:** 2026-09-30
+**Date:** 2026-09-30 (revisions 1, 2)
 **Depends on:** nothing for authority. This RFC adds no capability path and changes no grant;
 RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do. It defines a
-**hint** that hosts may use as an input to policy. Amends SPEC §13 (new §13.5), Appendix B.4
+**hint** that hosts may use as an input to policy. Amends SPEC §13 (new §13.6), Appendix B.4
 (enum), Changelog. Used by RFC-007.
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+> **Revision 2 note.** Settles the `_meta` key, which servers will hardcode and which is
+> therefore hard to change after adoption (formerly open question 1): `mcpl/class` is valid
+> under MCP's key rules and outside MCP's reserved space, and the `mcpl/` prefix is now
+> reserved for keys MCPL defines (RFC §3). Retargets the SPEC section to §13.6, since §13.5
+> now holds RFC-005's locators and references. Adds the acceptance criterion (RFC §10).
+> No change to the vocabulary, precedence, or trust model.
 
 ---
 
@@ -79,6 +87,15 @@ extensions, with prefixed keys. This RFC uses:
   classes are unknown is unclassed (RFC §5.2).
 - The slot is at MCP level, so a plain MCP server (not MCPL) can carry it too, and an MCPL
   host reads it from either.
+
+**The key.** MCP (2025-06-18, Basic → General fields → `_meta`) defines a key as an optional
+prefix — dot-separated labels followed by a slash — and a name, and reserves for itself any
+prefix whose labels include `mcp` or `modelcontextprotocol` followed by a further label
+(`mcp.dev/`, `tools.mcp.com/`). `mcpl/` is a single label followed by a slash, so it is a
+valid prefix and is not in MCP's reserved space; `class` is a valid name. **The `mcpl/`
+prefix is reserved for keys this specification defines.** Servers and hosts MUST NOT use
+`mcpl/`-prefixed `_meta` keys for anything else, and a host MUST ignore an `mcpl/` key that
+this specification does not define (and SHOULD log it), rather than guess at its meaning.
 
 Servers SHOULD class every tool they expose. A server that changes a tool's class announces
 it as any tool change, via `notifications/tools/list_changed`; the host recomputes the
@@ -187,7 +204,8 @@ Hosts SHOULD show a tool's effective class and its source to operators next to t
 
 ## 9. Spec amendments
 
-1. **§13.5 (new) Tool classes:** RFC §3, §5, §6, §7.
+1. **§13.6 (new) Tool classes:** RFC §3, §5, §6, §7, including the reservation of the
+   `mcpl/` `_meta` prefix.
 2. **Appendix B.4:** add **ToolClass:** `"comms" | "memory" | "notes" | "files" | "shell" |
    "web" | "computer" | "media" | "body" | "control"`.
 3. **Changelog:** record the `mcpl/class` slot and the vocabulary.
@@ -213,12 +231,27 @@ No new methods, capability paths, or error codes.
    `notifications/tools/list_changed`. After re-list the effective class is updated.
 9. **No model effect.** With any class, the tool's description and schema as sent to the
    model are byte-identical to what the server provided.
+10. **Malformed slot.** Server declares `_meta: {"mcpl/class": "shell"}` (a string, not an
+    array). Host treats the tool as unclassed and SHOULD log it.
+11. **Reserved prefix.** Server declares `_meta: {"mcpl/priority": "high"}`, a key this
+    specification does not define. Host ignores it for every purpose (and SHOULD log it);
+    the tool's effective class is unaffected.
 
-## 11. Open questions
+**Acceptance criterion:** before this RFC moves Draft→Accepted, these vectors freeze as
+executable vectors under `conformance/` (the RFC-003 §3.1 precedent, as RFC-005 §11 also
+requires) and run against at least one host implementation. agent-framework PR #199
+implements this revision's host side.
 
-1. **Key spelling.** `mcpl/class` follows MCP's prefixed `_meta` convention. If MCP's
-   reservation rules require a dotted or domain-form prefix, the key becomes whatever that
-   rule says; nothing else changes.
-2. **Should feature sets carry a default class** for all tools they contribute, so a server
+## 11. Decisions and open questions
+
+Decided:
+
+1. **Key spelling** (revision 2, formerly open question 1): `mcpl/class`, valid under MCP's
+   `_meta` rules and outside MCP's reserved space; the `mcpl/` prefix is reserved for keys
+   MCPL defines (RFC §3).
+
+Deferred:
+
+1. **Should feature sets carry a default class** for all tools they contribute, so a server
    need not tag each tool? Deferred: tools and feature sets are not bound in the SPEC today
-   (§6), and a per-tool slot is unambiguous.
+   (§6), and a per-tool slot is unambiguous. This does not block acceptance.

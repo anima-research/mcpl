@@ -6,6 +6,10 @@ import { tmpdir } from "node:os";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { format } from "node:util";
+import {
+  createCallMatcher,
+  expandInput,
+} from "./tool-lifecycle-fixture-calls.mjs";
 const fixture = fileURLToPath(
   new URL("./tool-lifecycle-peer.mjs", import.meta.url),
 );
@@ -28,13 +32,6 @@ const splitTool = (tool) =>
     : tool.includes("--")
       ? [tool.split("--").slice(0, -1).join("--"), tool.split("--").at(-1)]
       : [null, tool];
-export function expandInput(input) {
-  if (input?.$fixture === "object-utf8-bytes") {
-    const overhead = Buffer.byteLength(JSON.stringify({ data: "" }));
-    return { data: "x".repeat(input.bytes - overhead) };
-  }
-  return structuredClone(input);
-}
 export async function loadHost(root) {
   root = resolve(root);
   const load = (path) => import(pathToFileURL(join(root, path)).href);
@@ -99,7 +96,7 @@ export async function loadHost(root) {
         logs = new Map(),
         allCalls = vector.actions
           .filter((a) => a.op === "call")
-          .flatMap((a) => a.calls);
+          .flatMap((a, round) => a.calls.map((call) => ({ ...call, round })));
       const callsByKey = new Map(allCalls.map((c) => [c.key, c]));
       const connections = new Map();
       let activeConversation, streamBefore;
@@ -142,7 +139,9 @@ export async function loadHost(root) {
         }
         const membrane = new MockMembrane();
         const hostTools = vector.tools.filter((t) => !splitTool(t.name)[0]);
-        let hostCallIndex = 0;
+        const matchHostCall = createCallMatcher(
+          allCalls.filter((c) => !splitTool(c.tool)[0]),
+        );
         const module = {
           name: "host",
           async start() {},
@@ -154,11 +153,10 @@ export async function loadHost(root) {
               inputSchema: { type: "object" },
             })),
           async handleToolCall(call) {
-            const planned = allCalls.filter((c) => !splitTool(c.tool)[0])[
-              hostCallIndex++
-            ];
-            if (!planned || splitTool(planned.tool)[1] !== call.name)
-              throw Error("Unexpected host-tool call");
+            const planned = matchHostCall({
+              name: call.name,
+              arguments: call.input,
+            });
             hostCalls.push({
               event: "call",
               key: planned.key,

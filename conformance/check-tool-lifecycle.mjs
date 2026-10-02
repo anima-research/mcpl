@@ -31,6 +31,22 @@ assert.deepEqual(
   Array.from({ length: 54 }, (_, i) => i + 1),
   "exactly the 54 RFC cases",
 );
+// Validate targeted coverage before importing or starting any Host adapter.
+let selected = null;
+if (values.only !== undefined) {
+  const requested = values.only.split(",");
+  const known = new Set(data.vectors.map((vector) => vector.rfcVector));
+  if (
+    !/^[1-9][0-9]*(,[1-9][0-9]*)*$/.test(values.only) ||
+    new Set(requested).size !== requested.length ||
+    requested.some((value) => !known.has(Number(value)))
+  ) {
+    throw Error(
+      "Invalid --only: use distinct case numbers 1–54 separated by commas",
+    );
+  }
+  selected = new Set(requested.map(Number));
+}
 const module = await import(
   values.adapter
     ? pathToFileURL(resolve(values.adapter)).href
@@ -40,11 +56,7 @@ const host = await module.loadHost(values.host);
 const report = { host: host.info, selection: values.only ?? "all", cases: [] };
 console.log("Host evidence: " + JSON.stringify(host.info));
 for (const vector of data.vectors) {
-  if (
-    values.only &&
-    !values.only.split(",").map(Number).includes(vector.rfcVector)
-  )
-    continue;
+  if (selected && !selected.has(vector.rfcVector)) continue;
   if (vector.requires && !host.info.capabilities[vector.requires]) {
     const reason = "Host capability absent: " + vector.requires;
     report.cases.push({ id: vector.id, status: "not-applicable", reason });

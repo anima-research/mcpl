@@ -1,14 +1,15 @@
 // Synthetic MCPL peer: real stdio, scripted tools/results, no Host decisions.
 import { readFileSync, appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
+import { createCallMatcher } from "./tool-lifecycle-fixture-calls.mjs";
 const config = JSON.parse(readFileSync(process.env.MCPL_FIXTURE, "utf8"));
 const log = (event) => appendFileSync(config.log, JSON.stringify(event) + "\n");
 const send = (value) => process.stdout.write(JSON.stringify(value) + "\n");
 const reply = (id, result) => send({ jsonrpc: "2.0", id, result });
 const held = new Map();
 const reverse = new Map();
-let seq = 10000,
-  callIndex = 0;
+let seq = 10000;
+const matchCall = createCallMatcher(config.calls);
 function finish(msg, call) {
   const result = {
     content: [{ type: "text", text: call.resultText ?? "synthetic-result" }],
@@ -55,9 +56,7 @@ lines.on("line", (line) => {
       reply(msg.id, { tools: config.tools });
       break;
     case "tools/call": {
-      const call = config.calls[callIndex++];
-      if (!call || msg.params.name !== call.tool.split("--").at(-1))
-        throw Error("Unexpected fixture call " + JSON.stringify(msg.params));
+      const call = matchCall(msg.params);
       log({ event: "call", key: call.key, params: msg.params });
       if (call.hold) held.set(call.key, { msg, call });
       else finish(msg, call);

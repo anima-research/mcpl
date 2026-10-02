@@ -10,16 +10,19 @@ import { execFileSync } from 'node:child_process';
 const here = dirname(fileURLToPath(import.meta.url));
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'));
 
-export function expand(value, origin) {
-  if (typeof value === 'string') return value.replaceAll('$ORIGIN', origin);
-  if (Array.isArray(value)) return value.map(x => expand(x, origin));
+export function expand(value, origin, caseId = value?.id) {
+  if (typeof value === 'string') {
+    if (value.includes('$CASE')) assert.ok(typeof caseId === 'string' && caseId.length > 0, 'case namespace requires a case id');
+    return value.replaceAll('$ORIGIN', origin).replaceAll('$CASE', encodeURIComponent(caseId ?? ''));
+  }
+  if (Array.isArray(value)) return value.map(x => expand(x, origin, caseId));
   if (value && typeof value === 'object') {
     if ('$repeat' in value) {
       assert.equal(typeof value.$repeat, 'string');
       assert.ok(Number.isSafeInteger(value.count) && value.count >= 0 && value.count <= 2 ** 21);
       return value.$repeat.repeat(value.count);
     }
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, expand(v, origin)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, expand(v, origin, caseId)]));
   }
   return value;
 }

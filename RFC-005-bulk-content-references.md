@@ -495,6 +495,7 @@ git -C "$FRAMEWORK" checkout --detach 03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc
 AJV_DIR="$(mktemp -d)"
 bun add --cwd "$AJV_DIR" --exact --ignore-scripts ajv@8.17.1
 bun test conformance/bulk-reference-runner.test.mjs
+MCPL_FRAMEWORK="$FRAMEWORK" bun test conformance/bulk-reference-isolation.test.mjs
 bun run conformance/check-bulk-references.mjs \
   --framework "$FRAMEWORK" \
   --ajv "$AJV_DIR/node_modules/ajv/dist/ajv.js" \
@@ -511,7 +512,7 @@ This is component-boundary evidence, not a running residence or a model-provider
 
 #### Vector and adapter contract
 
-Consume the JSON cases rather than copying their inputs. Each case has a stable `id`, its RFC row number in `rfc`, `blocks`, per-block `schemaValid` booleans, an `operation`, and Host expectations in `expect`. Expand `{"$repeat":"x","count":1048576}` into the specified string and replace `$ORIGIN` with the fixture origin. This keeps megabyte inputs portable without committing megabyte files.
+Consume the JSON cases rather than copying their inputs. Each case has a stable `id`, its RFC row number in `rfc`, `blocks`, per-block `schemaValid` booleans, an `operation`, and Host expectations in `expect`. Expand `{"$repeat":"x","count":1048576}` into the specified string and replace `$ORIGIN` with the fixture origin and `$CASE` with the URL-encoded case id. Each case has a distinct URI path even when a loopback port is reused, so process-global Host reference caches cannot cross-contaminate cases. This keeps megabyte inputs portable without committing megabyte files.
 
 The operations are:
 
@@ -521,7 +522,7 @@ The operations are:
 
 To run another implementation with the same JavaScript assertions, pass `--adapter /path/to/adapter.mjs`. Export `createAdapter(root)`, returning `identity`, a positive `maxViewChars` policy bound, `displayProfile`, and `observe(case, {origin, token})`. The profile gives `fieldChars` limits for `name` and `mimeType`, plus the renderer’s nonempty `truncationMarkers`. The two `displayField` cases require a mark only when the original field exceeds that profile’s limit. A renderer with a 255-character limit can keep the entire 255-character value; another renderer can use `[truncated]` instead of an ellipsis. These are profile assertions, not protocol-wide typography or truncation thresholds. The supplied adapter documents the observation shape in code. Report actual parsing, model-facing strings, private reference records, fetch outcomes, save callbacks, and lookup errors; keep expected-value comparisons in the runner. `maxViewChars`, the registry quota, origin-only fetch policy, and id-based filenames describe the tested Host profile, not protocol-wide constants. Other language implementations can consume the same fixtures and expected properties directly.
 
-The harness regression tests deliberately perturb observations to check that URI/payload leaks, unbounded displays, receipt-triggered fetches, retained invalid fields, model-visible mismatched payloads, per-lane control/bidi leaks, saved partial bytes, forwarded credentials, missed stream aborts, and id reuse produce failures. The conformance command records source hashes, the MCPL and Host revisions, the runtime, Ajv version, and resolved Framework package versions. Its exit status is nonzero for any schema or Host expectation failure; setup failures also exit nonzero. Maintainers decide RFC acceptance from this evidence; adding or running the corpus does not change Draft status.
+The isolation regression runs a verified fetch and a digest-mismatch fetch against one deliberately reused origin, requiring a distinct reference and a fresh request for the second case. The harness regression tests deliberately perturb observations to check that URI/payload leaks, unbounded displays, receipt-triggered fetches, retained invalid fields, model-visible mismatched payloads, per-lane control/bidi leaks, saved partial bytes, forwarded credentials, missed stream aborts, and id reuse produce failures. The conformance command records source hashes, the MCPL and Host revisions, the runtime, Ajv version, and resolved Framework package versions. Its exit status is nonzero for any schema or Host expectation failure; setup failures also exit nonzero. Maintainers decide RFC acceptance from this evidence; adding or running the corpus does not change Draft status.
 
 ---
 

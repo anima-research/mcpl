@@ -3,7 +3,7 @@
   "source": "RFC-005 revision 3 \u00a711 / SPEC \u00a719 and Appendix B.1",
   "fixtures": {
     "token": "fixture-secret",
-    "expansion": "$ORIGIN is loopback fixture origin; {$repeat, count} expands to a string. bodyBase64 is decoded before optional gzip."
+    "expansion": "$ORIGIN is loopback fixture origin; $CASE is the URL-encoded case id; {$repeat, count} expands to a string. bodyBase64 is decoded before optional gzip."
   },
   "cases": [
     {
@@ -13,7 +13,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -84,7 +84,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 19,
@@ -122,7 +122,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 19,
@@ -159,7 +159,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 129,
@@ -188,7 +188,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -222,7 +222,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload?token=fixture-secret",
+          "uri": "$ORIGIN/case/$CASE/payload?token=fixture-secret",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -249,7 +249,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -279,7 +279,7 @@
         },
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 0,
@@ -312,7 +312,7 @@
         },
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 9007199254740991,
@@ -341,7 +341,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload?signature=fixture-secret",
+          "uri": "$ORIGIN/case/$CASE/payload?signature=fixture-secret",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -371,7 +371,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload?signature=fixture-secret",
+          "uri": "$ORIGIN/case/$CASE/payload?signature=fixture-secret",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -401,7 +401,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload?signature=fixture-secret",
+          "uri": "$ORIGIN/case/$CASE/payload?signature=fixture-secret",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12
@@ -430,7 +430,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 1,
@@ -494,7 +494,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -524,7 +524,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "image/png",
           "sizeBytes": 12,
@@ -558,7 +558,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "../../.ssh/authorized_keys",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -590,7 +590,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": -1,
@@ -618,7 +618,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 3.5,
@@ -646,7 +646,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 9007199254740992,
@@ -674,7 +674,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -703,7 +703,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": {
             "$repeat": "x",
             "count": 1048576
@@ -732,7 +732,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": {
             "$repeat": "x",
@@ -761,7 +761,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "bad\u0000\u0007\u0085\u202ename",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -794,7 +794,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "CON",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -827,7 +827,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 512,
@@ -862,7 +862,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 1,
@@ -894,7 +894,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -977,7 +977,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": {
             "$repeat": "a",
             "count": 255
@@ -1006,7 +1006,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": {
             "$repeat": "a",
             "count": 256
@@ -1034,7 +1034,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": {
             "$repeat": "a",
@@ -1063,7 +1063,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": {
             "$repeat": "a",
@@ -1091,7 +1091,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -1120,7 +1120,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -1149,7 +1149,7 @@
       "blocks": [
         {
           "type": "image",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -1174,7 +1174,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,
@@ -1202,7 +1202,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": {
             "$repeat": "a",
             "count": 1024
@@ -1233,7 +1233,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": {
             "$repeat": "a",
@@ -1264,7 +1264,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$ORIGIN/payload",
+          "uri": "$ORIGIN/case/$CASE/payload",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 12,

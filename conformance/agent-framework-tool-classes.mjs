@@ -122,6 +122,13 @@ export async function loadHost(root) {
           });
         }
         return observations;
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        const tail = diagnostics.slice(-6).map(line => line.slice(0, 600)).join("\n");
+        const events = (await readLog(logPath).catch(() => [])).slice(-6);
+        failure.message += "\nHost diagnostic tail:\n" + (tail || "(none)")
+          + "\nProvider event tail: " + JSON.stringify(events).slice(0, 2000);
+        throw failure;
       } finally {
         try { await framework?.stop(); }
         finally {

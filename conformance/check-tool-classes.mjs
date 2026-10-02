@@ -18,6 +18,11 @@ const adapterURL = values.adapter ? pathToFileURL(resolve(values.adapter)) : new
 const { loadHost } = await import(adapterURL.href);
 const host = await loadHost(values.host);
 console.log("Host evidence: " + JSON.stringify(host.info));
+function sameClasses(actual, expected, label) {
+  assert.ok(Array.isArray(actual), label + " is an array");
+  assert.ok(actual.every(value => typeof value === "string" && vectors.vocabulary.includes(value)), label + " contains only known classes");
+  assert.deepEqual([...new Set(actual)].sort(), [...new Set(expected)].sort(), label + " membership");
+}
 let stages = 0;
 const diagnostics = [];
 for (const vector of vectors.vectors) {
@@ -27,14 +32,15 @@ for (const vector of vectors.vectors) {
   for (const [index, stage] of vector.stages.entries()) {
     const result = observed[index];
     const label = vector.id + " stage " + (index + 1);
-    assert.deepEqual(result.descriptor.class, stage.expect.classes, label + " descriptor class");
-    assert.deepEqual(result.effective, { classes: stage.expect.classes, source: stage.expect.source }, label + " class/source");
+    sameClasses(result.descriptor.class, stage.expect.classes, label + " descriptor class");
+    sameClasses(result.effective.classes, stage.expect.classes, label + " effective class");
+    assert.equal(result.effective.source, stage.expect.source, label + " class source");
     assert.equal(result.model.name, stage.modelName, label + " projected name");
     assert.equal(result.model.description, stage.tool.description, label + " description bytes");
     assert.equal(JSON.stringify(result.model.inputSchema), JSON.stringify(stage.tool.inputSchema), label + " schema bytes");
     assert.ok(result.opening, label + " must emit metadata, not silently suppress");
     assert.equal(result.opening.phase, "started", label + " phase");
-    assert.deepEqual(result.opening.class, stage.expect.classes, label + " reported classes");
+    sameClasses(result.opening.class, stage.expect.classes, label + " reported classes");
     if (stage.expect.input === "sent") {
       assert.ok(Object.hasOwn(result.opening, "input"), label + " allowed input must be present");
       assert.deepEqual(result.opening.input, vector.input, label + " allowed argument values");

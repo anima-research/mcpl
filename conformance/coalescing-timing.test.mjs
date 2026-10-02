@@ -60,9 +60,9 @@ test('paused delivery and a campaign shorter than the bound cannot establish tim
 });
 function paired() {
   const phase = start => ({
-    quietMs: 200, ordinaryPolicy: 'ordinary', scheduler: { running: true, quiesced: false },
-    ordinaryAdmission: { receipt: { accepted: true }, decisionAt: start, content: 'ORDINARY' },
-    gateEvents: [{ kind: 'ordinary-debounce', policyName: 'ordinary', observedAt: start + 205 }],
+    quietMs: 200, ordinaryPolicy: 'ordinary', scheduler: { running: true, quiesced: false, gateQuiesced: false },
+    ordinaryAdmission: { receipt: { accepted: true }, decisionAt: start, content: 'ORDINARY', wire: { method: 'push/event', params: { eventId: 'ordinary-' + start, payload: { content: [{ type: 'text', text: 'ORDINARY' }] } } } },
+    gateEvents: [{ kind: 'ordinary-debounce', policyName: 'ordinary', eventId: 'ordinary-' + start, observedAt: start + 205 }],
     ordinaryWakeIndex: 0, requests: [request(start + 210, 'ORDINARY')],
   });
   const baseline = phase(1000), combined = phase(2000);
@@ -79,7 +79,7 @@ test('ordinary timing follows its own cause, not early content in a different re
   checkOrdinaryTiming(paired());
   for (const at of [2100, 2300]) {
     const t = paired(); t.combined.gateEvents[0].observedAt = at;
-    assert.throws(() => checkOrdinaryTiming(t), /shortened or extended/);
+    assert.throws(() => checkOrdinaryTiming(t), /shortened or extended|still pending/);
   }
 });
 test('fabricated delivery timestamps cannot replace the paired causal/request witnesses', () => {
@@ -113,4 +113,24 @@ test('conditional profile choice, missing mechanism, and absent fixture controls
   assert.equal((await runScenario(adapter, entry, v(['soft']))).status, 'inapplicable');
   assert.equal((await runScenario(adapter, entry, v(['bound', 'clock']))).status, 'blocked');
   assert.equal((await runScenario(adapter, entry, v(['clock']))).status, 'unexercised');
+});
+
+test('equal early wake offsets do not establish an ordinary quiet-period control', () => {
+  const t = paired(); t.baseline.gateEvents[0].observedAt = 1050; t.combined.gateEvents[0].observedAt = 2050;
+  assert.throws(() => checkOrdinaryTiming(t), /configured quiet period/);
+  const noLongerPending = paired(); noLongerPending.combined.gateEvents[0].observedAt = 2090;
+  assert.throws(() => checkOrdinaryTiming(noLongerPending), /still pending/);
+});
+test('ordinary timing needs nonempty linked input, unique wake identity, and an unpaused gate', () => {
+  for (const mutate of [
+    t => { t.combined.ordinaryAdmission.content = ''; },
+    t => { t.combined.ordinaryAdmission.wire.params.payload.content = [{ type: 'text', text: 'OTHER' }]; },
+    t => { delete t.combined.ordinaryAdmission.wire; },
+    t => { t.combined.scheduler.gateQuiesced = true; },
+    t => { delete t.combined.scheduler.gateQuiesced; },
+    t => { t.combined.gateEvents[0].eventId = 'another-occurrence'; },
+    t => { t.combined.gateEvents.push({ ...t.combined.gateEvents[0], observedAt: 2050 }); },
+  ]) {
+    const t = paired(); mutate(t); assert.throws(() => checkOrdinaryTiming(t), /nonempty|wire input|paused|uniquely linked/);
+  }
 });

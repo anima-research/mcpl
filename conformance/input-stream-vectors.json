@@ -7437,6 +7437,413 @@
           }
         }
       ]
+    },
+    {
+      "name": "accepted-update-discards-preparation-immediately",
+      "description": "Superseding a hypothesis clears its artifact before any final arrives.",
+      "config": {
+        "mode": "prepare"
+      },
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "transportEpoch": "epoch-1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "prepare"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "Hello"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 1
+            }
+          }
+        },
+        {
+          "prepare": "s1"
+        },
+        {
+          "control": {
+            "now": 1100
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 2,
+            "text": "Hello again"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 2
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 2,
+                "provisional": "Hello again"
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "ignored-or-rejected-update-preserves-preparation",
+      "description": "Duplicate, stale, and rate-rejected updates do not supersede an accepted artifact.",
+      "config": {
+        "mode": "prepare"
+      },
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "transportEpoch": "epoch-1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "prepare"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 2,
+            "text": "Hello"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 2
+            }
+          }
+        },
+        {
+          "prepare": "s1"
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 2,
+            "text": "Hello"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "duplicate",
+              "revision": 2
+            }
+          },
+          "expectState": {
+            "prepared": {
+              "s1": {
+                "revision": 2,
+                "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+              }
+            }
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "old"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "stale",
+              "revision": 2
+            }
+          },
+          "expectState": {
+            "prepared": {
+              "s1": {
+                "revision": 2,
+                "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+              }
+            }
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 3,
+            "text": "Too soon"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "rate_limited"
+              }
+            }
+          },
+          "expectState": {
+            "prepared": {
+              "s1": {
+                "revision": 2,
+                "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stable-binding-change-invalidates-lease",
+      "description": "Changing the trusted underlying channel invalidates a lease even if generation was not incremented.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "transportEpoch": "epoch-1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 1
+            }
+          }
+        },
+        {
+          "control": {
+            "channels": {
+              "voice:lobby": {
+                "identity": "other-channel",
+                "generation": 1,
+                "permitted": true,
+                "senders": [
+                  "alice"
+                ],
+                "direction": "inbound"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "lease_mismatch"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        }
+      ]
     }
   ]
 }

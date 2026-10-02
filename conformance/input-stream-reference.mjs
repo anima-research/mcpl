@@ -54,10 +54,10 @@ const reject = reason => { throw new Rejection(-32025, "Input stream rejected", 
 // Advertisement is separate from the grant. The new explicit member is a local
 // exception to SPEC 5.1 shorthand: legacy booleans never advertise input streaming.
 export function advertised(capabilities) {
-  const channels = capabilities?.channels;
+  const channels = object(capabilities) && Object.hasOwn(capabilities, "channels") ? capabilities.channels : undefined;
   return {
-    incoming: channels === true || (object(channels) && channels.incoming === true),
-    streaming: object(channels) && channels.inputStreaming === true,
+    incoming: channels === true || (object(channels) && Object.hasOwn(channels, "incoming") && channels.incoming === true),
+    streaming: object(channels) && Object.hasOwn(channels, "inputStreaming") && channels.inputStreaming === true,
   };
 }
 
@@ -109,6 +109,11 @@ export class InputStreamHost {
     return JSON.stringify([this.serverPrincipal, channel.identity, messageId]);
   }
 
+  bindingMatches(stream, channel) {
+    return channel.generation === stream.generation
+      && this.canonicalKey(channel, stream.open.messageId) === stream.canonicalKey;
+  }
+
   terminate(stream, status) {
     stream.status = status;
     stream.text = null;
@@ -123,7 +128,7 @@ export class InputStreamHost {
       else {
         try {
           const channel = this.authority(stream.open.channelId, stream.open.sender.id);
-          if (channel.generation !== stream.generation) this.terminate(stream, "aborted");
+          if (!this.bindingMatches(stream, channel)) this.terminate(stream, "aborted");
         } catch (error) {
           if (!(error instanceof Rejection)) throw error;
           this.terminate(stream, "aborted");
@@ -220,7 +225,7 @@ export class InputStreamHost {
     };
     if (!Object.entries(expected).every(([key, value]) => params[key] === value)) reject("lease_mismatch");
     if (this.now >= stream.expiresAt) reject("expired");
-    if (this.channels[params.channelId].generation !== stream.generation) reject("lease_mismatch");
+    if (!this.bindingMatches(stream, this.channels[params.channelId])) reject("lease_mismatch");
     return stream;
   }
 
@@ -251,6 +256,7 @@ export class InputStreamHost {
     if (method === "update") {
       if (params.revision === stream.revision) return { accepted: true, status: "duplicate", revision: stream.revision };
       if (stream.lastUpdateAt !== null && this.now - stream.lastUpdateAt < 1000 / this.maxUpdateHz) reject("rate_limited");
+      this.prepared.delete(params.streamId);
       stream.revision = params.revision;
       stream.text = params.text;
       stream.lastUpdateAt = this.now;

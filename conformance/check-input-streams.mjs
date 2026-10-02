@@ -18,7 +18,12 @@ export function assertSubset(actual, expected, path = "state") {
 const path = process.argv[2] ?? fileURLToPath(new URL("./input-stream-vectors.json", import.meta.url));
 const vectors = JSON.parse(await readFile(path, "utf8"));
 assert.equal(vectors.profile, "rfc-009-text-input");
-let assertions = 0;
+// Parsed JSON has no inherited members. This separate API-level check pins the
+// helper's explicit-own-member rule when called directly from JavaScript.
+assert.deepEqual(advertised({ channels: Object.assign(
+  Object.create({ inputStreaming: true }), { incoming: true },
+) }), { incoming: true, streaming: false }, "inherited member is not advertisement");
+let assertions = 1;
 const names = new Set();
 for (const vector of vectors.advertisements) {
   assert.ok(!names.has(vector.name), "Duplicate vector name");
@@ -53,4 +58,4 @@ for (const trace of vectors.traces) {
   }
 }
 console.log("INPUT STREAM CONFORMANCE OK (" + vectors.advertisements.length
-  + " advertisement vectors, " + vectors.traces.length + " traces, " + assertions + " assertions)");
+  + " advertisement vectors, " + vectors.traces.length + " traces, 1 API check, " + assertions + " assertions)");

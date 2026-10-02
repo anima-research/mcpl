@@ -42,7 +42,7 @@ A participating Server and Host each advertise the following under `capabilities
 
 `channels.inputStreaming: true` is an explicit advertisement of the capability path `channels.incoming.streaming`. It is not a capability path named `channels.inputStreaming`. An implementation MUST recognize this advertisement only when `channels` is an object and its own `inputStreaming` member is the boolean `true`.
 
-This is a deliberate local exception to SPEC §5.1's mirrored advertisement tree. `channels.incoming` is already an executable leaf. Replacing `incoming: true` with an object would make some existing Hosts lose the ordinary incoming advertisement. Extending the descendants of the old boolean would make old manifests claim a new behavior. A distinct member preserves the old advertisement and makes the new opt-in explicit.
+This is a deliberate local exception to SPEC §5.1's mirrored advertisement tree. `channels.incoming` is already an executable leaf with a boolean wire shape. Keeping `incoming: true` preserves that shape for existing consumers. Extending the descendants of the old boolean would make old manifests claim a new behavior under SPEC §5.1's expansion rule. A distinct member preserves the old advertisement and makes the new opt-in explicit.
 
 For this capability only, neither `channels: true`, `incoming: true`, nor another ancestor boolean shorthand advertises input streaming. `channels.streaming: true` continues to mean Host → Server outgoing streaming. Nested `incoming: {"streaming": true}` and a literal `"incoming.streaming"` member are not this profile's advertisement.
 
@@ -155,9 +155,9 @@ Open is the one method that does not echo the Host epoch or lease: its response 
 
 The Host reserves `streamId` within the connection epoch and the canonical key `(authenticated Server principal, registered channel identity, messageId)` when it accepts open. Another stream cannot reserve the same canonical key concurrently. The registered channel identity is the Host's stable identity for the underlying channel, distinct from the registration generation. Reconnecting or re-registering the same underlying channel does not create a new canonical deduplication namespace. Textually identical channel IDs on unrelated connections do not by themselves establish the same registered channel identity.
 
-Retrying open with identical parsed params and JSON object member order ignored returns the original result. The request ID may differ. It does not allocate another lease, extend expiry, reset limits, or reopen a terminal stream. Reusing that `streamId` with different params returns `conflict`. Authorization and expiry checks precede a replay receipt.
+While the stream is still open, retrying open with identical parsed params and JSON object member order ignored returns the original result. The request ID may differ. It does not allocate another lease, extend expiry, or reset limits. An identical open retry after a terminal transition returns `terminal`; it does not reopen the stream. Reusing that `streamId` with different params returns `conflict`. Authorization and expiry checks precede replay or terminal handling.
 
-A Host MUST bound both concurrent leases and retained epoch identifiers. When admitting another stream would exceed those budgets, it rejects open with `resource_limit`. It MUST NOT evict an identifier and then treat its replay as a new stream. Expired and terminal identifiers remain reserved until the epoch ends; transcript bodies need not remain (RFC §10).
+A Host MUST bound both concurrent leases and retained epoch identifiers. When admitting another stream would exceed those budgets, it rejects open with `resource_limit`. It MUST NOT evict an identifier and then treat its replay as a new stream. Both the stream identifier and its canonical-key reservation remain reserved through the epoch after abort or expiry. Terminal identifiers likewise remain reserved until the epoch ends; transcript bodies need not remain (RFC §10).
 
 A previously committed canonical message key remains a duplicate even across transport epochs. The Host's durable message identity and deduplication record enforce that boundary. A fresh open for an already committed key returns `conflict`, rather than creating another message. This does not require old provisional state to survive a reconnect.
 
@@ -359,19 +359,19 @@ An error changes no admitted state, except independently required expiry or auth
 
 The executable artifacts for this RFC belong under `conformance/`. They exercise the wire contract and a non-normative reference Host treatment model. The model is not the Agent Framework Host, a database transaction implementation, or Portal STT evidence.
 
-The conformance suite must cover:
+The in-memory Host traces cover the following protocol outcomes. Their canonical-message and preparation assertions are observations of the reference model, not evidence about a deployed Host's storage, logs, scheduler, or transport:
 
-1. Legacy `incoming:true`, outgoing `streaming:true`, and ancestor booleans do not opt into input streaming. New advertisement without both grants cannot open a stream. A completion-only peer receives one ordinary final.
+1. Legacy `incoming:true`, outgoing `streaming:true`, and ancestor booleans do not opt into input streaming. New advertisement without both grants cannot open a stream.
 2. Open returns explicit limits and Host-bound identity. Pre-open updates fail. Identical open retries reuse the lease; changed or competing identities conflict.
 3. Replacement text removes superseded words. Duplicate and out-of-order updates leave state unchanged. Conflicting same revisions fail.
 4. Completion works without updates, confirms identical current text, or supplies a newer full final. An older or conflicting final fails.
 5. Exact completion replay produces one canonical row and one logical ingestion/scheduling decision. Changed retries, late updates, and abort-after-complete produce no additional effects.
 6. Abort, expiry, disconnect, epoch change, grant reduction, sender revocation, and channel re-registration clear provisional state without promoting it. Terminal retries respect authorization and expiry.
 7. Every envelope binding is checked. Claimed identity does not replace authenticated registration/sender facts.
-8. Cadence, coalescing, size, admission limits, Unicode scalar counting, digest bytes, and terminal bypass of update cadence agree across implementations.
-9. Provisional content remains outside ordinary logs, context, and wakes by default. Preparation reuse requires an exact accepted-final binding; superseding or aborting discards it.
-10. Ingestion rejection or failure does not leave a successful receipt without a canonical message, and an uncertain response after commit cannot duplicate the final.
+8. Cadence, size, admission limits, Unicode scalar counting, digest bytes, and terminal bypass of update cadence match the contract.
+9. Provisional updates produce no canonical messages. Preparation reuse requires an exact accepted-final binding; superseding or aborting discards it.
+10. Downstream final rejection leaves no successful receipt or canonical message. Completion retries preserve the same one-final state.
 
-Acceptance additionally requires an experimental Portal STT producer and a real Host implementation to run the profile together. The exercise must include revised words, completion, cancel, timeout, reconnect, grant reduction, and a Host with no provisional consumer. It must show one canonical final and one ordinary ingestion path, without partials in durable authored history. Host transaction/fault-injection tests must establish the logical commit boundary; an in-memory conformance model alone cannot establish crash recovery.
+Acceptance additionally requires an experimental Portal STT producer and a real Host implementation to run the profile together. The exercise must include revised words, completion, cancel, timeout, reconnect, grant reduction, and a Host with no provisional consumer. It must show producer-side latest-state coalescing, completion-only delivery to an older Host, one canonical final and one ordinary ingestion path, and the absence of partials from durable authored history, process logs, ordinary context, and wakes. Host transaction/fault-injection tests must establish the logical commit boundary; an in-memory conformance model alone cannot establish crash recovery.
 
 The generic vocabulary remains unaccepted until that interoperability evidence exists, as requested in issue #3. These RFC and conformance artifacts are protocol-design evidence, not a claim that [agent-framework#102](https://github.com/anima-research/agent-framework/issues/102) or [eidoverse-worlds#33](https://github.com/anima-research/eidoverse-worlds/issues/33) is implemented.

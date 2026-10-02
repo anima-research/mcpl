@@ -1163,6 +1163,82 @@ Recovery:
 Revision 6's wake vectors are retained as behavioral checks 43–44; no vector requires a
 particular scheduler data structure. Audit vector 37 remains illustrative under host policy.
 
+### Executable corpus and evidence
+
+[`conformance/event-coalescing-vectors.json`](./conformance/event-coalescing-vectors.json) freezes all 64 labeled rows above, including suffix variants. The corpus contains 77 scenarios: some rows have several permitted timelines or controls, and §6's empty-slot obligation has a separate supplement under vector 34. Each row carries its source contract; each scenario carries setup, profile preconditions, ordered actions, and observable expectations.
+
+The supplied runner distinguishes **Host passes**, **Host failures**, **supporting evidence with a narrower boundary**, **unexercised preconditions**, **server-fixture obligations**, **advisory observations**, and **execution errors**. A missing profile precondition is never a pass. Neither this corpus nor its reference execution changes the RFC's Draft status.
+
+#### Run the suite
+
+Run from the MCPL repository root with Bun. Use an isolated checkout of Agent Framework:
+
+```sh
+FRAMEWORK="$(mktemp -d)"
+git clone https://github.com/anima-research/agent-framework.git "$FRAMEWORK"
+git -C "$FRAMEWORK" checkout --detach 03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc
+(cd "$FRAMEWORK" && bun install --ignore-scripts)
+bun test conformance/event-coalescing-runner.test.mjs
+bun run conformance/check-event-coalescing.mjs \
+  --framework "$FRAMEWORK" \
+  --report /tmp/event-coalescing-report.json
+```
+
+Use `--case 21,34,43` to select particular RFC labels. The report identifies that selection; a selected run is not full-corpus evidence. The runner records the suite revision, dirty state, source hashes, actual Host revision, resolved dependency versions, and declared profile. It exits nonzero for any failed expectation, unexercised precondition, or execution error. A failing transport or fixture is an execution error, not evidence of a Host conformance defect.
+
+The pinned reference run exposes three distinct Host behaviors as failures:
+
+- **Vector 21, disconnected before assembly:** accepted deferred work disappears. After reconnect, the same binding, operator policy, effective grant, and enabled feature sets are restored; retry returns the original acceptance, and a fresh ordinary control is admitted. The accepted fallback still reaches no request. This differs from temporarily withholding work until authority is re-established.
+- **Vector 34, §6 empty-slot supplement:** the first `noted` deletion notice is stored, but the next create returns `replaced` and removes it. The ordinary notice was retained as the subject's occupant. The narrower history-bit scenario passes: a second deletion still returns `noted`.
+- **Vector 43, two timelines:** a debounced qualifying occurrence is replaced by a `skip` occurrence or retracted unread before inference begins. Its old debounce cause still starts a request. Skip-only, qualifying-only, and skip-to-qualifying controls distinguish this from a general failure to honor the wake policy.
+
+The report carries the observations behind each checked step, including wire receipts, actual provider-request messages, private Host policy/binding readouts, render requests, published channel messages, and trace events. The frozen expected values remain spec-derived even when the pinned Host fails them.
+
+#### What the adapter observes
+
+[`agent-framework-coalescing.mjs`](./conformance/agent-framework-coalescing.mjs) runs a synthetic MCPL peer over real loopback WebSockets. [`coalescing-host-worker.mjs`](./conformance/coalescing-host-worker.mjs) imports the actual Framework in a separate Bun subprocess with a temporary Chronicle store and a synthetic model provider. The peer remains alive across Host restarts and SIGKILL, preserving the endpoint identity while the Host's process state is lost. Test files and runtime logs stay in the temporary directory.
+
+The model provider records actual assembled requests. It can fail after assembly, with the public no-retry error policy selected for vector 4, so failure cannot be mistaken for an unconsumed occurrence. Compression uses the real autobiographical strategy. Held render responses expose cancellation, timeout, and late-response races without replacing the coalescer's state machine.
+
+The fixture can queue a Host-requested inference, change grants through the real connection's grant API, invoke the actual channel tools, and deliberately keep one recipient idle by withholding its pending wake. These controls drive the existing scheduler and policy objects; they do not synthesize coalescing outcomes or consumption watermarks. Operator configuration, grants, binding, and enabled features are observed directly where those distinctions matter.
+
+A `restart` stops the Host and launches a new process on the same store. A `kill` sends SIGKILL without a graceful stop. Killing a render-started Host happens after the peer has observed its `push/render`; recovery must materialize the admitted fallback without a second render. The pending-deferred recovery scenario permits either a retained pending render or conservative fallback delivery, while requiring exactly one materialization.
+
+The default profile establishes `none` from `initial`, keeps untracked history conservative otherwise, uses conservative recovery/shared consumption, retains 64 notices, advertises a one-hour retry window, and uses the actual five-second render deadline. These are profile choices, not new protocol constants.
+
+Ten principal scenarios are **unexercised** by this adapter:
+
+| RFC label | Precondition the adapter does not construct |
+|---|---|
+| 15 | A Host advertising no `channelScopedPush` support |
+| 23 | A fallback materialized but still unread; the separate supporting scenario checks a late result after consumption |
+| 27e, before-consumption variant | A materialized rendered occurrence still unread |
+| 31, 34a | Restart with loss of consumed-history knowledge |
+| 34c | A hard coalescing-subject capacity boundary |
+| 36, 44 | A declared finite postponement bound with a controlled clock |
+| 46 | A Host choosing per-context rather than conservative shared consumption |
+| 48 | Changing a previously advertised two-hour retry guarantee to one hour |
+
+These rows remain in the corpus with their actions and oracles. Another adapter can exercise them when it establishes their stated preconditions. Their absence from the tested profile proves neither compliance nor noncompliance with those requirements. In particular, the suite makes no all-green starvation or retry-window-change claim for the reference Host. Vector 27 checks the synthetic notice-only conformance server's dropped-count report and is labeled `server-fixture`; vector 37 records audit observations without making an optional retention policy mandatory.
+
+#### Consume the vectors
+
+Each case has `id`, `contract`, `kind`, and `variants`. A variant has `name`, `setup`, `requires`, and `steps`. Steps have stable `id` values and an `op`; wire sends carry the unmodified JSON-RPC `method` and `params`. A receiving implementation gets those values, not a locally reconstructed interpretation of the expected state.
+
+The supplied adapter implements these controls:
+
+- `send` and `register` deliver wire requests; `channelTool` invokes an actual Host channel tool.
+- `render` selects an immediate, empty, held, error, inference-requesting, or notice-summary peer response. `waitRender` and `releaseRender` coordinate on actual requests.
+- `turn` drives existing wakes; `assemble` requests and drives a Host inference. `startTurn` and `joinTurn` expose a render in flight. `suppressWake` keeps a selected recipient idle.
+- `restart`, `kill`, `disconnect`, `reconnect`, and `reassign` alter the real lifecycle boundary. `grant` and `disableFeature` alter the actual admission policy.
+- `failNextModel`, `compress`, `wait`, and `observe` supply the indicated fixture condition or observation.
+
+Conditional scenarios also name controls their adapter must provide: `materializeWithoutConsume` stops at that model-visibility boundary; `restartWithoutHistory` preserves accepted content while losing consumed-history knowledge; `fillCapacity` establishes a declared hard subject limit; `consumeContext` assembles one recipient only; `advertiseWindow`, `reconnectWithWindow`, and `advanceClock` exercise the specified guarantee across elapsed time; `continuousReplacements` and `unrelatedDebounce` measure provider delivery under their declared quiet periods and postponement bound. Advertising a capability in an adapter profile is a claim that the adapter genuinely constructs that condition, not permission to substitute an expected answer.
+
+Expectations address raw observations by dotted `path`. `eq` compares a value exactly; `oneOf` allows the listed alternatives; `sameAs` compares with an earlier step's observed value. Text checks use `includes`, `excludes`, `counts`, and `order`. `requestText` is the last provider request's messages; `allRequestText` covers every observed request, so superseded or private content cannot pass merely by disappearing from a later request. `allContextText` covers stored context. `recoveryContent` permits either the new occurrence alone or one preserved old occurrence followed by the new one; `exactlyOneOf` permits one of the listed materializations, once. Event-identity checks inspect every stored copy with that `eventId`; model-specific checks select the actual request's `config.model`.
+
+For another implementation, pass `--adapter /path/to/adapter.mjs`. Export `createAdapter(root)`, returning `identity`, `profile` (including its `capabilities`), and `open(setup)`. Each opened session supplies `step(action)` and `close()`; the reference adapter and worker define the observation shape. Keep state-transition decisions in the implementation under test and expected-value comparisons in the runner. Other languages can consume the same wire/actions and expected properties directly.
+
 ## 15. Implementation notes (non-normative)
 
 - **agent-framework.** [PR #196](https://github.com/anima-research/agent-framework/pull/196)

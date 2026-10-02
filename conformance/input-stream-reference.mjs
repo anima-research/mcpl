@@ -96,7 +96,7 @@ export class InputStreamHost {
         throw new Rejection(-32002, "Capability denied", { capability });
       }
     }
-    const channel = this.channels[channelId];
+    const channel = Object.hasOwn(this.channels, channelId) ? this.channels[channelId] : undefined;
     if (!channel) throw new Rejection(-32023, "Unknown channel");
     if (!["inbound", "bidirectional"].includes(channel.direction)
       || !channel.permitted || !channel.senders.includes(senderId)) {

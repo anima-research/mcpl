@@ -427,7 +427,7 @@ bun run conformance/check-input-streams.mjs
 node conformance/check-input-streams.mjs
 ```
 
-Success prints `INPUT STREAM CONFORMANCE OK` with the advertisement, trace, and assertion counts. Any failed assertion exits nonzero. The optional first argument selects another vector JSON file.
+Success prints `INPUT STREAM CONFORMANCE OK` with the advertisement, trace, API-check, and assertion counts. Any failed assertion exits nonzero. The optional first argument selects another vector JSON file.
 
 ### Consume the data in another implementation
 

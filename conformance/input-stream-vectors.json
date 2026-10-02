@@ -7844,6 +7844,169 @@
           }
         }
       ]
+    },
+    {
+      "name": "unregistered-dictionary-name-constructor",
+      "description": "Inherited Object members are not registered channels.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "constructor",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "error": {
+              "code": -32023,
+              "message": "Unknown channel"
+            }
+          },
+          "expectState": {
+            "streams": {},
+            "messages": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "unregistered-dictionary-name-__proto__",
+      "description": "Inherited Object members are not registered channels.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "__proto__",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "error": {
+              "code": -32023,
+              "message": "Unknown channel"
+            }
+          },
+          "expectState": {
+            "streams": {},
+            "messages": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "registered-dictionary-name",
+      "description": "A genuinely registered own entry remains usable even when its name matches an Object prototype member.",
+      "config": {
+        "channels": {
+          "__proto__": {
+            "identity": "proto-channel",
+            "generation": 1,
+            "permitted": true,
+            "senders": [
+              "alice"
+            ],
+            "direction": "inbound"
+          }
+        }
+      },
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "__proto__",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "transportEpoch": "epoch-1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "__proto__",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "Hello"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "completed",
+              "messageId": "m1",
+              "revision": 1,
+              "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+            }
+          },
+          "expectState": {
+            "messages": [
+              {
+                "channelId": "__proto__",
+                "messageId": "m1",
+                "author": {
+                  "id": "alice",
+                  "name": "Alice"
+                },
+                "timestamp": "1970-01-01T00:00:00.900Z",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Hello"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

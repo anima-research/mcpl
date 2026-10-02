@@ -86,3 +86,43 @@ test('an evicted-id alias or an undefined tool error cannot pass', () => {
   assert.throws(() => check(c, { ...out, fresh: { ...out.fresh, refId: 'old' } }), /reused/);
   assert.throws(() => check(c, { ...out, unknownError: { success: true } }));
 });
+for (const lane of ['push', 'wake', 'history']) {
+  test('raw control and bidi characters are checked in ' + lane + ' values', () => {
+    const c = { ...vector, expect: { ...vector.expect, cleanLabel: true } };
+    for (const value of ['\u0000', '\u0007', '\u0085', '\u202e']) {
+      const out = observation();
+      if (lane === 'push') out.before.push[0].text += value;
+      else out.before[lane] += value;
+      assert.throws(() => check(c, out), /unsafe display-label/);
+    }
+  });
+  test('mismatched payload cannot appear before or after fetch in ' + lane, () => {
+    const c = {
+      ...vector, operation: 'fetch',
+      expect: { ...vector.expect, ok: false, requests: 0, hidden: ['mismatched-body', 'bWlzbWF0Y2hlZC1ib2R5'] },
+    };
+    for (const stage of ['before', 'after']) {
+      for (const body of c.expect.hidden) {
+        const out = { ...observation(), after: structuredClone(observation().before), outcome: { ok: false }, saves: [] };
+        if (lane === 'push') out[stage].push[0].text += body;
+        else out[stage][lane] += body;
+        assert.throws(() => check(c, out), /forbidden/);
+      }
+    }
+  });
+}
+test('truncation markers and thresholds come from the declared display profile', () => {
+  const c = { ...vector, blocks: [{ ...vector.blocks[0], name: 'a'.repeat(255) }], expect: { ...vector.expect, displayField: 'name' } };
+  const render = text => {
+    const out = observation();
+    out.before = { push: [{ type: 'text', text }], wake: text, history: text };
+    return out;
+  };
+  for (const marker of ['…', '[truncated]']) {
+    const profile = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 120 }, truncationMarkers: [marker] } };
+    checkObservation(c, render('[ref_fixture] ' + 'a'.repeat(119) + marker), network, profile);
+    assert.throws(() => checkObservation(c, render('[ref_fixture] ' + 'a'.repeat(120)), network, profile), /must be marked/);
+  }
+  const wider = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 255 }, truncationMarkers: ['[truncated]'] } };
+  checkObservation(c, render('[ref_fixture] ' + 'a'.repeat(255)), network, wider);
+});

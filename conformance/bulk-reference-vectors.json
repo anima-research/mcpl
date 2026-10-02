@@ -203,7 +203,9 @@
         "stub": true,
         "hidden": [
           "$ORIGIN",
-          "fixture-secret"
+          "fixture-secret",
+          "RIFF0000WAVEpayload",
+          "UklGRjAwMDBXQVZFcGF5bG9hZA=="
         ],
         "ok": false,
         "requests": 1
@@ -994,7 +996,7 @@
           "$ORIGIN",
           "fixture-secret"
         ],
-        "truncationMarked": true
+        "displayField": "name"
       }
     },
     {
@@ -1051,7 +1053,7 @@
           "$ORIGIN",
           "fixture-secret"
         ],
-        "truncationMarked": true
+        "displayField": "mimeType"
       }
     },
     {

@@ -86,6 +86,14 @@ export async function fixture(response = {}) {
   };
 }
 
+// Inspect values as the model receives them, rather than JSON escape sequences.
+export function semanticStrings(value) {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(semanticStrings);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(semanticStrings);
+  return [];
+}
+
 export function checkObservation(c, out, network, adapter) {
   const e = c.expect;
   if (c.operation === 'registry') {
@@ -105,7 +113,7 @@ export function checkObservation(c, out, network, adapter) {
   assert.ok(out.before && typeof out.before.history === 'string' && typeof out.before.wake === 'string' && Array.isArray(out.before.push), 'adapter must observe both model-facing conversion paths');
   const views = [out.before, ...(out.after ? [out.after] : [])];
   for (const view of views) {
-    for (const text of [JSON.stringify(view.push), view.wake, view.history]) {
+    for (const text of [semanticStrings(view.push).join(''), view.wake, view.history]) {
       assert.ok(text.length <= adapter.maxViewChars, 'view exceeds declared Host display bound');
       for (const forbidden of e.hidden ?? []) assert.ok(!text.includes(forbidden), 'model-visible forbidden value: ' + forbidden);
       for (const included of e.includes ?? []) assert.ok(text.includes(included), 'missing text: ' + included);
@@ -117,8 +125,17 @@ export function checkObservation(c, out, network, adapter) {
         const inline = Buffer.from(e.stubOrInlineBase64, 'base64').toString('utf8');
         assert.ok(out.records.some(record => text.includes(record.refId)) || text.includes(inline) || text.includes(e.stubOrInlineBase64), 'verified ref may inline or retain its stub');
       }
-      if (e.truncationMarked) assert.ok(text.includes('…'), 'display truncation must be marked');
-      if (e.cleanLabel) assert.ok(!/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(view.history), 'unsafe display-label characters');
+      if (e.displayField) {
+        // This case uses a schema-valid ASCII label. Its shortening threshold
+        // and recognized marks belong to the declared Host profile, not MCPL.
+        const profile = adapter.displayProfile;
+        assert.ok(profile && Number.isSafeInteger(profile.fieldChars[e.displayField]) && profile.fieldChars[e.displayField] > 0, 'missing Host field display limit');
+        const original = c.blocks[0][e.displayField];
+        if (original.length > profile.fieldChars[e.displayField]) {
+          assert.ok(profile.truncationMarkers.some(mark => text.includes(mark)), 'display truncation must be marked according to the declared Host profile');
+        }
+      }
+      if (e.cleanLabel) assert.ok(!/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(text), 'unsafe display-label characters');
     }
   }
   if (e.kind) assert.equal(out.parsed[0].kind, e.kind);
@@ -201,6 +218,7 @@ export async function main(argv) {
   const module = await import(pathToFileURL(resolve(options.adapter ?? resolve(here, 'agent-framework-bulk-references.mjs'))).href);
   const adapter = await module.createAdapter(resolve(options.framework));
   assert.ok(Number.isSafeInteger(adapter.maxViewChars) && adapter.maxViewChars > 0);
+  assert.ok(Array.isArray(adapter.displayProfile?.truncationMarkers) && adapter.displayProfile.truncationMarkers.length > 0 && adapter.displayProfile.truncationMarkers.every(mark => typeof mark === 'string' && mark.length > 0), 'adapter must declare nonempty truncation markers');
   const ajvPackage = await readJson(resolve(dirname(options.ajv), '../package.json'));
   const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'check-bulk-references.mjs'];
   const suiteHashes = {};
@@ -213,7 +231,7 @@ export async function main(argv) {
     vectorRevision: execFileSync('git', ['-C', here, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     runtime: process.version, bun: process.versions.bun ?? null,
     validator: { name: 'Ajv', version: ajvPackage.version, strict: true, strictRequired: false, schema: 'SPEC.md Appendix B.1' },
-    legacySchemaRevision: legacy.sourceRevision, host: adapter.identity, results: [],
+    legacySchemaRevision: legacy.sourceRevision, host: adapter.identity, displayProfile: adapter.displayProfile, results: [],
   };
   for (const raw of vectors.cases) {
     const network = await fixture(raw.response);

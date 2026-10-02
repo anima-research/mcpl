@@ -47,6 +47,7 @@ export async function createAdapter(root) {
       scope: 'classification, PushHandler wake/queue content, persisted tool history, registry, fetch_reference dispatch, ReferenceFetcher' },
     // This adapter's tested display policy, not a protocol-wide limit.
     maxViewChars: 2048,
+    displayProfile: { fieldChars: { name: 120, mimeType: 120 }, truncationMarkers: ['…'] },
     async observe(input, environment) {
       const { operation, blocks } = input;
       const parsed = blocks.map(refs.classifyBlock);

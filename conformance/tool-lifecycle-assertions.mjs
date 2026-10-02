@@ -231,13 +231,11 @@ export function verify(vector, result, hostInfo) {
     const disabled = policy.disabled ?? [];
     assert.ok(
       disabled.includes(vector.disabledFeature.name) &&
-        result.diagnostics.some((line) =>
-          line.includes(
-            "obs/" +
-              vector.disabledFeature.name +
-              " disabled: " +
-              vector.disabledFeature.reason,
-          ),
+        result.disabledFeatures?.some(
+          (feature) =>
+            feature.server === "obs" &&
+            feature.name === vector.disabledFeature.name &&
+            feature.reason === vector.disabledFeature.reason,
         ),
       "actual invalid_uses policy",
     );
@@ -270,10 +268,9 @@ export function verify(vector, result, hostInfo) {
     approvalDuration: approvalDuration.length ? approvalDuration : undefined,
     diagnostic: vector.diagnostic
       ? {
-          hint: vector.diagnostic,
-          observed: result.diagnostics.some((line) =>
-            line.includes(vector.diagnostic),
-          ),
+          code: vector.diagnostic,
+          observed:
+            result.diagnosticCodes?.includes(vector.diagnostic) ?? false,
         }
       : undefined,
     recommendedReuse: vector.recommendedReuse

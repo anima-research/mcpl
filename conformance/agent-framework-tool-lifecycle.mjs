@@ -393,7 +393,41 @@ export async function loadHost(root) {
           });
         const peers = {};
         for (const [id, path] of logs) peers[id] = await logAt(path);
-        return { peers, hostCalls, responses, grants, diagnostics, traces };
+        // Framework reports invalid_uses in diagnostics rather than the wire policy.
+        // Normalize the observed reason here; preserve its raw source in the report.
+        const disabledFeatures = diagnostics.flatMap((line) => {
+          const match =
+            /^\[mcpl\] ([^/]+)\/(.+) disabled: (invalid_uses)\b/.exec(line);
+          return match
+            ? [
+                {
+                  server: match[1],
+                  name: match[2],
+                  reason: match[3],
+                  source: line,
+                },
+              ]
+            : [];
+        });
+        const diagnosticCodes = [];
+        if (
+          diagnostics.some((line) =>
+            line.includes("granted without toolLifecycle.observe"),
+          )
+        )
+          diagnosticCodes.push("inputs-without-observe");
+        if (diagnostics.some((line) => line.includes("narrowed to NO tools")))
+          diagnosticCodes.push("inputs-unnarrowed");
+        return {
+          diagnosticCodes,
+          peers,
+          hostCalls,
+          responses,
+          grants,
+          diagnostics,
+          traces,
+          disabledFeatures,
+        };
       } catch (error) {
         error.message += "\nHost tail:\n" + diagnostics.slice(-8).join("\n");
         throw error;

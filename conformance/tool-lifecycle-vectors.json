@@ -518,7 +518,7 @@
       "expect": {
         "obs": []
       },
-      "diagnostic": "granted without toolLifecycle.observe"
+      "diagnostic": "inputs-without-observe"
     },
     {
       "rfcVector": 9,
@@ -586,7 +586,7 @@
           }
         ]
       },
-      "diagnostic": "narrowed to NO tools"
+      "diagnostic": "inputs-unnarrowed"
     },
     {
       "rfcVector": 10,

@@ -57,6 +57,27 @@ function observation(number) {
     },
   };
 }
+test("disabled reason is semantic rather than diagnostic wording", () => {
+  const result = {
+    peers: {
+      obs: [
+        { event: "policy", params: { disabled: ["bad"] } },
+        { event: "barrier" },
+      ],
+    },
+    hostCalls: [
+      { event: "call", key: "a" },
+      { event: "result", key: "a" },
+    ],
+    responses: [],
+    grants: [{ server: "obs", stage: "initial", paths: [] }],
+    diagnostics: [],
+    disabledFeatures: [{ server: "obs", name: "bad", reason: "invalid_uses" }],
+  };
+  verify(vectors[10], result, {});
+  result.disabledFeatures[0].reason = "operator_disabled";
+  assert.throws(() => verify(vectors[10], result, {}), /invalid_uses policy/);
+});
 test("approval refused: zero executions, pending then aborted", () => {
   verify(vectors[22], observation(23), {});
 });

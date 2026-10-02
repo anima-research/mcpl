@@ -1,9 +1,10 @@
 // These are harness regression tests, not another Host implementation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { expand, checkObservation } from './check-bulk-references.mjs';
 
-const adapter = { maxViewChars: 256 };
+const adapter = { maxViewChars: 256, credentialPolicy: 'connection-bearer' };
 const network = { requests: [], redirected: [] };
 const vector = {
   operation: 'render',
@@ -54,26 +55,19 @@ test('optional-field truncation cannot pass as rejection', () => {
 });
 test('partial bytes from a refused fetch cannot pass', () => {
   const c = { ...vector, operation: 'fetch', expect: { ...vector.expect, ok: false, requests: 0 } };
-  const out = { ...observation(), outcome: { ok: false }, saves: [{ name: 'partial' }] };
+  const out = { ...observation(), after: structuredClone(observation().before), outcome: { ok: false }, saves: [{ name: 'partial' }] };
   assert.throws(() => check(c, out), /partial/);
 });
 test('cross-origin forwarding of a connection credential cannot pass', () => {
   const c = { ...vector, operation: 'fetch', expect: { ...vector.expect, redirectSafe: true } };
-  const out = { ...observation(), outcome: { ok: false }, saves: [] };
+  const out = { ...observation(), after: structuredClone(observation().before), outcome: { ok: false }, saves: [] };
   const net = { requests: [{ authorization: 'Bearer fixture-secret' }], redirected: [{ authorization: 'Bearer fixture-secret' }] };
   assert.throws(() => check(c, out, net), /credential leak/);
 });
 test('a continued stream must close before its producer finishes', () => {
   const c = { ...vector, operation: 'fetch', response: { stream: { chunks: 64 } }, expect: { ...vector.expect, abortStream: true } };
-  const out = { ...observation(), outcome: { ok: false }, saves: [] };
+  const out = { ...observation(), after: structuredClone(observation().before), outcome: { ok: false }, saves: [] };
   assert.throws(() => check(c, out, { ...network, streamClosed: true, chunksSent: 64 }), /buffer/);
-});
-test('both permitted verified-ref presentations pass', () => {
-  const c = { ...vector, operation: 'render', expect: { stubOrInlineBase64: 'cGF5bG9hZA==' } };
-  check(c);
-  const out = observation();
-  out.before = { push: [{ type: 'text', text: 'payload' }], wake: 'payload', history: 'payload' };
-  check(c, out);
 });
 test('an evicted-id alias or an undefined tool error cannot pass', () => {
   const c = { operation: 'registry', blocks: [{ uri: 'https://example.invalid/a' }], expect: {} };
@@ -125,4 +119,65 @@ test('truncation markers and thresholds come from the declared display profile',
   }
   const wider = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 255 }, truncationMarkers: ['[truncated]'] } };
   checkObservation(c, render('[ref_fixture] ' + 'a'.repeat(255)), network, wider);
+});
+const corpus = JSON.parse(readFileSync(new URL('./bulk-reference-vectors.json', import.meta.url), 'utf8'));
+const corpusCase = id => expand(corpus.cases.find(c => c.id === id), 'http://fixture.invalid');
+const viewOf = text => ({ push: [{ type: 'text', text }], wake: text, history: text });
+const addVisible = (view, lane, text) => { if (lane === 'push') view.push[0].text += text; else view[lane] += text; };
+function successfulVerifiedReference(c) {
+  const out = observation(), data = c.expect.decodedBase64;
+  out.after = structuredClone(out.before);
+  Object.assign(out.records[0], { fetchedPath: 'scratch/ref_fixture.wav', verifiedBytes: Buffer.from(data, 'base64').length, verifiedMimeType: 'audio/wav', digestVerified: true });
+  out.outcome = { ok: true, path: out.records[0].fetchedPath, bytes: out.records[0].verifiedBytes, mimeType: 'audio/wav', digestVerified: true };
+  out.saves = [{ name: 'ref_fixture.wav', base64: data, mimeType: 'audio/wav' }];
+  return out;
+}
+const authenticatedRequest = { requests: [{ authorization: 'Bearer fixture-secret' }], redirected: [] };
+test('the verified-ref corpus permits stub or inline only after the fetch', () => {
+  const c = corpusCase('03-verified-ref');
+  for (const after of ['[ref_fixture] attachment', c.expect.decodedBase64, Buffer.from(c.expect.decodedBase64, 'base64').toString('utf8')]) {
+    const out = successfulVerifiedReference(c);
+    out.after = viewOf(after);
+    check(c, out, authenticatedRequest);
+  }
+  const out = successfulVerifiedReference(c); delete out.after;
+  assert.throws(() => check(c, out, authenticatedRequest), /post-fetch/);
+});
+for (const lane of ['push', 'wake', 'history']) {
+  test('unverified inline bytes fail in the corpus before-fetch ' + lane + ' view', () => {
+    const c = corpusCase('03-verified-ref');
+    for (const leaked of [c.expect.decodedBase64, Buffer.from(c.expect.decodedBase64, 'base64').toString('utf8')]) {
+      const out = successfulVerifiedReference(c);
+      addVisible(out.before, lane, leaked);
+      assert.throws(() => check(c, out, authenticatedRequest), /forbidden/);
+    }
+  });
+  test('the inline-contradiction corpus excludes decoded data and URI in ' + lane, () => {
+    for (const id of ['02-inline-image', '02-inline-audio', 'schema-both-uri-and-data']) {
+      const c = corpusCase(id), block = c.blocks[0];
+      const forbidden = [block.data, Buffer.from(block.data, 'base64').toString('utf8'), ...(block.uri ? [block.uri] : [])];
+      for (const text of forbidden) {
+        const out = observation();
+        addVisible(out.before, lane, text);
+        assert.throws(() => check(c, out), /forbidden/, id + ' must withhold ' + text);
+      }
+    }
+  });
+}
+test('same-origin credential omission is permitted under its declared profile', () => {
+  const c = corpusCase('03-verified-ref'), out = successfulVerifiedReference(c);
+  const omit = { ...adapter, credentialPolicy: 'omit' };
+  const anonymous = { requests: [{ authorization: null }], redirected: [] };
+  checkObservation(c, out, anonymous, omit);
+  assert.throws(() => checkObservation(c, out, authenticatedRequest, omit), /credential-use profile/);
+  assert.throws(() => checkObservation(c, out, anonymous, adapter), /credential-use profile/);
+});
+test('cross-origin credentials remain forbidden under either profile', () => {
+  const c = corpusCase('12-cross-origin-redirect');
+  const out = { ...observation(), after: structuredClone(observation().before), outcome: { ok: false }, saves: [] };
+  for (const policy of ['connection-bearer', 'omit']) {
+    const profile = { ...adapter, credentialPolicy: policy };
+    const net = { requests: [{ authorization: policy === 'connection-bearer' ? 'Bearer fixture-secret' : null }], redirected: [{ authorization: 'Bearer fixture-secret' }] };
+    assert.throws(() => checkObservation(c, out, net, profile), /cross-origin credential leak/);
+  }
 });

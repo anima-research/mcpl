@@ -51,7 +51,8 @@
       "expect": {
         "stub": false,
         "hidden": [
-          "U0VDUkVULVBheWxvYWQ="
+          "U0VDUkVULVBheWxvYWQ=",
+          "SECRET-Payload"
         ]
       }
     },
@@ -73,7 +74,8 @@
       "expect": {
         "stub": false,
         "hidden": [
-          "U0VDUkVULVBheWxvYWQ="
+          "U0VDUkVULVBheWxvYWQ=",
+          "SECRET-Payload"
         ]
       }
     },
@@ -144,7 +146,16 @@
         "digestVerified": true,
         "requests": 1,
         "savedMime": "audio/wav",
-        "stubOrInlineBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+        "before": {
+          "stub": true,
+          "hidden": [
+            "UklGRjAwMDBXQVZFcGF5bG9hZA==",
+            "RIFF0000WAVEpayload"
+          ]
+        },
+        "after": {
+          "stubOrInlineBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+        }
       },
       "response": {
         "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
@@ -1163,7 +1174,9 @@
       "expect": {
         "stub": false,
         "hidden": [
-          "U0VDUkVU"
+          "U0VDUkVU",
+          "SECRET",
+          "$ORIGIN/case/$CASE/payload"
         ]
       }
     },

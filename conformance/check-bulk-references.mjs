@@ -114,31 +114,33 @@ export function checkObservation(c, out, network, adapter) {
     return;
   }
   assert.ok(out.before && typeof out.before.history === 'string' && typeof out.before.wake === 'string' && Array.isArray(out.before.push), 'adapter must observe both model-facing conversion paths');
-  const views = [out.before, ...(out.after ? [out.after] : [])];
-  for (const view of views) {
+  if (c.operation === 'fetch') assert.ok(out.after && typeof out.after.history === 'string' && typeof out.after.wake === 'string' && Array.isArray(out.after.push), 'fetch must observe post-fetch model views');
+  const views = [['before', out.before], ...(out.after ? [['after', out.after]] : [])];
+  for (const [stage, view] of views) {
+    const visible = { ...e, ...e[stage], hidden: [...(e.hidden ?? []), ...(e[stage]?.hidden ?? [])] };
     for (const text of [semanticStrings(view.push).join(''), view.wake, view.history]) {
       assert.ok(text.length <= adapter.maxViewChars, 'view exceeds declared Host display bound');
-      for (const forbidden of e.hidden ?? []) assert.ok(!text.includes(forbidden), 'model-visible forbidden value: ' + forbidden);
-      for (const included of e.includes ?? []) assert.ok(text.includes(included), 'missing text: ' + included);
-      if (e.stub) {
+      for (const forbidden of visible.hidden ?? []) assert.ok(!text.includes(forbidden), 'model-visible forbidden value: ' + forbidden);
+      for (const included of visible.includes ?? []) assert.ok(text.includes(included), 'missing text: ' + included);
+      if (visible.stub) {
         assert.ok(out.records.length > 0, 'reference record absent');
         for (const record of out.records) assert.ok(text.includes(record.refId), 'stub must identify its Host record');
       }
-      if (e.stubOrInlineBase64) {
-        const inline = Buffer.from(e.stubOrInlineBase64, 'base64').toString('utf8');
-        assert.ok(out.records.some(record => text.includes(record.refId)) || text.includes(inline) || text.includes(e.stubOrInlineBase64), 'verified ref may inline or retain its stub');
+      if (visible.stubOrInlineBase64) {
+        const inline = Buffer.from(visible.stubOrInlineBase64, 'base64').toString('utf8');
+        assert.ok(out.records.some(record => text.includes(record.refId)) || text.includes(inline) || text.includes(visible.stubOrInlineBase64), 'verified ref may inline or retain its stub');
       }
-      if (e.displayField) {
+      if (visible.displayField) {
         // This case uses a schema-valid ASCII label. Its shortening threshold
         // and recognized marks belong to the declared Host profile, not MCPL.
         const profile = adapter.displayProfile;
-        assert.ok(profile && Number.isSafeInteger(profile.fieldChars[e.displayField]) && profile.fieldChars[e.displayField] > 0, 'missing Host field display limit');
-        const original = c.blocks[0][e.displayField];
-        if (original.length > profile.fieldChars[e.displayField]) {
+        assert.ok(profile && Number.isSafeInteger(profile.fieldChars[visible.displayField]) && profile.fieldChars[visible.displayField] > 0, 'missing Host field display limit');
+        const original = c.blocks[0][visible.displayField];
+        if (original.length > profile.fieldChars[visible.displayField]) {
           assert.ok(profile.truncationMarkers.some(mark => text.includes(mark)), 'display truncation must be marked according to the declared Host profile');
         }
       }
-      if (e.cleanLabel) assert.ok(!/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(text), 'unsafe display-label characters');
+      if (visible.cleanLabel) assert.ok(!/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(text), 'unsafe display-label characters');
     }
   }
   if (e.kind) assert.equal(out.parsed[0].kind, e.kind);
@@ -156,8 +158,13 @@ export function checkObservation(c, out, network, adapter) {
   assert.ok(out.outcome && Array.isArray(out.saves), 'fetch observation missing');
   if ('ok' in e) assert.equal(out.outcome.ok, e.ok, out.outcome.error ?? 'unexpected successful fetch');
   if ('requests' in e) assert.equal(network.requests.length, e.requests, 'request count');
-  // The fixture binding has a reusable credential. Its visibility ends here.
-  if (network.requests.length) assert.equal(network.requests[0].authorization, 'Bearer fixture-secret');
+  // §19.6.1 permits applying the connection credential; a Host may omit it.
+  // This fixture is public, so credential use is an explicit tested profile.
+  if (network.requests.length) {
+    assert.ok(['connection-bearer', 'omit'].includes(adapter.credentialPolicy), 'declare the Host credential-use policy');
+    const authorization = adapter.credentialPolicy === 'connection-bearer' ? 'Bearer fixture-secret' : null;
+    for (const request of network.requests) assert.equal(request.authorization, authorization, 'same-origin credential-use profile');
+  }
   if (e.redirectSafe) {
     assert.equal(network.requests.length, 1, 'initial redirect response must be exercised');
     assert.ok(network.redirected.length <= 1, 'redirect traversal must be bounded');
@@ -222,6 +229,7 @@ export async function main(argv) {
   const adapter = await module.createAdapter(resolve(options.framework));
   assert.ok(Number.isSafeInteger(adapter.maxViewChars) && adapter.maxViewChars > 0);
   assert.ok(Array.isArray(adapter.displayProfile?.truncationMarkers) && adapter.displayProfile.truncationMarkers.length > 0 && adapter.displayProfile.truncationMarkers.every(mark => typeof mark === 'string' && mark.length > 0), 'adapter must declare nonempty truncation markers');
+  assert.ok(['connection-bearer', 'omit'].includes(adapter.credentialPolicy), 'adapter must declare credentialPolicy');
   const ajvPackage = await readJson(resolve(dirname(options.ajv), '../package.json'));
   const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'check-bulk-references.mjs'];
   const suiteHashes = {};
@@ -234,7 +242,7 @@ export async function main(argv) {
     vectorRevision: execFileSync('git', ['-C', here, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     runtime: process.version, bun: process.versions.bun ?? null,
     validator: { name: 'Ajv', version: ajvPackage.version, strict: true, strictRequired: false, schema: 'SPEC.md Appendix B.1' },
-    legacySchemaRevision: legacy.sourceRevision, host: adapter.identity, displayProfile: adapter.displayProfile, results: [],
+    legacySchemaRevision: legacy.sourceRevision, host: adapter.identity, displayProfile: adapter.displayProfile, credentialPolicy: adapter.credentialPolicy, results: [],
   };
   for (const raw of vectors.cases) {
     const network = await fixture(raw.response);

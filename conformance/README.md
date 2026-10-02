@@ -429,6 +429,8 @@ node conformance/check-input-streams.mjs
 
 Success prints `INPUT STREAM CONFORMANCE OK` with the advertisement, trace, API-check, and assertion counts. Any failed assertion exits nonzero. The optional first argument selects another vector JSON file.
 
+The direct JavaScript API checks are separate from the wire traces. They cover inherited advertisement members and reference-model duration configuration, including non-JSON values such as NaN and Infinity. The resolved `maxDurationMs` fixture setting must be a positive safe integer; invalid settings throw a configuration error before requests are handled. A one-millisecond lease must open and complete before expiry, and a large valid duration remains capped by the requested deadline.
+
 ### Consume the data in another implementation
 
 The file's `defaults` describe the synthetic Host environment. Each trace starts with a fresh Host. Its optional `config` shallowly overrides defaults, so a channel mapping replaces the whole default mapping. IDs and clock values are deterministic fixture inputs, not production ID-generation advice.

@@ -79,7 +79,8 @@ export class InputStreamHost {
     this.mode = config.mode ?? "volatile";
     this.finalAccepted = config.finalAccepted ?? true;
     if (!MODES.has(this.mode) || !Number.isFinite(this.maxUpdateHz) || this.maxUpdateHz <= 0
-      || !Number.isSafeInteger(this.maxChars) || this.maxChars <= 0) throw Error("Invalid fixture configuration");
+      || !Number.isSafeInteger(this.maxChars) || this.maxChars <= 0
+      || !Number.isSafeInteger(this.maxDurationMs) || this.maxDurationMs <= 0) throw Error("Invalid fixture configuration");
     this.streams = new Map();
     this.messages = [];
     this.committedKeys = new Set();

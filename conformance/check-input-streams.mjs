@@ -24,6 +24,45 @@ assert.deepEqual(advertised({ channels: Object.assign(
   Object.create({ inputStreaming: true }), { incoming: true },
 ) }), { incoming: true, streaming: false }, "inherited member is not advertisement");
 let assertions = 1;
+let apiChecks = 1;
+// Host fixture configuration is not producer wire input. Reject invalid durations
+// before an open could return an expired, fractional, or non-finite deadline.
+const invalidDurations = [
+  ["zero", 0], ["negative", -1], ["fractional", 0.5], ["NaN", NaN],
+  ["positive infinity", Infinity], ["negative infinity", -Infinity],
+  ["unsafe integer", Number.MAX_SAFE_INTEGER + 1], ["string", "1000"],
+  ["true", true], ["false", false], ["object", {}], ["array", []],
+];
+for (const [label, maxDurationMs] of invalidDurations) {
+  assert.throws(() => new InputStreamHost({ maxDurationMs }),
+    /Invalid fixture configuration/, "invalid duration: " + label);
+  apiChecks++;
+  assertions++;
+}
+const openParams = {
+  streamId: "s", channelId: "voice:lobby", messageId: "m", sender: { id: "alice" },
+  contentType: "text/plain", startedAt: 900, expiresAt: 5000,
+};
+const shortLease = new InputStreamHost({ maxDurationMs: 1 });
+assert.deepEqual(shortLease.request("open", openParams), { result: {
+  accepted: true, streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",
+  expiresAt: 1001, maxUpdateHz: 10, maxChars: 100, mode: "volatile",
+} }, "minimum integer duration opens a future lease");
+assert.deepEqual(shortLease.request("complete", {
+  streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",
+  channelId: "voice:lobby", senderId: "alice", contentType: "text/plain",
+  startedAt: 900, expiresAt: 1001, revision: 1, text: "",
+}), { result: {
+  accepted: true, status: "completed", messageId: "m", revision: 1,
+  contentDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+} }, "minimum integer duration permits completion before expiry");
+apiChecks++;
+assertions += 2;
+assert.equal(new InputStreamHost({ maxDurationMs: Number.MAX_SAFE_INTEGER })
+  .request("open", openParams).result.expiresAt, 5000,
+  "maximum safe integer duration remains capped by the requested deadline");
+apiChecks++;
+assertions++;
 const names = new Set();
 for (const vector of vectors.advertisements) {
   assert.ok(!names.has(vector.name), "Duplicate vector name");
@@ -58,4 +97,4 @@ for (const trace of vectors.traces) {
   }
 }
 console.log("INPUT STREAM CONFORMANCE OK (" + vectors.advertisements.length
-  + " advertisement vectors, " + vectors.traces.length + " traces, 1 API check, " + assertions + " assertions)");
+  + " advertisement vectors, " + vectors.traces.length + " traces, " + apiChecks + " API checks, " + assertions + " assertions)");

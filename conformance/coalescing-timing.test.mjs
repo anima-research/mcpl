@@ -4,7 +4,7 @@ import { checkReplacementTiming, checkOrdinaryTiming } from './coalescing-timing
 import { check, runScenario } from './check-event-coalescing.mjs';
 
 const scheduler = { running: true, quiesced: false, gateQuiesced: false };
-const request = (at, content) => ({ observedAt: at, assemblyStartedAt: at - 2, messages: [{ content: [{ type: 'text', text: content }] }] });
+const request = (at, content) => ({ recipient: 'agent', observedAt: at, assemblyStartedAt: at - 2, messages: [{ content: [{ type: 'text', text: content }] }] });
 function run(start, count, deliveredAt) {
   const admissions = Array.from({ length: count }, (_, i) => ({
     sentAt: start + 100 * i, acceptedAt: start + 100 * i + 2, content: 'CURRENT_' + i + '_END',
@@ -12,7 +12,7 @@ function run(start, count, deliveredAt) {
     binding: 'binding', wire: { server: 'editor', method: 'push/event', params: { featureSet: 'doc', coalesce: { key: 'K' } } },
     decision: { matchedPolicy: 'subject', behavior: 'debounce:300', timestamp: start + 100 * i },
   }));
-  return { policyName: 'subject', admissions, trafficEndedAt: start + count * 100 + 2,
+  return { recipient: 'agent', policyName: 'subject', admissions, trafficEndedAt: start + count * 100 + 2,
     states: Array.from({ length: count + 2 }, () => ({ ...scheduler })),
     requests: [request(deliveredAt, admissions.at(-1).content)], gateEvents: [] };
 }
@@ -61,7 +61,7 @@ test('paused delivery and a campaign shorter than the bound cannot establish tim
 function paired() {
   const phase = start => ({
     quietMs: 200, ordinaryPolicy: 'ordinary', scheduler: { running: true, quiesced: false, gateQuiesced: false },
-    ordinaryAdmission: { receipt: { accepted: true }, decisionAt: start, content: 'ORDINARY', wire: { method: 'push/event', params: { eventId: 'ordinary-' + start, payload: { content: [{ type: 'text', text: 'ORDINARY' }] } } } },
+    ordinaryAdmission: { recipient: 'agent', receipt: { accepted: true }, decisionAt: start, content: 'ORDINARY', wire: { method: 'push/event', params: { eventId: 'ordinary-' + start, payload: { content: [{ type: 'text', text: 'ORDINARY' }] } } } },
     gateEvents: [{ kind: 'ordinary-debounce', policyName: 'ordinary', eventId: 'ordinary-' + start, observedAt: start + 205 }],
     ordinaryWakeIndex: 0, requests: [request(start + 210, 'ORDINARY')],
   });
@@ -133,4 +133,36 @@ test('ordinary timing needs nonempty linked input, unique wake identity, and an 
   ]) {
     const t = paired(); mutate(t); assert.throws(() => checkOrdinaryTiming(t), /nonempty|wire input|paused|uniquely linked/);
   }
+});
+
+function splitRecipients() {
+  const t = paired();
+  t.baseline.ordinaryAdmission.recipient = 'ordinary-recipient';
+  t.baseline.requests[0].recipient = 'ordinary-recipient';
+  t.combined.ordinaryAdmission.recipient = 'ordinary-recipient';
+  t.combined.requests[0].messages = [{ content: [{ type: 'text', text: 'CURRENT_2_END' }] }];
+  t.combined.requests[1].recipient = 'ordinary-recipient';
+  t.combined.requests[1].messages = [{ content: [{ type: 'text', text: 'ORDINARY' }] }];
+  t.combined.subjectRun.requests = [t.combined.requests[0]];
+  return t;
+}
+test('ordinary-only requests to another recipient are outside subject-content validation', () => {
+  checkOrdinaryTiming(splitRecipients());
+  const missing = splitRecipients(); missing.combined.subjectRun.requests[0].messages = ['MISSING_CURRENT'];
+  assert.throws(() => checkOrdinaryTiming(missing), /current subject/);
+  const stale = splitRecipients(); stale.combined.subjectRun.requests[0].messages = ['CURRENT_0_END'];
+  assert.throws(() => checkOrdinaryTiming(stale), /superseded/);
+});
+test('partitioning cannot filter out an inconvenient request to the real subject recipient', () => {
+  const t = splitRecipients();
+  t.combined.requests.push({ ...request(2115, 'MISSING_CURRENT') });
+  assert.throws(() => checkOrdinaryTiming(t), /every combined request/);
+  t.combined.subjectRun.requests.push(t.combined.requests.at(-1));
+  assert.throws(() => checkOrdinaryTiming(t), /current subject/);
+});
+test('another recipient cannot stand in for either subject or ordinary delivery', () => {
+  const ordinary = splitRecipients(); ordinary.combined.requests[1].recipient = 'unrelated';
+  assert.throws(() => checkOrdinaryTiming(ordinary), /ordinary content never reached/);
+  const bound = splitRecipients(); bound.combined.requests[0].recipient = 'ordinary-recipient';
+  assert.throws(() => checkOrdinaryTiming(bound), /observed recipient/);
 });

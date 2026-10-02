@@ -38,13 +38,13 @@ process.on('message', async message => {
       membrane = new MockMembrane();
       membrane.streamYielding = request => {
         membrane.calls.push(request);
-        providerRequests.push({ model: request.config?.model, messages: structuredClone(request.messages), observedAt: Date.now(), assemblyStartedAt: assemblies.get(request)?.startedAt });
+        providerRequests.push({ model: request.config?.model, messages: structuredClone(request.messages), observedAt: Date.now(), assemblyStartedAt: assemblies.get(request)?.startedAt, recipient: assemblies.get(request)?.recipient });
         if (failModel) { failModel = false; modelFailures++; throw new Error('fixture model failure after assembly'); }
         return new MockYieldingStream([ok()]);
       };
       membrane.complete = async request => {
         membrane.calls.push(request);
-        providerRequests.push({ model: request.config?.model, messages: structuredClone(request.messages), observedAt: Date.now(), assemblyStartedAt: assemblies.get(request)?.startedAt });
+        providerRequests.push({ model: request.config?.model, messages: structuredClone(request.messages), observedAt: Date.now(), assemblyStartedAt: assemblies.get(request)?.startedAt, recipient: assemblies.get(request)?.recipient });
         return createMockResponse([{ type: 'text', text: 'FIXTURE_SUMMARY' }]);
       };
       const agents = (value.agents ?? ['agent']).map(name => ({ name, model: 'fixture-' + name, systemPrompt: 'Conformance fixture.' }));
@@ -68,7 +68,7 @@ process.on('message', async message => {
         agent.buildActivationRequest = async (...args) => {
           const startedAt = Date.now();
           const request = await original(...args);
-          assemblies.set(request, { startedAt });
+          assemblies.set(request, { startedAt, recipient: agent.name });
           return request;
         };
       }

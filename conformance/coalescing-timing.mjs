@@ -8,6 +8,7 @@ const finite = value => typeof value === 'number' && Number.isFinite(value);
 const text = request => JSON.stringify(request.messages);
 
 function validateRun(run, quietMs, clock, sustained) {
+  measured(typeof run.recipient === 'string' && run.recipient.length > 0, 'missing measured subject recipient');
   measured(Array.isArray(run.admissions) && run.admissions.length > 0, 'no admitted occurrences');
   measured(Array.isArray(run.requests) && Array.isArray(run.gateEvents), 'missing raw request/gate observations');
   measured(run.states.length === run.admissions.length + 2, 'missing initial, admission, or final scheduler readouts');
@@ -34,6 +35,7 @@ function validateRun(run, quietMs, clock, sustained) {
     }
   }
   for (const request of run.requests) {
+    measured(request.recipient === run.recipient, 'subject request does not match its independently observed recipient');
     measured(finite(request.observedAt) && finite(request.assemblyStartedAt), 'request lacks provider/assembly timestamps');
     measured(request.observedAt >= run.admissions[0].decision.timestamp && request.observedAt >= request.assemblyStartedAt && request.assemblyStartedAt >= run.admissions[0].sentAt - clock.resolutionMs, 'negative request elapsed time');
     const definitelyAdmitted = run.admissions.filter(a => a.acceptedAt < request.assemblyStartedAt - clock.resolutionMs);
@@ -89,14 +91,17 @@ export function checkOrdinaryTiming(timing) {
     const wakes = run.gateEvents.filter(event => event.kind === 'ordinary-debounce' && event.policyName === run.ordinaryPolicy);
     measured(wakes.length === 1 && wakes[0] === wake && wake.eventId === params.eventId, 'ordinary wake is not uniquely linked to the input occurrence');
     measured(wake.observedAt >= a.decisionAt, 'negative ordinary elapsed time');
-    const visible = run.requests?.filter(request => text(request).includes(a.content)) ?? [];
+    measured(typeof a.recipient === 'string' && a.recipient.length > 0, 'ordinary input lacks its independently observed recipient');
+    const visible = run.requests?.filter(request => request.recipient === a.recipient && text(request).includes(a.content)) ?? [];
     measured(visible.length > 0, 'ordinary content never reached a provider request');
     for (const request of visible) measured(finite(request.observedAt) && request.observedAt >= a.decisionAt - clock.resolutionMs, 'invalid ordinary-request elapsed time');
     return { offset: wake.observedAt - a.decisionAt, due: a.decisionAt + run.quietMs, wokeAt: wake.observedAt };
   }
   measured(combined.subjectRun && finite(combined.subjectQuietMs), 'combined run lacks subject eligibility/cadence witnesses');
   validateRun(combined.subjectRun, combined.subjectQuietMs, clock, true);
-  measured(JSON.stringify(combined.subjectRun.requests) === JSON.stringify(combined.requests), 'subject and ordinary observations do not identify the same provider requests');
+  measured(Array.isArray(combined.requests) && combined.requests.every(request => typeof request.recipient === 'string' && request.recipient.length > 0), 'combined provider requests lack recipient identities');
+  const subjectRequests = combined.requests.filter(request => request.recipient === combined.subjectRun.recipient);
+  measured(JSON.stringify(combined.subjectRun.requests) === JSON.stringify(subjectRequests), 'subject observations must include every combined request for the measured recipient');
   const control = ordinary(baseline), treatment = ordinary(combined);
   measured(control.offset >= baseline.quietMs - clock.resolutionMs && control.offset <= baseline.quietMs + clock.resolutionMs + clock.schedulerLagMs, 'ordinary-only control did not honor its configured quiet period');
   assert.equal(combined.quietMs, baseline.quietMs, 'ordinary policy changed between paired runs');
@@ -105,7 +110,7 @@ export function checkOrdinaryTiming(timing) {
   measured(boundWake.observedAt >= combined.ordinaryAdmission.decisionAt && boundWake.observedAt < treatment.due, 'bound did not fire during the unrelated ordinary quiet period');
   measured(treatment.wokeAt > boundWake.observedAt + clock.resolutionMs, 'ordinary wake was not still pending when the bound fired');
   const request = combined.requests?.[boundWake.requestIndex];
-  measured(request && finite(request.observedAt) && text(request).includes(combined.currentSubjectContent), 'bound wake lacks its actual current-content provider request');
+  measured(request && request.recipient === combined.subjectRun.recipient && finite(request.observedAt) && text(request).includes(combined.currentSubjectContent), 'bound wake lacks its actual current-content provider request');
   measured(request.observedAt >= boundWake.observedAt - clock.resolutionMs && request.observedAt <= boundWake.observedAt + clock.schedulerLagMs + clock.resolutionMs, 'bound request is not temporally linked to its wake');
   assert.ok(Math.abs(treatment.offset - control.offset) <= clock.schedulerLagMs + 2 * clock.resolutionMs,
     'coalescing shortened or extended the ordinary wake deadline relative to its control');
@@ -141,7 +146,7 @@ export async function measureReplacementTiming(session, openControl, step, polic
     await new Promise(done => setTimeout(done, quietMs + clock.schedulerLagMs + 20));
     const final = await target.step({ op: 'observe' });
     states.push(final.scheduler);
-    return { policyName: 'timing-subject', admissions, trafficEndedAt, states, requests: final.requests, gateEvents: final.trace.filter(event => event.type.startsWith('gate:')) };
+    return { recipient: 'agent', policyName: 'timing-subject', admissions, trafficEndedAt, states, requests: final.requests, gateEvents: final.trace.filter(event => event.type.startsWith('gate:')) };
   }
   const controlSession = await openControl();
   let control;

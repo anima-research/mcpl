@@ -19,6 +19,21 @@ const workerFile = fileURLToPath(new URL('./coalescing-host-worker.mjs', import.
 const textBlock = text => text ? [{ type: 'text', text }] : [];
 export const TIMESTAMP = '2026-01-01T00:00:00Z';
 
+// This is the same peer response handler used by the live WebSocket fixture.
+// Each overlapping request owns its entry across awaits and completion order.
+export async function respondToRender({ renders, server, params, plan, held, reply, replyError, send }) {
+  const entry = { server, params };
+  renders.push(entry);
+  if (plan.mode === 'held') held.push({ reply, params });
+  else if (plan.mode === 'error') replyError({ code: -32000, message: 'fixture renderer error' });
+  else if (plan.mode === 'inference-request') {
+    const response = await send(server, 'inference/request', { featureSet: 'doc', messages: [] });
+    entry.inferenceResponse = response;
+    reply({ content: textBlock(plan.text) });
+  } else if (plan.mode === 'notice-summary') reply({ content: textBlock('DROPPED=' + params.dropped) });
+  else reply({ content: plan.mode === 'empty' ? [] : textBlock(plan.text) });
+}
+
 export async function createAdapter(root) {
   const require = createRequire(resolve(root, 'package.json'));
   const { WebSocketServer } = require('ws');
@@ -91,16 +106,9 @@ export async function createAdapter(root) {
             else if (message.method === 'channels/open') reply({ channel: { id: message.params.channelId, type: 'discord', label: message.params.channelId } });
             else if (message.method === 'channels/close') reply({ closed: true });
             else if (message.method === 'push/render') {
-              renders.push({ server, params: message.params });
-              const plan = { ...renderPlan };
-              if (plan.mode === 'held') held.push({ reply, params: message.params });
-              else if (plan.mode === 'error') socket.send(JSON.stringify({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'fixture renderer error' } }));
-              else if (plan.mode === 'inference-request') {
-                const response = await send(server, 'inference/request', { featureSet: 'doc', messages: [] });
-                renders.at(-1).inferenceResponse = response;
-                reply({ content: textBlock(plan.text) });
-              } else if (plan.mode === 'notice-summary') reply({ content: textBlock('DROPPED=' + message.params.dropped) });
-              else reply({ content: plan.mode === 'empty' ? [] : textBlock(plan.text) });
+              await respondToRender({ renders, server, params: message.params, plan: { ...renderPlan }, held, reply, send,
+                replyError: error => socket.send(JSON.stringify({ jsonrpc: '2.0', id: message.id, error })),
+              });
             } else if (message.id !== undefined) reply({});
           });
         });

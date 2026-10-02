@@ -21,12 +21,16 @@ test('receipt comparison uses the observed earlier result', () => {
   after.reply.result.accepted = false;
   assert.throws(() => expect({ path: 'reply.result', sameAs: 'accepted.reply.result' }, after, new Map([['accepted', before]])));
 });
-test('duplicate and reversed recovered occurrences fail', () => {
-  const e = { path: 'requestText', recoveryContent: ['FIRST', 'SECOND'] };
-  expect(e);
-  const out = observed(); out.requests[0].messages = ['SECOND']; expect(e, out);
-  out.requests[0].messages = ['FIRST FIRST SECOND']; assert.throws(() => expect(e, out), /duplicate/);
-  out.requests[0].messages = ['SECOND FIRST']; assert.throws(() => expect(e, out), /order/);
+test('recovery receipt and content must choose the same permitted branch', () => {
+  const e = { path: 'requestText', recoveryContent: ['FIRST', 'SECOND'], recoveryFrom: 'receipt.reply.result.coalesce.outcome' };
+  const appended = observed(), replaced = observed(); replaced.reply.result.coalesce.outcome = 'replaced';
+  const withReceipt = (out, receipt) => expect(e, out, new Map([['receipt', receipt]]));
+  withReceipt(observed(), appended);
+  const out = observed(); out.requests[0].messages = ['SECOND']; withReceipt(out, replaced);
+  assert.throws(() => withReceipt(out, appended), /FIRST/);
+  out.requests[0].messages = ['FIRST SECOND']; assert.throws(() => withReceipt(out, replaced), /FIRST/);
+  out.requests[0].messages = ['FIRST FIRST SECOND']; assert.throws(() => withReceipt(out, appended));
+  out.requests[0].messages = ['SECOND FIRST']; assert.throws(() => withReceipt(out, appended), /order/);
 });
 test('private or superseded content in any provider request fails', () => {
   const e = { path: 'allRequestText', excludes: ['PRIVATE_DATA'] };
@@ -96,4 +100,64 @@ test('exactly one recovered materialization permits either form, never both or d
   for (const text of ['FALLBACK RENDERED', 'RENDERED RENDERED', '']) {
     out.requests[0].messages = [text]; assert.throws(() => expect(e, out));
   }
+});
+test('replacement stays in original recipients, including when a nonrecipient already exists', () => {
+  const earlier = observed();
+  earlier.contexts = { a: [{ content: ['FIRST'] }], b: [] };
+  const history = new Map([['audience', earlier]]);
+  const e = { audienceFrom: 'audience', original: 'FIRST', replacement: 'EDIT' };
+  const current = observed(); current.contexts = { a: [{ content: ['EDIT'] }], b: [], newEmptyContext: [] };
+  expect(e, current, history);
+  current.contexts = { a: [], b: [{ content: ['EDIT'] }] };
+  assert.throws(() => expect(e, current, history), /original recipient/);
+  current.contexts = { a: [{ content: ['EDIT'] }], b: [{ content: ['EDIT'] }] };
+  assert.throws(() => expect(e, current, history), /widened/);
+});
+test('two model requests must reach two designated recipients, not duplicate one', () => {
+  const out = observed(); out.requests.push({ model: 'fixture-b', messages: ['RENDERED'] });
+  expect({ model: 'fixture-agent', requestCount: 1 }, out);
+  expect({ model: 'fixture-b', requestCount: 1, includes: ['RENDERED'] }, out);
+  out.requests[1].model = 'fixture-agent';
+  assert.throws(() => expect({ model: 'fixture-agent', requestCount: 1 }, out));
+  assert.throws(() => expect({ model: 'fixture-b', requestCount: 1 }, out));
+});
+test('an explicitly unread recipient must have zero earlier requests', () => {
+  const out = observed();
+  expect({ model: 'fixture-agent', requestCount: 1 }, out);
+  expect({ model: 'fixture-b', requestCount: 0 }, out);
+  out.requests[0].model = 'fixture-b';
+  assert.throws(() => expect({ model: 'fixture-b', requestCount: 0 }, out));
+});
+test('an exclusion-only assembly cannot pass without a new provider request', async () => {
+  const out = { ...observed(), requests: [], modelCalls: 0, runError: null };
+  const v = { ...variant, steps: [{ id: 'assembly', op: 'assemble', checks: [{ path: 'requestText', excludes: ['WITHDRAWN'] }] }] };
+  const result = await runScenario(fakeAdapter(async () => out), entry, v);
+  assert.equal(result.status, 'execution-error');
+  assert.match(result.executionError.error, /no new provider request/);
+});
+test('unexpected drive errors cannot be hidden behind successful content exclusions', async () => {
+  const out = { ...observed(), runError: 'injected assembly error' };
+  const v = { ...variant, steps: [{ id: 'assembly', op: 'assemble', checks: [{ path: 'requestText', excludes: ['WITHDRAWN'] }] }] };
+  const result = await runScenario(fakeAdapter(async () => out), entry, v);
+  assert.equal(result.status, 'execution-error');
+  assert.match(result.executionError.error, /injected/);
+});
+test('the expected model-failure scenario needs a failing request containing its input', async () => {
+  let calls = 0;
+  const v = { ...variant, steps: [
+    { id: 'armed', op: 'failNextModel' },
+    { id: 'run', op: 'turn', expectedModelFailureSince: 'armed', checks: [{ path: 'requestText', includes: ['FIRST'] }] },
+  ] };
+  const adapter = fakeAdapter(async () => ++calls === 1
+    ? { ...observed(), requests: [], modelFailures: 0 }
+    : { ...observed(), modelFailures: 1, runError: 'expected fixture model failure' });
+  assert.equal((await runScenario(adapter, entry, v)).status, 'pass');
+  const noFailure = fakeAdapter(async () => ({ ...observed(), modelFailures: 0, runError: null }));
+  assert.equal((await runScenario(noFailure, entry, v)).status, 'execution-error');
+});
+test('advisory runs retain readouts even when the step has no mandatory assertion', async () => {
+  const v = { ...variant, steps: [{ id: 'audit', op: 'observe' }] };
+  const result = await runScenario(fakeAdapter(async () => ({ ...observed(), trace: [{ type: 'fixture-audit' }] })), { ...entry, kind: 'advisory' }, v);
+  assert.equal(result.status, 'observed');
+  assert.deepEqual(result.observations[0].observed.trace, [{ type: 'fixture-audit' }]);
 });

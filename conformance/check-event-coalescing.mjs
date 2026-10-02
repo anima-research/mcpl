@@ -20,15 +20,29 @@ export function view(observation) {
   };
 }
 export function validateCheck(expectation) {
-  const keys = expectation.event ? ['event', 'metadata'] : expectation.model ? ['model', 'order'] :
-    ['path', 'eq', 'oneOf', 'gte', 'between', 'exactlyOneOf', 'includes', 'excludes', 'counts', 'order', 'recoveryContent', 'everyIncludes', 'sameAs', 'lteProfile'];
+  const keys = expectation.audienceFrom ? ['audienceFrom', 'original', 'replacement'] : expectation.event ? ['event', 'metadata'] : expectation.model ? ['model', 'requestCount', 'order', 'includes', 'excludes', 'counts'] :
+    ['path', 'eq', 'oneOf', 'gte', 'between', 'exactlyOneOf', 'includes', 'excludes', 'counts', 'order', 'recoveryContent', 'recoveryFrom', 'everyIncludes', 'sameAs', 'lteProfile'];
   for (const key of Object.keys(expectation)) if (!keys.includes(key)) throw new Error('Unknown expectation operator: ' + key);
+  if (expectation.recoveryContent && !expectation.recoveryFrom) throw new Error('Recovery content must be linked to its receipt');
   if (Object.keys(expectation).length < 2) throw new Error('Expectation must assert a property');
 }
 
 export function check(check, observation, history, profile) {
   validateCheck(check);
   const out = view(observation);
+  if (check.audienceFrom) {
+    assert.ok(history.has(check.audienceFrom), 'missing original audience observation');
+    const originalContexts = history.get(check.audienceFrom).contexts;
+    const recipients = new Set(Object.keys(originalContexts).filter(name => json(originalContexts[name]).includes(check.original)));
+    assert.ok(recipients.size > 0, 'original delivery must establish at least one recipient');
+    for (const name of new Set([...Object.keys(originalContexts), ...Object.keys(out.contexts)])) {
+      const content = json(out.contexts[name] ?? []);
+      assert.ok(!content.includes(check.original), 'unread original survives in ' + name);
+      if (recipients.has(name)) assert.ok(content.includes(check.replacement), 'replacement missing from original recipient ' + name);
+      else assert.ok(!content.includes(check.replacement), 'replacement widened audience to ' + name);
+    }
+    return;
+  }
   if (check.event) {
     const messages = Object.values(out.contexts).flat().filter(message => message.metadata?.eventId === check.event);
     assert.ok(messages.length, 'no stored occurrence for event ' + check.event);
@@ -37,8 +51,13 @@ export function check(check, observation, history, profile) {
   }
   if (check.model) {
     const requests = out.requests.filter(request => request.model === check.model);
-    assert.ok(requests.length, 'no observed provider request for ' + check.model);
-    return checkValue(json(requests.at(-1).messages), { order: check.order });
+    if ('requestCount' in check) assert.equal(requests.length, check.requestCount, 'provider request count for ' + check.model);
+    const { model, requestCount, ...constraints } = check;
+    if (Object.keys(constraints).length) {
+      assert.ok(requests.length, 'no observed provider request for ' + model);
+      checkValue(json(requests.at(-1).messages), constraints);
+    }
+    return;
   }
   const actual = at(out, check.path);
   if ('sameAs' in check) {
@@ -50,6 +69,15 @@ export function check(check, observation, history, profile) {
   if ('lteProfile' in check) {
     assert.ok(Number.isFinite(profile[check.lteProfile]), 'profile must supply the required bound');
     assert.ok(actual <= profile[check.lteProfile]);
+    return;
+  }
+  if (check.recoveryContent) {
+    const [step, ...path] = check.recoveryFrom.split('.');
+    assert.ok(history.has(step), 'missing recovery receipt');
+    const outcome = at(history.get(step), path.join('.'));
+    assert.ok(['replaced', 'appended'].includes(outcome), 'invalid recovery receipt outcome');
+    const [first, second] = check.recoveryContent;
+    checkValue(actual, { counts: { [first]: outcome === 'appended' ? 1 : 0, [second]: 1 }, ...(outcome === 'appended' ? { order: [first, second] } : {}) });
     return;
   }
   checkValue(actual, check);
@@ -74,13 +102,7 @@ function checkValue(actual, expected) {
     if (expected.exactlyOneOf) {
       assert.equal(expected.exactlyOneOf.reduce((total, value) => total + text.split(value).length - 1, 0), 1, 'exactly one permitted materialization');
     }
-    if (expected.recoveryContent) {
-      const [first, second] = expected.recoveryContent;
-      assert.equal(text.split(second).length - 1, 1, 'new occurrence appears exactly once');
-      const occurrences = text.split(first).length - 1;
-      assert.ok(occurrences === 0 || occurrences === 1, 'recovery must not duplicate old occurrence');
-      if (occurrences) assert.ok(text.indexOf(first) < text.indexOf(second), 'recovery preserves order');
-    }
+
   }
   if ('everyIncludes' in expected) {
     assert.ok(Array.isArray(actual) && actual.length > 0);
@@ -92,15 +114,29 @@ export async function runScenario(adapter, entry, variant) {
   const missing = variant.requires.filter(capability => !adapter.profile.capabilities.includes(capability));
   if (missing.length) return { case: entry.id, variant: variant.name, kind: entry.kind, status: 'unexercised', missing, contract: entry.contract };
   const history = new Map(), failures = [], observations = [];
-  let session, executionError;
+  let session, executionError, priorRequests = 0;
   try {
     session = await adapter.open(variant.setup);
     for (const step of variant.steps) {
       let observed;
       try { observed = await session.step(step); }
       catch (error) { executionError = { step: step.id, operation: step.op, error: String(error?.stack ?? error) }; break; }
+      observed = structuredClone(observed);
       history.set(step.id, observed);
-      if (step.checks?.length) observations.push({ step: step.id, observed });
+      if (entry.kind === 'advisory' || step.op === 'observe' || step.checks?.length || ['assemble', 'turn', 'joinTurn'].includes(step.op)) observations.push({ step: step.id, observed });
+      let witnessedFailure = false;
+      if (step.expectedModelFailureSince) {
+        const before = history.get(step.expectedModelFailureSince);
+        witnessedFailure = !!before && Number.isSafeInteger(observed.modelFailures) && observed.modelFailures > before.modelFailures;
+        if (!witnessedFailure) executionError = { step: step.id, operation: step.op, error: 'Expected model failure was not observed after its setup' };
+      }
+      if (['assemble', 'turn', 'joinTurn'].includes(step.op)) {
+        if (!Object.hasOwn(observed, 'runError')) executionError ??= { step: step.id, operation: step.op, error: 'Missing Host-drive completion observation' };
+        else if (observed.runError && !witnessedFailure) executionError ??= { step: step.id, operation: step.op, error: String(observed.runError) };
+      }
+      if (step.op === 'assemble' && observed.requests.length <= priorRequests) executionError ??= { step: step.id, operation: step.op, error: 'Requested assembly produced no new provider request' };
+      priorRequests = observed.requests.length;
+      if (executionError) break;
       for (const expectation of step.checks ?? []) {
         try { check(expectation, observed, history, adapter.profile); }
         catch (error) {

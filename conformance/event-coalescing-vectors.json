@@ -27,7 +27,7 @@
         {
           "name": "default",
           "setup": {},
-          "requires": [],
+          "requires": ["untracked-history-unknown"],
           "steps": [
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s0"},
             {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST"]}],"id": "s1"}
@@ -82,7 +82,7 @@
           "steps": [
             {"op": "failNextModel","id": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s1"},
-            {"op": "turn","checks": [{"path": "modelCalls","eq": 1},{"path": "modelFailures","eq": 1}],"id": "s2"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 1},{"path": "modelFailures","eq": 1},{"path": "requestText","includes": ["FIRST"]}],"id": "s2","expectedModelFailureSince": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s3"},
             {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","SECOND"]}],"id": "s4"}
           ]
@@ -240,7 +240,7 @@
             {"op": "observe","id": "audience"},
             {"op": "channelTool","name": "channel_close","id": "s3"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","channelId": "chat"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s4"},
-            {"op": "observe","checks": [{"path": "agents","sameAs": "audience.agents"},{"path": "allContextText","includes": ["EDIT"]},{"path": "allContextText","excludes": ["FIRST"]}],"id": "s5"}
+            {"op": "observe","checks": [{"audienceFrom": "audience","original": "FIRST","replacement": "EDIT"}],"id": "s5"}
           ]
         }
       ]
@@ -631,7 +631,7 @@
             {"op": "grant","leaves": ["pushEvents"],"id": "s5"},
             {"op": "releaseRender","text": "REVOKED_RENDER","id": "s6"},
             {"op": "joinTurn","id": "s7"},
-            {"op": "observe","checks": [{"path": "allContextText","excludes": ["FALLBACK","REVOKED_RENDER"]}],"id": "s8"}
+            {"op": "observe","checks": [{"path": "allContextText","excludes": ["FALLBACK","REVOKED_RENDER"]},{"path": "allRequestText","excludes": ["FALLBACK","REVOKED_RENDER"]}],"id": "s8"}
           ]
         },
         {
@@ -658,7 +658,7 @@
           "steps": [
             {"op": "render","plan": {"mode": "immediate","text": "RENDERED"},"id": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
-            {"op": "turn","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 2},{"path": "requests","everyIncludes": "RENDERED"}],"id": "s2"}
+            {"op": "turn","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 2},{"path": "requests","everyIncludes": "RENDERED"},{"model": "fixture-agent","requestCount": 1,"includes": ["RENDERED"]},{"model": "fixture-b","requestCount": 1,"includes": ["RENDERED"]},{"path": "contexts.agent","includes": ["RENDERED"]},{"path": "contexts.b","includes": ["RENDERED"]}],"id": "s2"}
           ]
         }
       ]
@@ -892,7 +892,7 @@
         {
           "name": "before-consumption",
           "setup": {},
-          "requires": ["materialized-unread"],
+          "requires": ["materialized-unread","initial-history-none"],
           "steps": [
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s0"},
             {"op": "materializeWithoutConsume","id": "s1"},
@@ -1176,7 +1176,7 @@
         {
           "name": "default",
           "setup": {},
-          "requires": ["restart-without-history"],
+          "requires": ["restart-without-history","initial-history-none"],
           "steps": [
             {"op": "restartWithoutHistory","id": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s1"},
@@ -1327,7 +1327,7 @@
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
             {"op": "restart","id": "s1"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","oneOf": ["replaced","appended"]}],"id": "s2"},
-            {"op": "assemble","checks": [{"path": "requestText","includes": ["SECOND"]},{"path": "requestText","recoveryContent": ["FIRST","SECOND"]}],"id": "s3"}
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["SECOND"]},{"path": "requestText","recoveryContent": ["FIRST","SECOND"],"recoveryFrom": "s2.reply.result.coalesce.outcome"}],"id": "s3"}
           ]
         },
         {
@@ -1338,7 +1338,7 @@
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
             {"op": "kill","id": "s1"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","oneOf": ["replaced","appended"]}],"id": "s2"},
-            {"op": "assemble","checks": [{"path": "requestText","includes": ["SECOND"]},{"path": "requestText","recoveryContent": ["FIRST","SECOND"]}],"id": "s3"}
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["SECOND"]},{"path": "requestText","recoveryContent": ["FIRST","SECOND"],"recoveryFrom": "s2.reply.result.coalesce.outcome"}],"id": "s3"}
           ]
         },
         {
@@ -1394,7 +1394,7 @@
         {
           "name": "default",
           "setup": {},
-          "requires": [],
+          "requires": ["initial-history-none"],
           "steps": [
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "ENDPOINT_A"}]}},"id": "s0"},
             {"op": "reassign","id": "s1"},
@@ -1413,7 +1413,7 @@
         {
           "name": "skip-control",
           "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
-          "requires": ["initial-history-none"],
+          "requires": [],
           "steps": [
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "SKIP"}]}},"id": "s0"},
             {"op": "wait","ms": 200,"id": "s1"},
@@ -1423,7 +1423,7 @@
         {
           "name": "qualifying-control",
           "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
-          "requires": ["initial-history-none"],
+          "requires": [],
           "steps": [
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "QUALIFYING"}]},"tags": ["probe:wake"]},"id": "s0"},
             {"op": "wait","ms": 200,"id": "s1"},
@@ -1433,7 +1433,7 @@
         {
           "name": "qualifying-to-skip",
           "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
-          "requires": ["initial-history-none"],
+          "requires": [],
           "steps": [
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "QUALIFYING"}]},"tags": ["probe:wake"]},"id": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "NEW_NONQUALIFYING"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"},{"path": "modelCalls","eq": 0}],"id": "s1"},
@@ -1455,7 +1455,7 @@
         {
           "name": "skip-to-qualifying",
           "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
-          "requires": ["initial-history-none"],
+          "requires": [],
           "steps": [
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "SKIP"}]}},"id": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "QUALIFYING"}]},"tags": ["probe:wake"]},"id": "s1"},
@@ -1568,11 +1568,11 @@
             {"op": "render","plan": {"mode": "immediate","text": "BASELINE_ONE"},"id": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
             {"op": "suppressWake","agent": "b","id": "s2"},
-            {"op": "turn","checks": [{"path": "modelCalls","eq": 1}],"id": "s3"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 1},{"model": "fixture-agent","requestCount": 1,"includes": ["BASELINE_ONE"]},{"model": "fixture-b","requestCount": 0},{"path": "contexts.b","includes": ["BASELINE_ONE"]}],"id": "s3"},
             {"op": "render","plan": {"mode": "immediate","text": "DELTA_TWO"},"id": "s4"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s5"},
             {"op": "turn","id": "s6"},
-            {"op": "observe","checks": [{"model": "fixture-b","order": ["BASELINE_ONE","DELTA_TWO"]}],"id": "s7"}
+            {"op": "observe","checks": [{"model": "fixture-b","order": ["BASELINE_ONE","DELTA_TWO"]},{"path": "renders.length","eq": 2}],"id": "s7"}
           ]
         }
       ]

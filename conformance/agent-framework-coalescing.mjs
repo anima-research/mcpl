@@ -31,7 +31,7 @@ export async function createAdapter(root) {
     profile: {
       initialHistory: 'none', recovery: 'conservative', contextConsumption: 'shared',
       noticeRetention: 64, retryWindowMs: 3600000, renderTimeoutMs: 5000,
-      capabilities: ['wire', 'multi-server', 'compression', 'process-restart', 'process-kill', 'held-render', 'debounce', 'initial-history-none', 'conservative-recovery', 'retain-64-notices'],
+      capabilities: ['wire', 'multi-server', 'compression', 'process-restart', 'process-kill', 'held-render', 'debounce', 'initial-history-none', 'untracked-history-unknown', 'conservative-recovery', 'retain-64-notices'],
     },
     async open(setup = {}) {
       const directory = await mkdtemp(join(tmpdir(), 'mcpl-rfc006-'));
@@ -164,6 +164,8 @@ export async function createAdapter(root) {
           } else if (step.op === 'joinTurn') {
             if (!running) throw new Error('No running turn');
             latest = await running; running = null;
+            const runError = latest.runError;
+            return { ...await snapshot(reply), runError };
           } else if (step.op === 'wait') await pause(step.ms);
           else if (step.op === 'restart' || step.op === 'kill') {
             latest = await rpc('snapshot'); priorRequests.push(...latest.requests);

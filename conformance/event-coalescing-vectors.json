@@ -1216,12 +1216,14 @@
           "setup": {},
           "requires": ["hard-subject-limit"],
           "steps": [
-            {"op": "fillCapacity","id": "s0"},
-            {"op": "register","channel": "chat","id": "s1"},
-            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"checks": [{"path": "reply.result.results.0.coalesce.outcome","eq": "appended"}],"id": "s2"},
-            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "untracked","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "untracked","retract": true},"payload": {"content": [{"type": "text","text": "CAPACITY_NOTICE"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s3"},
-            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "deferred-new","deferred": true},"payload": {"content": [{"type": "text","text": "CAPACITY_FALLBACK"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s4"},
-            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","CAPACITY_NOTICE","CAPACITY_FALLBACK"]},{"path": "renders.length","eq": 0}],"id": "s5"}
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "CONTROL_BEFORE","eventId": "control-before","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "ORDINARY_BEFORE"}]}]},"checks": [{"path": "reply.result.results.0","ordinaryAdmission": true}],"id": "s1"},
+            {"op": "fillCapacity","channel": "chat","checks": [{"path": "capacity","capacitySaturated": true}],"id": "s2"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "CONTROL_AFTER","eventId": "control-after","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "ORDINARY_AFTER"}]}]},"checks": [{"path": "reply.result.results.0","ordinaryAdmission": true}],"id": "s3"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"checks": [{"path": "reply.result.results.0.coalesce.outcome","eq": "appended"}],"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "untracked","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "untracked","retract": true,"channelId": "chat"},"payload": {"content": [{"type": "text","text": "CAPACITY_NOTICE"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s5"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "deferred-new","deferred": true,"channelId": "chat"},"payload": {"content": [{"type": "text","text": "CAPACITY_FALLBACK"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s6"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","CAPACITY_NOTICE","CAPACITY_FALLBACK"]},{"path": "renders.length","eq": 0}],"id": "s7"}
           ]
         }
       ]
@@ -1250,10 +1252,10 @@
       "variants": [
         {
           "name": "default",
-          "setup": {"wakePolicy": "debounce","clock": "controlled"},
-          "requires": ["finite-wake-postponement-bound","controlled-clock"],
+          "setup": {"background": true,"gate": {"policies": [{"name": "timing-subject","match": {"tagsAny": ["doc:wake"]},"behavior": {"debounce": 300}}],"default": "skip"}},
+          "requires": ["timing-observation"],
           "steps": [
-            {"op": "continuousReplacements","quietMs": 100,"intervalMs": 30,"checks": [{"path": "firstDeliveryMs","lteProfile": "wakeBoundMs"}],"id": "s0"}
+            {"op": "continuousReplacements","id": "s0","quietMs": 300,"intervalMs": 40,"count": 25,"checks": [{"path": "timing","timing": "replacement"}]}
           ]
         }
       ]
@@ -1472,10 +1474,10 @@
       "variants": [
         {
           "name": "default",
-          "setup": {"wakePolicy": "debounce","clock": "controlled"},
-          "requires": ["finite-wake-postponement-bound","controlled-clock"],
+          "setup": {"wakePolicy": "debounce"},
+          "requires": ["finite-wake-postponement-bound","paired-debounce-control"],
           "steps": [
-            {"op": "unrelatedDebounce","ordinaryQuietMs": 200,"checks": [{"path": "ordinaryDeliveryMs","between": [200,201]}],"id": "s0"}
+            {"op": "unrelatedDebounce","ordinaryQuietMs": 200,"checks": [{"path": "timing","timing": "ordinary-preserved"}],"id": "s0"}
           ]
         }
       ]

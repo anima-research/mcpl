@@ -1167,7 +1167,7 @@ particular scheduler data structure. Audit vector 37 remains illustrative under 
 
 [`conformance/event-coalescing-vectors.json`](./conformance/event-coalescing-vectors.json) freezes all 64 labeled rows above, including suffix variants. The corpus contains 77 scenarios: some rows have several permitted timelines or controls, and §6's empty-slot obligation has a separate supplement under vector 34. Each row carries its source contract; each scenario carries setup, profile preconditions, ordered actions, and observable expectations.
 
-The supplied runner distinguishes **Host passes**, **Host failures**, **supporting evidence with a narrower boundary**, **unexercised preconditions**, **server-fixture obligations**, **advisory observations**, and **execution errors**. A missing profile precondition is never a pass. Neither this corpus nor its reference execution changes the RFC's Draft status.
+The supplied runner distinguishes **Host passes**, **Host failures**, **supporting evidence with a narrower boundary**, **inapplicable profile conditions**, **blocked checks**, **unexercised adapter preconditions**, **server-fixture obligations**, **advisory observations**, and **execution errors**. A missing profile precondition is never a pass. Neither this corpus nor its reference execution changes the RFC's Draft status.
 
 #### Run the suite
 
@@ -1178,18 +1178,19 @@ FRAMEWORK="$(mktemp -d)"
 git clone https://github.com/anima-research/agent-framework.git "$FRAMEWORK"
 git -C "$FRAMEWORK" checkout --detach 03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc
 (cd "$FRAMEWORK" && bun install --ignore-scripts)
-bun test conformance/event-coalescing-runner.test.mjs
+bun test conformance/event-coalescing-runner.test.mjs conformance/coalescing-timing.test.mjs
 bun run conformance/check-event-coalescing.mjs \
   --framework "$FRAMEWORK" \
   --report /tmp/event-coalescing-report.json
 ```
 
-Use `--case 21,34,43` to select particular RFC labels. The report identifies that selection; a selected run is not full-corpus evidence. The runner records the suite revision, dirty state, source hashes, actual Host revision, resolved dependency versions, and declared profile. It exits nonzero for any failed expectation, unexercised precondition, or execution error. A failing transport or fixture is an execution error, not evidence of a Host conformance defect. Ordinary Host-drive errors are execution errors, and every forced `assemble` needs a new observed provider request; an empty request list cannot satisfy exclusion-only assertions. The explicitly expected model-failure scenario instead requires a witnessed failed request carrying its input.
+Use `--case 21,34,43` to select particular RFC labels. The report identifies that selection; a selected run is not full-corpus evidence. The runner records the suite revision, dirty state, source hashes, actual Host revision, resolved dependency versions, and declared profile. It exits nonzero for any failed expectation, blocked check, unexercised precondition, or execution error. A genuinely inapplicable profile condition is reported as such, not counted as a pass. A failing transport or fixture is an execution error, not evidence of a Host conformance defect. Ordinary Host-drive errors are execution errors, and every forced `assemble` needs a new observed provider request; an empty request list cannot satisfy exclusion-only assertions. The explicitly expected model-failure scenario instead requires a witnessed failed request carrying its input.
 
-The pinned reference run exposes three distinct Host behaviors as failures:
+The pinned reference run exposes four distinct Host behaviors as failures:
 
 - **Vector 21, disconnected before assembly:** accepted deferred work disappears. After reconnect, the same binding, operator policy, effective grant, and enabled feature sets are restored; retry returns the original acceptance, and a fresh ordinary control is admitted. The accepted fallback still reaches no request. This differs from temporarily withholding work until authority is re-established.
 - **Vector 34, §6 empty-slot supplement:** the first `noted` deletion notice is stored, but the next create returns `replaced` and removes it. The ordinary notice was retained as the subject's occupant. The narrower history-bit scenario passes: a second deletion still returns `noted`.
+- **Vector 36, required postponement bound:** the inspected EventGate/Framework/coalescer paths provide no finite bound for the reset-only debounce policy. A bounded live run records an ordinary single-event delivery control and 25 eligible plain same-subject occurrences against continuously running Host event loops. Actual gate decisions, admissions, scheduler state, request contents, and assembly/provider timestamps witness sustained eligibility and delivery availability. The finite run corroborates the missing mechanism; it does not prove infinite starvation on its own. This source assessment is a reviewed account of the pinned paths, not an automatic detector for arbitrary implementations. The report carries it only when all three inspected source-file hashes match. Changed source is unassessed rather than inheriting this verdict.
 - **Vector 43, two timelines:** a debounced qualifying occurrence is replaced by a `skip` occurrence or retracted unread before inference begins. Its old debounce cause still starts a request. Skip-only, qualifying-only, and skip-to-qualifying controls distinguish this from a general failure to honor the wake policy.
 
 The report carries the observations behind each checked step, including wire receipts, actual provider-request messages, private Host policy/binding readouts, render requests, published channel messages, and trace events. The frozen expected values remain spec-derived even when the pinned Host fails them.
@@ -1198,7 +1199,7 @@ The report carries the observations behind each checked step, including wire rec
 
 [`agent-framework-coalescing.mjs`](./conformance/agent-framework-coalescing.mjs) runs a synthetic MCPL peer over real loopback WebSockets. [`coalescing-host-worker.mjs`](./conformance/coalescing-host-worker.mjs) imports the actual Framework in a separate Bun subprocess with a temporary Chronicle store and a synthetic model provider. The peer remains alive across Host restarts and SIGKILL, preserving the endpoint identity while the Host's process state is lost. Test files and runtime logs stay in the temporary directory.
 
-The model provider records actual assembled requests. It can fail after assembly, with the public no-retry error policy selected for vector 4, so failure cannot be mistaken for an unconsumed occurrence. Compression uses the real autobiographical strategy. Held render responses expose cancellation, timeout, and late-response races without replacing the coalescer's state machine.
+The model provider copies the actual assembled message payloads at provider entry, so later Host mutation cannot rewrite the observations. It can fail after assembly, with the public no-retry error policy selected for vector 4, so failure cannot be mistaken for an unconsumed occurrence. Compression uses the real autobiographical strategy. Held render responses expose cancellation, timeout, and late-response races without replacing the coalescer's state machine.
 
 The fixture can queue a Host-requested inference, change grants through the real connection's grant API, invoke the actual channel tools, and deliberately keep one recipient idle by withholding its pending wake. These controls drive the existing scheduler and policy objects; they do not synthesize coalescing outcomes or consumption watermarks. Operator configuration, grants, binding, and enabled features are observed directly where those distinctions matter.
 
@@ -1206,20 +1207,27 @@ A `restart` stops the Host and launches a new process on the same store. A `kill
 
 The default profile establishes `none` from `initial`, keeps untracked history conservative otherwise, uses conservative recovery/shared consumption, retains 64 notices, advertises a one-hour retry window, and uses the actual five-second render deadline. These are profile choices, not new protocol constants.
 
-Ten principal scenarios are **unexercised** by this adapter:
+The report separates conditional applicability from missing implementation or measurement support:
 
-| RFC label | Precondition the adapter does not construct |
+| RFC label | Reference-profile disposition |
 |---|---|
-| 15 | A Host advertising no `channelScopedPush` support |
-| 23 | A fallback materialized but still unread; the separate supporting scenario checks a late result after consumption |
-| 27e, before-consumption variant | A materialized rendered occurrence still unread |
-| 31, 34a | Restart with loss of consumed-history knowledge |
-| 34c | A hard coalescing-subject capacity boundary |
-| 36, 44 | A declared finite postponement bound with a controlled clock |
-| 46 | A Host choosing per-context rather than conservative shared consumption |
-| 48 | Changing a previously advertised two-hour retry guarantee to one hour |
+| 15 | Inapplicable: this profile advertises `channelScopedPush`, so the absent-leaf condition does not apply |
+| 34c | Inapplicable: the Host prunes idle subjects above a soft target rather than imposing a hard live-subject admission cap |
+| 46 | Inapplicable: the Host chooses conservative shared consumption, which the RFC permits |
+| 36 | Failed required bound, supported by inspected source and the bounded live observation |
+| 44 | Blocked by #36's missing required bound; this is not an optional capability exemption |
+| 23 | Unexercised unread-fallback precondition; a separate supporting scenario checks the late result after consumption |
+| 27e, before-consumption variant | Unexercised materialized-but-unread precondition |
+| 31, 34a | The adapter does not construct lost-history recovery while preserving accepted content |
+| 48 | The adapter does not construct a change from a previously advertised two-hour guarantee to one hour |
 
-These rows remain in the corpus with their actions and oracles. Another adapter can exercise them when it establishes their stated preconditions. Their absence from the tested profile proves neither compliance nor noncompliance with those requirements. In particular, the suite makes no all-green starvation or retry-window-change claim for the reference Host. Vector 27 checks the synthetic notice-only conformance server's dropped-count report and is labeled `server-fixture`; vector 37 records audit observations without making an optional retention policy mandatory.
+All rows remain in the corpus. A Host with a hard capacity limit needs an observed saturation readout and successful ordinary-admission controls before its overflow outcomes are assessed. A different history policy must establish the scenario's stated known-none or unknown-history precondition. Deferred `first` outcomes are independent of the plain-mode known-none rule.
+
+The timing oracles use actual request/content witnesses, accepted eligible replacement cadence, and no-pause/running-loop controls. They reject negative or nonfinite elapsed values and a standalone delivery timestamp without a provider request. A finite bound is an observation of Host policy, not a new wire field or a value supplied merely to make the test pass. The reference probe declares one-millisecond clock resolution and a 60-millisecond scheduling/observation allowance; these are fixture measurement limits, not protocol timing constants. Assembly-start and provider-entry observations come from wrappers around the actual request builder and synthetic transport seam, without changing their decisions.
+
+For #44, a capable adapter must record an ordinary-only control and the combined run, identify the ordinary wake's own cause separately from the coalesced-bound wake, link that bound wake to an actual current-content request, and preserve the ordinary wake offset relative to its control within the declared clock/lag allowance. An earlier request caused by the coalesced event can legitimately contain ordinary content already stored in context; that alone does not mean the ordinary timer was shortened. The oracle does not impose a universal `[200,201]` millisecond delivery window. The reference Host cannot exercise this check until a finite bound exists, so its report remains blocked rather than inventing a passing timestamp.
+
+Vector 27 checks the synthetic notice-only conformance server's dropped-count report and is labeled `server-fixture`. Vector 37 retains actual audit readouts without making an optional retention policy mandatory. These distinctions qualify what the evidence establishes; they do not change the frozen requirements or the RFC's status.
 
 #### Consume the vectors
 
@@ -1233,7 +1241,7 @@ The supplied adapter implements these controls:
 - `restart`, `kill`, `disconnect`, `reconnect`, and `reassign` alter the real lifecycle boundary. `grant` and `disableFeature` alter the actual admission policy.
 - `failNextModel`, `compress`, `wait`, and `observe` supply the indicated fixture condition or observation.
 
-Conditional scenarios also name controls their adapter must provide: `materializeWithoutConsume` stops at that model-visibility boundary; `restartWithoutHistory` preserves accepted content while losing consumed-history knowledge; `fillCapacity` establishes a declared hard subject limit; `consumeContext` assembles one recipient only; `advertiseWindow`, `reconnectWithWindow`, and `advanceClock` exercise the specified guarantee across elapsed time; `continuousReplacements` and `unrelatedDebounce` measure provider delivery under their declared quiet periods and postponement bound. Advertising a capability in an adapter profile is a claim that the adapter genuinely constructs that condition, not permission to substitute an expected answer.
+Conditional scenarios also name controls their adapter must provide: `materializeWithoutConsume` stops at that model-visibility boundary; `restartWithoutHistory` preserves accepted content while losing consumed-history knowledge; `fillCapacity` establishes a declared hard subject limit; `consumeContext` assembles one recipient only; `advertiseWindow`, `reconnectWithWindow`, and `advanceClock` exercise the specified guarantee across elapsed time; `continuousReplacements` measures current-content provider delivery under sustained eligible traffic against a single ordinary-event control; `unrelatedDebounce` compares the ordinary wake cause against an ordinary-only control while a coalesced bound fires. Advertising a capability in an adapter profile is a claim that the adapter genuinely constructs that condition, not permission to substitute an expected answer.
 
 Expectations address raw observations by dotted `path`. `eq` compares a value exactly; `oneOf` allows the listed alternatives; `sameAs` compares with an earlier step's observed value. Text checks use `includes`, `excludes`, `counts`, and `order`. `requestText` is the last provider request's messages; `allRequestText` covers every observed request, so superseded or private content cannot pass merely by disappearing from a later request. `allContextText` covers stored context. `recoveryContent` uses `recoveryFrom` to read the earlier receipt: `replaced` requires the new occurrence alone, while `appended` requires one preserved old occurrence followed by the new one; `exactlyOneOf` permits one of the listed materializations, once. Event-identity checks inspect every stored copy with that `eventId`; model-specific checks select the actual request's `config.model` and can require a request count, including zero for a recipient that must still be unread. `audienceFrom` derives recipients from an earlier delivery snapshot and checks each original recipient and each nonrecipient separately. Advisory scenarios retain their actual observations even when they have no mandatory content assertion.
 

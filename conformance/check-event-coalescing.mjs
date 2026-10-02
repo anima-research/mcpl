@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { checkReplacementTiming, checkOrdinaryTiming } from './coalescing-timing.mjs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -21,7 +22,7 @@ export function view(observation) {
 }
 export function validateCheck(expectation) {
   const keys = expectation.audienceFrom ? ['audienceFrom', 'original', 'replacement'] : expectation.event ? ['event', 'metadata'] : expectation.model ? ['model', 'requestCount', 'order', 'includes', 'excludes', 'counts'] :
-    ['path', 'eq', 'oneOf', 'gte', 'between', 'exactlyOneOf', 'includes', 'excludes', 'counts', 'order', 'recoveryContent', 'recoveryFrom', 'everyIncludes', 'sameAs', 'lteProfile'];
+    ['path', 'eq', 'oneOf', 'gte', 'between', 'exactlyOneOf', 'includes', 'excludes', 'counts', 'order', 'recoveryContent', 'recoveryFrom', 'everyIncludes', 'sameAs', 'lteProfile', 'timing', 'capacitySaturated', 'ordinaryAdmission'];
   for (const key of Object.keys(expectation)) if (!keys.includes(key)) throw new Error('Unknown expectation operator: ' + key);
   if (expectation.recoveryContent && !expectation.recoveryFrom) throw new Error('Recovery content must be linked to its receipt');
   if (Object.keys(expectation).length < 2) throw new Error('Expectation must assert a property');
@@ -60,6 +61,19 @@ export function check(check, observation, history, profile) {
     return;
   }
   const actual = at(out, check.path);
+  if (check.timing) {
+    if (check.timing === 'replacement') return checkReplacementTiming(actual);
+    if (check.timing === 'ordinary-preserved') return checkOrdinaryTiming(actual);
+    throw new Error('Unknown timing contract');
+  }
+  if (check.capacitySaturated) {
+    if (actual?.hard !== true || !Number.isSafeInteger(actual.limit) || actual.limit < 0 || !Number.isSafeInteger(actual.occupied) || actual.occupied < actual.limit) throw new Error('Hard capacity saturation was not observed');
+    return;
+  }
+  if (check.ordinaryAdmission) {
+    if (actual?.accepted !== true) throw new Error('Ordinary admission control did not establish the capacity-test precondition');
+    return;
+  }
   if ('sameAs' in check) {
     const [step, ...path] = check.sameAs.split('.');
     assert.ok(history.has(step), 'missing comparison step: ' + step);
@@ -112,7 +126,11 @@ function checkValue(actual, expected) {
 
 export async function runScenario(adapter, entry, variant) {
   const missing = variant.requires.filter(capability => !adapter.profile.capabilities.includes(capability));
-  if (missing.length) return { case: entry.id, variant: variant.name, kind: entry.kind, status: 'unexercised', missing, contract: entry.contract };
+  if (missing.length) {
+    const reasons = missing.map(capability => ({ capability, ...(adapter.profile.preconditions?.[capability] ?? { status: 'unexercised', reason: 'This adapter does not construct the stated precondition.' }) }));
+    const status = reasons.some(reason => reason.status === 'blocked') ? 'blocked' : reasons.every(reason => reason.status === 'inapplicable') ? 'inapplicable' : 'unexercised';
+    return { case: entry.id, variant: variant.name, kind: entry.kind, status, missing, reasons, contract: entry.contract };
+  }
   const history = new Map(), failures = [], observations = [];
   let session, executionError, priorRequests = 0;
   try {
@@ -191,7 +209,7 @@ export async function main(argv) {
   const { createAdapter } = await import(pathToFileURL(adapterPath).href);
   const adapter = await createAdapter(resolve(options.framework));
   const hashes = {};
-  for (const file of ['event-coalescing-vectors.json', 'check-event-coalescing.mjs', 'coalescing-host-worker.mjs']) hashes[file] = createHash('sha256').update(await readFile(resolve(here, file))).digest('hex');
+  for (const file of ['event-coalescing-vectors.json', 'check-event-coalescing.mjs', 'coalescing-host-worker.mjs', 'coalescing-timing.mjs']) hashes[file] = createHash('sha256').update(await readFile(resolve(here, file))).digest('hex');
   hashes['RFC-006-event-coalescing.md'] = createHash('sha256').update(source).digest('hex');
   hashes.adapter = createHash('sha256').update(await readFile(adapterPath)).digest('hex');
   const report = {
@@ -209,12 +227,12 @@ export async function main(argv) {
       if (result.executionError) console.log('  ' + result.executionError.error.slice(0, 1200));
     }
   }
-  report.summary = Object.fromEntries(['pass', 'supporting-pass', 'fail', 'unexercised', 'observed', 'execution-error'].map(status => [status, report.results.filter(result => result.status === status).length]));
+  report.summary = Object.fromEntries(['pass', 'supporting-pass', 'fail', 'inapplicable', 'blocked', 'unexercised', 'observed', 'execution-error'].map(status => [status, report.results.filter(result => result.status === status).length]));
   report.byKind = Object.fromEntries(['host', 'server-fixture', 'advisory'].map(kind => [kind, Object.fromEntries(Object.keys(report.summary).map(status => [status, report.results.filter(result => result.kind === kind && result.status === status).length]))]));
   console.log(json(report.summary));
   console.log(json(report.byKind));
   if (options.report) await writeFile(options.report, JSON.stringify(report, null, 2) + '\n');
   // Unexercised cases are incomplete evidence, never an all-green conformance result.
-  return report.results.some(result => ['fail', 'unexercised', 'execution-error'].includes(result.status)) ? 1 : 0;
+  return report.results.some(result => ['fail', 'blocked', 'unexercised', 'execution-error'].includes(result.status)) ? 1 : 0;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await main(process.argv.slice(2));

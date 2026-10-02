@@ -1,4 +1,6 @@
 // Wire/Host adapter. Expected outcomes live in the independent corpus/runner.
+import { createHash } from 'node:crypto';
+import { measureReplacementTiming } from './coalescing-timing.mjs';
 import { fork } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -26,12 +28,29 @@ export async function createAdapter(root) {
   for (const name of ['@animalabs/chronicle', '@animalabs/context-manager', '@animalabs/membrane', 'ws']) {
     dependencies[name] = JSON.parse(await readFile(resolve(root, 'node_modules', name, 'package.json'), 'utf8')).version;
   }
-  return {
+  const inspected = {
+    'src/gate/event-gate.ts': '6d1aafbff71f2954828e6ae9bca7f8512e994fe8d31a20a18fc15bab243495d3',
+    'src/framework.ts': '9f7e02d34f33c52b2b49a8138b79dbbd5fdf32dbda976932c82b241b906d817b',
+    'src/mcpl/push-coalescer.ts': 'cd9470ebe2d9db172a7fe53965912f479b459e5825e5e88568147c72f7192aba',
+  };
+  const sourceHashes = {};
+  for (const path of Object.keys(inspected)) sourceHashes[path] = createHash('sha256').update(await readFile(resolve(root, path))).digest('hex');
+  const sourceVerified = Object.entries(inspected).every(([path, hash]) => sourceHashes[path] === hash);
+  const postponement = { kind: sourceVerified ? 'missing-required-bound' : 'unassessed-source', sourceVerified, sourceHashes, sourceRevision: revision,
+    basis: 'Inspected reset-only EventGate.handleDebounce and Framework/coalescer wake paths; no finite replacement-postponement mechanism. A finite live probe corroborates behavior but cannot prove infinite starvation.' };
+  const adapter = {
     identity: { implementation: 'Agent Framework', revision, dependencies, runtime: 'Bun ' + process.versions.bun },
     profile: {
       initialHistory: 'none', recovery: 'conservative', contextConsumption: 'shared',
       noticeRetention: 64, retryWindowMs: 3600000, renderTimeoutMs: 5000,
-      capabilities: ['wire', 'multi-server', 'compression', 'process-restart', 'process-kill', 'held-render', 'debounce', 'initial-history-none', 'untracked-history-unknown', 'conservative-recovery', 'retain-64-notices'],
+      postponement,
+      preconditions: sourceVerified ? {
+        'hard-subject-limit': { status: 'inapplicable', reason: 'Only idle subjects are pruned above a soft target; live subjects have no hard admission cap.' },
+        'per-context-consumption': { status: 'inapplicable', reason: 'This Host uses conservative shared consumption, an allowed policy.' },
+        'unadvertised-channel-scoped-push': { status: 'inapplicable', reason: 'This Host profile advertises channelScopedPush; the absent-leaf condition does not apply.' },
+        'finite-wake-postponement-bound': { status: 'blocked', reason: 'Blocked by the missing mandatory bound recorded in case 36.' },
+      } : {},
+      capabilities: ['timing-observation', 'wire', 'multi-server', 'compression', 'process-restart', 'process-kill', 'held-render', 'debounce', 'initial-history-none', 'untracked-history-unknown', 'conservative-recovery', 'retain-64-notices'],
     },
     async open(setup = {}) {
       const directory = await mkdtemp(join(tmpdir(), 'mcpl-rfc006-'));
@@ -87,7 +106,7 @@ export async function createAdapter(root) {
         });
       }
       const config = {
-        storePath: join(directory, 'store'), agents: setup.agents, compression: setup.compression,
+        storePath: join(directory, 'store'), agents: setup.agents, compression: setup.compression, background: setup.background,
         gate: setup.gate, conversations: setup.conversations, errorPolicy: setup.errorPolicy,
         servers: [...servers].map(([id, entry]) => ({
           id, url: 'ws://127.0.0.1:' + entry.wss.address().port, enabledFeatureSets: ['doc', 'other'],
@@ -133,11 +152,15 @@ export async function createAdapter(root) {
         await rm(directory, { recursive: true, force: true });
         throw error;
       }
-      return {
+      const session = {
         async step(step) {
           let reply;
           const server = step.server ?? 'editor';
-          if (step.op === 'send') reply = await send(server, step.method, step.params);
+          if (step.op === 'continuousReplacements') {
+            const timing = await measureReplacementTiming(session, () => adapter.open(setup), step, postponement);
+            return { ...await snapshot(), timing };
+          }
+          else if (step.op === 'send') reply = await send(server, step.method, step.params);
           else if (step.op === 'register') reply = await send(server, 'channels/register', { channels: [{ id: step.channel ?? 'chat', type: 'discord', label: step.channel ?? 'chat', metadata: { channelType: 'guild_text' } }] });
           else if (step.op === 'render') renderPlan = step.plan;
           else if (step.op === 'turn') {
@@ -203,6 +226,8 @@ export async function createAdapter(root) {
           if (failure) throw failure;
         },
       };
+      return session;
     },
   };
+  return adapter;
 }

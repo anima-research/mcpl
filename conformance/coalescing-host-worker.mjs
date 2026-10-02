@@ -9,7 +9,8 @@ const { AgentFramework } = await load('src/framework.ts');
 const { MockMembrane, MockYieldingStream, createMockResponse } = await load('test/helpers/mock-membrane.ts');
 const { CapabilityGrant } = await load('src/mcpl/capability-grant.ts');
 const require = createRequire(resolve(root, 'package.json'));
-let framework, membrane, failModel = false, modelFailures = 0, trace = [];
+let framework, membrane, failModel = false, modelFailures = 0, trace = [], providerRequests = [];
+const assemblies = new WeakMap();
 const ok = () => createMockResponse([{ type: 'text', text: 'FIXTURE_MODEL_REPLY' }]);
 
 function snapshot() {
@@ -25,8 +26,8 @@ function snapshot() {
       enabledFeatures: Object.fromEntries(['doc', 'other'].map(name => [name, framework.featureSetManager.isEnabled(id, name)])),
     };
   }
-  return { contexts, servers, requests: membrane.calls.map(call => ({ model: call.config?.model, messages: call.messages })),
-    trace, modelFailures, agents: Object.keys(contexts) };
+  return { contexts, servers, requests: providerRequests,
+    trace, modelFailures, scheduler: { running: framework.running, quiesced: framework.quiesced, gateQuiesced: framework.eventGate?.quiesced ?? false }, agents: Object.keys(contexts) };
 }
 
 process.on('message', async message => {
@@ -37,11 +38,13 @@ process.on('message', async message => {
       membrane = new MockMembrane();
       membrane.streamYielding = request => {
         membrane.calls.push(request);
+        providerRequests.push({ model: request.config?.model, messages: structuredClone(request.messages), observedAt: Date.now(), assemblyStartedAt: assemblies.get(request)?.startedAt });
         if (failModel) { failModel = false; modelFailures++; throw new Error('fixture model failure after assembly'); }
         return new MockYieldingStream([ok()]);
       };
       membrane.complete = async request => {
         membrane.calls.push(request);
+        providerRequests.push({ model: request.config?.model, messages: structuredClone(request.messages), observedAt: Date.now(), assemblyStartedAt: assemblies.get(request)?.startedAt });
         return createMockResponse([{ type: 'text', text: 'FIXTURE_SUMMARY' }]);
       };
       const agents = (value.agents ?? ['agent']).map(name => ({ name, model: 'fixture-' + name, systemPrompt: 'Conformance fixture.' }));
@@ -60,8 +63,18 @@ process.on('message', async message => {
         ...(value.conversations ? { conversations: value.conversations } : {}),
         mcplServers: value.servers,
       });
+      for (const agent of framework.agents.values()) {
+        const original = agent.buildActivationRequest.bind(agent);
+        agent.buildActivationRequest = async (...args) => {
+          const startedAt = Date.now();
+          const request = await original(...args);
+          assemblies.set(request, { startedAt });
+          return request;
+        };
+      }
       const originalTrace = framework.emitTrace.bind(framework);
       framework.emitTrace = event => { trace.push(event); originalTrace(event); };
+      if (value.background) framework.start();
       result = snapshot();
     } else if (operation === 'snapshot') result = snapshot();
     else if (operation === 'run') {

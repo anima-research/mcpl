@@ -59,7 +59,8 @@ export async function fixture(response = {}) {
         if (chunksSent === chunks) { clearInterval(timer); timers.delete(timer); res.end(); }
       }, intervalMs);
       timers.add(timer);
-      res.on('close', () => {
+      // Observe the transport: Bun 1.3.x can omit ServerResponse.close on client abort.
+      req.socket.once('close', () => {
         streamClosed = true;
         clearInterval(timer);
         timers.delete(timer);

@@ -37,6 +37,9 @@ test('timing requires actual current-content requests and a sustained eligible c
   assert.throws(() => checkReplacementTiming(skipped), /eligibility/);
 });
 test('negative and nonfinite delivery elapsed values are invalid observations', () => {
+  const control = replacement();
+  control.control.requests[0].observedAt = 999; control.control.requests[0].assemblyStartedAt = 999;
+  assert.throws(() => checkReplacementTiming(control), /negative/);
   for (const observedAt of [-1, NaN, Infinity, -Infinity]) {
     const t = replacement(); t.sustained.requests[0].observedAt = observedAt;
     assert.throws(() => checkReplacementTiming(t), /timestamp|elapsed/);

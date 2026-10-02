@@ -35,7 +35,7 @@ function validateRun(run, quietMs, clock, sustained) {
   }
   for (const request of run.requests) {
     measured(finite(request.observedAt) && finite(request.assemblyStartedAt), 'request lacks provider/assembly timestamps');
-    measured(request.observedAt >= request.assemblyStartedAt && request.assemblyStartedAt >= run.admissions[0].sentAt - clock.resolutionMs, 'negative request elapsed time');
+    measured(request.observedAt >= run.admissions[0].decision.timestamp && request.observedAt >= request.assemblyStartedAt && request.assemblyStartedAt >= run.admissions[0].sentAt - clock.resolutionMs, 'negative request elapsed time');
     const definitelyAdmitted = run.admissions.filter(a => a.acceptedAt < request.assemblyStartedAt - clock.resolutionMs);
     const latestRequired = definitelyAdmitted.at(-1) ?? run.admissions[0];
     const possiblyAdmitted = run.admissions.filter(a => a.sentAt <= request.observedAt + clock.resolutionMs);

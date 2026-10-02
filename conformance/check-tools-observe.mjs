@@ -30,19 +30,16 @@ for (const c of cases) {
 }
 for (const number of [43, 44, 45, 54]) {
   const vector = vectors.find((v) => v.rfcVector === number);
-  let filter = null;
   for (const action of vector.actions.filter((a) => a.op === "observe")) {
     const params =
       action.params?.$fixture === "rules-over-limit"
         ? { rules: Array.from({ length: 65 }, () => ({ match: {} })) }
         : action.params;
-    const old = filter;
     const response = parseRequest(params, { granted: number !== 43 });
     assert.equal(response.error?.code, action.expectCode, vector.id);
     if (action.expectLimit)
       assert.equal(typeof response.error.data.limit, "string");
-    if (!response.error) filter = response.filter;
-    else assert.strictEqual(filter, old, "error retains the previous filter");
+    if (!response.error) assert.deepEqual(response.result, {});
   }
   report.wrapper.push({
     rfcVector: number,

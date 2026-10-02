@@ -1126,7 +1126,7 @@
       },
       "id": "rfc008-11-reserved-prefix",
       "rfcVector": 11,
-      "description": "An undefined mcpl/priority slot changes neither effective class, argument treatment, nor model-facing content.",
+      "description": "An undefined mcpl/priority slot changes neither an existing class nor an otherwise unclassed tool; it grants no argument access and does not alter model-facing content.",
       "stages": [
         {
           "tool": {
@@ -1212,6 +1212,46 @@
             ],
             "source": "server",
             "input": "sent"
+          },
+          "diagnosticHint": "mcpl/priority",
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/priority": "high"
+            }
+          },
+          "expect": {
+            "classes": [],
+            "source": "none",
+            "input": "withheld"
           },
           "diagnosticHint": "mcpl/priority",
           "modelName": "s--run"

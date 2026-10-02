@@ -89,6 +89,7 @@ export async function loadHost(root) {
           toolObserveFilter: parsed.rules,
         };
         const observations = [];
+        let diagnosticOffset = 0;
         for (const [index, stage] of vector.stages.entries()) {
           if (index > 0) {
             if (hostTool) throw Error("Host-tool re-list is outside this adapter's fixture contract");
@@ -117,9 +118,10 @@ export async function loadHost(root) {
             descriptor: clone(descriptor), effective: clone(effective),
             model: clone(model), opening: clone(opening),
             // The hints are SHOULD-level observations, not invented policy.
-            diagnostics: [...diagnostics],
+            diagnostics: diagnostics.slice(diagnosticOffset),
             listedRevisions: (await readLog(logPath)).filter(event => event.event === "listed").map(event => event.revision),
           });
+          diagnosticOffset = diagnostics.length;
         }
         return observations;
       } catch (error) {

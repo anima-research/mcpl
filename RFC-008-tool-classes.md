@@ -244,7 +244,7 @@ implements this revision's host side.
 
 ### Running the executable vectors
 
-The frozen cases are in [`conformance/tool-class-vectors.json`](./conformance/tool-class-vectors.json). They retain the eleven case numbers above. Case 5 includes a files-only positive control, and case 9 checks all ten known classes, for 23 stages in total. Expected class and argument-treatment outcomes are stored in the JSON rather than derived by a reference implementation.
+The frozen cases are in [`conformance/tool-class-vectors.json`](./conformance/tool-class-vectors.json). They retain the eleven case numbers above. Case 5 includes a files-only positive control, case 9 checks all ten known classes, and case 11 includes a priority-only unclassed tool, for 24 stages in total. Coverage guards verify the eleven case numbers, the ten distinct model-surface classes, and the priority-only control before loading a Host adapter. Expected class and argument-treatment outcomes are stored in the JSON rather than derived by a reference implementation.
 
 Run the [checker](./conformance/check-tool-classes.mjs) with Bun against a local Agent Framework checkout. This adapter imports that checkout's TypeScript source and dependencies; no model API call is made.
 
@@ -252,10 +252,12 @@ Run the [checker](./conformance/check-tool-classes.mjs) with Bun against a local
 git clone https://github.com/anima-research/agent-framework /tmp/mcpl-tool-class-host
 git -C /tmp/mcpl-tool-class-host checkout --detach 03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc
 (cd /tmp/mcpl-tool-class-host && bun install)
+bun test conformance/tool-class-runner.test.mjs
+MCPL_FRAMEWORK=/tmp/mcpl-tool-class-host bun test conformance/tool-class-adapter.test.mjs
 bun run conformance/check-tool-classes.mjs --host /tmp/mcpl-tool-class-host
 ```
 
-The checker prints the Host's Git revision, tracked-file dirty status, Bun version, and resolved Chronicle, context-manager, and Membrane versions. It then reports each case and finishes with `TOOL CLASS CONFORMANCE OK (11 RFC cases, 23 stages)`. A failed assertion exits nonzero. The optional `--vectors PATH` selects another case file; `--adapter PATH` selects another implementation adapter.
+The checker prints the Host's Git revision, tracked-file dirty status, Bun version, and resolved Chronicle, context-manager, and Membrane versions. It then reports each case and finishes with `TOOL CLASS CONFORMANCE OK (11 RFC cases, 24 stages)`. A failed assertion exits nonzero. The optional `--vectors PATH` selects another case file; `--adapter PATH` selects another implementation adapter.
 
 The recorded run used clean Host revision `03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc`, Bun 1.4.2, `@animalabs/chronicle` 0.4.0, `@animalabs/context-manager` 0.11.0, and `@animalabs/membrane` 0.5.86. The Host does not commit a dependency lock, so a fresh installation may resolve other permitted versions; the checker reports the actual versions used.
 
@@ -267,7 +269,7 @@ The checks read the Host's actual tool ingestion, re-list handler, lifecycle des
 
 The adapter's argument checks exercise Host policy output, not notification delivery to another observer. The projection checks inspect the Host's model-facing definitions, not a live model provider. These boundaries are independent of RFC-007's larger delivery/pairing suite.
 
-Recommended diagnostics are reported separately from required behavior. At the recorded Host revision, unknown and malformed class diagnostics were present; the undefined `mcpl/priority` slot was ignored correctly but produced no recommended diagnostic. The checker exposes that SHOULD-level observation in its summary. Supplying this evidence leaves Draft→Accepted to protocol review.
+Recommended diagnostics are reported separately from required behavior. Each stage records only diagnostics captured since the previous stage's observation; an earlier warning cannot satisfy a later diagnostic hint. At the recorded Host revision, unknown and malformed class diagnostics were present; the undefined `mcpl/priority` slot was ignored correctly but produced no recommended diagnostic. The checker exposes that SHOULD-level observation in its summary. Supplying this evidence leaves Draft→Accepted to protocol review.
 
 ### Consuming the vectors in another Host
 

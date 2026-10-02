@@ -39,6 +39,10 @@ RFC-005's incorporation into the draft does not waive its [acceptance criterion]
 freeze executable vectors under `conformance/` and run them against a strict schema/parser
 implementation and a host-treatment implementation.
 
+### Experimental input streams
+
+[RFC-009: Provisional channel input streams](./RFC-009-input-streams.md) proposes a Host-authorized plain-text trial profile for revisable input, such as speech-to-text hypotheses. Partials stay provisional; one accepted final enters ordinary channel ingestion. It remains separate from the integrated specification and requires Portal STT interoperability evidence before acceptance.
+
 ## License
 
 MIT

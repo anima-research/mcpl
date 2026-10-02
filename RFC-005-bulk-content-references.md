@@ -481,6 +481,49 @@ strict schema/parser implementation and one host-treatment implementation.
 | 19 | Payload served with `Content-Encoding: gzip` | `sizeBytes` and `digest` describe the *decoded* identity octets; fetcher verifies against those, and the streaming ceiling applies to decoded bytes |
 | 20 | Lookup of an evicted or unknown reference id | Defined "unknown reference" error; the id never resolves to a different record within the session |
 
+### Running and consuming the executable vectors
+
+The executable corpus is [`conformance/bulk-reference-vectors.json`](./conformance/bulk-reference-vectors.json). Its 43 cases cover the 20 numbered rows above, media/size/disposition variants, schema boundaries, and the invalid-optional-field rule. The expected values come from this RFC and SPEC §19, not from the implementation under test. The runner reports strict emitter-schema validation and receiving-Host treatment separately.
+
+Run from the MCPL repository root with Bun. Install the external Host in an isolated checkout and Ajv in a temporary directory:
+
+```sh
+FRAMEWORK="$(mktemp -d)"
+git clone https://github.com/anima-research/agent-framework.git "$FRAMEWORK"
+git -C "$FRAMEWORK" checkout --detach 03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc
+(cd "$FRAMEWORK" && bun install --ignore-scripts)
+AJV_DIR="$(mktemp -d)"
+bun add --cwd "$AJV_DIR" --exact --ignore-scripts ajv@8.17.1
+bun test conformance/bulk-reference-runner.test.mjs conformance/bulk-reference-fixture.test.mjs
+MCPL_FRAMEWORK="$FRAMEWORK" bun test conformance/bulk-reference-isolation.test.mjs
+bun run conformance/check-bulk-references.mjs \
+  --framework "$FRAMEWORK" \
+  --ajv "$AJV_DIR/node_modules/ajv/dist/ajv.js" \
+  --report /tmp/bulk-reference-report.json
+```
+
+The measured baseline is **43/43 schema expectations and 40/43 Host expectations**, with exit status **1**. Agent Framework at the pinned revision truncates overlong `name`, `mimeType`, and `expiresAt` values into retained testimony instead of rejecting those optional fields as §8 requires. The three `field-rule-*` cases report these failures. The separate vector-17 display-bound checks pass. `REFERENCE_LIMITS` (255/255/64) matches the schema maxima: rejecting 1024-character testimony is the §8 field rule, while shortening an in-schema label to `STUB_FIELD_CHARS` (120) is the separate, compliant §5 display layer. A receiver can satisfy the display bound by dropping an invalid optional field; the corpus does not require that field to survive as a truncated label.
+
+The runner uses Ajv 8.17.1 on Appendix B.1 extracted directly from `SPEC.md`. Ajv strict mode is enabled; `strictRequired: false` permits the specification's nested `required` branches without requiring local duplicate property declarations. Unknown additional properties remain allowed by the schema. A negative schema expectation passing means the emitter's block was rejected, not that the block is conformant. The Host still receives the original input so invalid optional fields and inline-data contradictions exercise its defensive handling.
+
+The supplied adapter imports Agent Framework's actual classifier, `PushHandler`, tool-history serializer, registry, `ReferenceFetcher`, and `fetch_reference` dispatch method. Push observations include the text passed to the wake-policy callback and the content queued by `PushHandler`. Fetch fixtures use live loopback HTTP: gzip decoding runs in the runtime's real fetch stack, the continuing-stream fixture records early connection closure, and a second origin observes redirect traversal and credentials. Storage is an in-memory capture of the fetcher's save callback. Unknown/evicted-id tests execute the actual tool dispatch with event and trace sinks supplied by the fixture.
+
+This is component-boundary evidence, not a running residence or a model-provider integration test. It covers push content and persisted tool history; it does not claim full injection/channel delivery coverage. Vector 7 validates the unchanged annotated block against the pre-RFC-005 Appendix B.1 schema captured in `bulk-reference-legacy-schema.json` at MCPL `f684cae937bdaf3e8cd200c82673db217e63f652`, rather than running a historical Host. Vector 6 pins a known embedded-credential fixture's emitter nonconformance separately from schema acceptance: JSON Schema cannot identify arbitrary bearer capabilities. These distinctions remain part of the evidence for the acceptance decision.
+
+#### Vector and adapter contract
+
+Consume the JSON cases rather than copying their inputs. Each case has a stable `id`, its RFC row number in `rfc`, `blocks`, per-block `schemaValid` booleans, an `operation`, and Host expectations in `expect`. Model-view expectations apply before and after the operation; `expect.before` and `expect.after` override visibility fields at that stage, while their `hidden` lists add to the shared exclusions. The verified-`ref` case requires a payload-free stub before fetch and allows a stub or verified inline bytes afterward. Inline-contradiction cases exclude both base64 and decoded data, plus the URI when present. Expand `{"$repeat":"x","count":1048576}` into the specified string and replace `$ORIGIN` with the fixture origin and `$CASE` with the URL-encoded case id. Each case has a distinct URI path even when a loopback port is reused, so process-global Host reference caches cannot cross-contaminate cases. This keeps megabyte inputs portable without committing megabyte files.
+
+The operations are:
+
+- `render`: classify the original blocks and observe push content, wake-policy text, and tool-history text. Rendering alone must make zero requests.
+- `fetch`: observe rendering before and after an explicit Host-mediated fetch. `maxBytes` is the fixture's actual-byte ceiling. `response.bodyBase64` names identity octets; `gzip: true` compresses them on the wire. `stream` specifies chunk count, chunk bytes, and interval milliseconds. `redirect: true` points to the second loopback origin.
+- `registry`: register the first reference twice, force eviction through `registrations` distinct records, then register the first URI again and look up its old id plus an unknown id. The supplied Host's registry quota is 2,000; the fixture registers 2,100 records to cross it. A port needs a bounded test registry for this operation.
+
+To run another implementation with the same JavaScript assertions, pass `--adapter /path/to/adapter.mjs`. Export `createAdapter(root)`, returning `identity`, a positive `maxViewChars` policy bound, `displayProfile`, `credentialPolicy`, and `observe(case, {origin, token})`. The credential policy is `connection-bearer` or `omit`: this public loopback fixture permits either same-origin choice under §6.1, while cross-origin forwarding of connection credentials remains forbidden under both profiles. The profile gives `fieldChars` limits for `name` and `mimeType`, plus the renderer’s nonempty `truncationMarkers`. The two `displayField` cases require a mark only when the original field exceeds that profile’s limit. A renderer with a 255-character limit can keep the entire 255-character value; another renderer can use `[truncated]` instead of an ellipsis. These are profile assertions, not protocol-wide typography or truncation thresholds. The supplied adapter documents the observation shape in code. Report actual parsing, model-facing strings, private reference records, fetch outcomes, save callbacks, and lookup errors; keep expected-value comparisons in the runner. `maxViewChars`, the registry quota, origin-only fetch policy, and id-based filenames describe the tested Host profile, not protocol-wide constants. Other language implementations can consume the same fixtures and expected properties directly.
+
+The streaming fixture observes client aborts through the request socket close event, including under Bun 1.3.14, whose response close event can omit that notification. A fixture regression drives a known-aborting client and checks early closure before fixture cleanup; a non-aborting control must receive every chunk. Run that regression under the target Host runtime as well as the development runtime. The isolation regression runs a verified fetch and a digest-mismatch fetch against one deliberately reused origin, requiring a distinct reference and a fresh request for the second case. The harness regression tests deliberately perturb observations to check that URI/payload leaks, unbounded displays, receipt-triggered fetches, retained invalid fields, model-visible mismatched or unverified payloads, decoded inline contradictions, per-lane control/bidi leaks, saved partial bytes, forwarded credentials, missed stream aborts, and id reuse produce failures. The conformance command records source hashes, the MCPL and Host revisions, the runtime, Ajv version, and resolved Framework package versions. Its exit status is nonzero for any schema or Host expectation failure; setup failures also exit nonzero. Maintainers decide RFC acceptance from this evidence; adding or running the corpus does not change Draft status.
+
 ---
 
 ## 12. Migration Sketch (the motivating case)

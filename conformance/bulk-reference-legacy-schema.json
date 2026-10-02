@@ -1,0 +1,102 @@
+{
+  "sourceRevision": "f684cae937bdaf3e8cd200c82673db217e63f652",
+  "sourcePath": "SPEC.md Appendix B.1",
+  "schema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "type",
+          "text"
+        ],
+        "properties": {
+          "type": {
+            "const": "text"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "image"
+          },
+          "data": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "type",
+              "data",
+              "mimeType"
+            ]
+          },
+          {
+            "required": [
+              "type",
+              "uri"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "audio"
+          },
+          "data": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "type",
+              "data",
+              "mimeType"
+            ]
+          },
+          {
+            "required": [
+              "type",
+              "uri"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "object",
+        "required": [
+          "type",
+          "uri"
+        ],
+        "properties": {
+          "type": {
+            "const": "resource"
+          },
+          "uri": {
+            "type": "string"
+          }
+        }
+      }
+    ]
+  }
+}

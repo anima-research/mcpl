@@ -1,0 +1,1306 @@
+{
+  "format": "mcpl-bulk-references-1",
+  "source": "RFC-005 revision 3 \u00a711 / SPEC \u00a719 and Appendix B.1",
+  "fixtures": {
+    "token": "fixture-secret",
+    "expansion": "$ORIGIN is loopback fixture origin; $CASE is the URL-encoded case id; {$repeat, count} expands to a string. bodyBase64 is decoded before optional gzip."
+  },
+  "cases": [
+    {
+      "id": "01-never",
+      "rfc": 1,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret",
+          "RIFF0000WAVEpayload",
+          "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+        ]
+      }
+    },
+    {
+      "id": "02-inline-image",
+      "rfc": 2,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "image",
+          "data": "U0VDUkVULVBheWxvYWQ=",
+          "mimeType": "image/example",
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": false,
+        "hidden": [
+          "U0VDUkVULVBheWxvYWQ=",
+          "SECRET-Payload"
+        ]
+      }
+    },
+    {
+      "id": "02-inline-audio",
+      "rfc": 2,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "audio",
+          "data": "U0VDUkVULVBheWxvYWQ=",
+          "mimeType": "audio/example",
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": false,
+        "hidden": [
+          "U0VDUkVULVBheWxvYWQ=",
+          "SECRET-Payload"
+        ]
+      }
+    },
+    {
+      "id": "03-verified-never",
+      "rfc": 1,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 19,
+          "disposition": "never",
+          "digest": "sha256:uM7OLD5sO8G3SeWw3LirIreZM71523d9_qXxkn8ewpM"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret",
+          "RIFF0000WAVEpayload",
+          "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+        ],
+        "ok": true,
+        "decodedBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
+        "digestVerified": true,
+        "requests": 1,
+        "savedMime": "audio/wav"
+      },
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
+        "contentType": "audio/wav"
+      },
+      "maxBytes": 128
+    },
+    {
+      "id": "03-verified-ref",
+      "rfc": 3,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 19,
+          "disposition": "ref",
+          "digest": "sha256:uM7OLD5sO8G3SeWw3LirIreZM71523d9_qXxkn8ewpM"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": false,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": true,
+        "decodedBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
+        "digestVerified": true,
+        "requests": 1,
+        "savedMime": "audio/wav",
+        "before": {
+          "stub": true,
+          "hidden": [
+            "UklGRjAwMDBXQVZFcGF5bG9hZA==",
+            "RIFF0000WAVEpayload"
+          ]
+        },
+        "after": {
+          "stubOrInlineBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+        }
+      },
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
+        "contentType": "audio/wav"
+      },
+      "maxBytes": 128
+    },
+    {
+      "id": "04-claim-over-ceiling",
+      "rfc": 4,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 129,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": false,
+        "requests": 0,
+        "unchanged": true
+      },
+      "maxBytes": 128
+    },
+    {
+      "id": "05-digest-mismatch",
+      "rfc": 5,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never",
+          "digest": "sha256:2SmKENGwc1g33EvYXaxkGw887yekfl1TpU8vP1svz_o"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret",
+          "RIFF0000WAVEpayload",
+          "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+        ],
+        "ok": false,
+        "requests": 1
+      },
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+      },
+      "maxBytes": 128
+    },
+    {
+      "id": "06-embedded-server-credential",
+      "rfc": 6,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload?token=fixture-secret",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      },
+      "emitterConformant": false,
+      "knownEmbeddedCredential": "fixture-secret"
+    },
+    {
+      "id": "07-legacy-resource",
+      "rfc": 7,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      },
+      "legacySchemaValid": true
+    },
+    {
+      "id": "08-push-size-0",
+      "rfc": 8,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "event text"
+        },
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 0,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true,
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "includes": [
+          "event text"
+        ]
+      }
+    },
+    {
+      "id": "08-push-size-9007199254740991",
+      "rfc": 8,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "event text"
+        },
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 9007199254740991,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true,
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "includes": [
+          "event text"
+        ]
+      }
+    },
+    {
+      "id": "09-signed-never",
+      "rfc": 9,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload?signature=fixture-secret",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "includes": [
+          "attachment.wav",
+          "audio/wav",
+          "claimed"
+        ]
+      }
+    },
+    {
+      "id": "09-signed-ref",
+      "rfc": 9,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload?signature=fixture-secret",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "ref"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "includes": [
+          "attachment.wav",
+          "audio/wav",
+          "claimed"
+        ]
+      }
+    },
+    {
+      "id": "09-signed-ABSENT",
+      "rfc": 9,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload?signature=fixture-secret",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "includes": [
+          "attachment.wav",
+          "audio/wav",
+          "claimed"
+        ]
+      }
+    },
+    {
+      "id": "10-stream-ceiling",
+      "rfc": 10,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 1,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": false,
+        "requests": 1,
+        "abortStream": true
+      },
+      "maxBytes": 64,
+      "response": {
+        "stream": {
+          "chunks": 64,
+          "chunkBytes": 32,
+          "intervalMs": 8
+        }
+      }
+    },
+    {
+      "id": "11-file-refused",
+      "rfc": 11,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "file:///private/fixture",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": false,
+        "requests": 0
+      },
+      "maxBytes": 128
+    },
+    {
+      "id": "12-cross-origin-redirect",
+      "rfc": 12,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "redirectSafe": true
+      },
+      "maxBytes": 128,
+      "response": {
+        "redirect": true
+      }
+    },
+    {
+      "id": "13-observed-mime",
+      "rfc": 13,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "image/png",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": true,
+        "requests": 1,
+        "savedMime": "audio/wav",
+        "decodedBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+      },
+      "maxBytes": 128,
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
+        "contentType": "image/png"
+      }
+    },
+    {
+      "id": "14-path-label",
+      "rfc": 14,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "../../.ssh/authorized_keys",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": true,
+        "requests": 1,
+        "storageFromId": true
+      },
+      "maxBytes": 128,
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+      }
+    },
+    {
+      "id": "15-invalid-size--1",
+      "rfc": 15,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": -1,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "missingFields": [
+          "sizeBytes"
+        ]
+      }
+    },
+    {
+      "id": "15-invalid-size-3.5",
+      "rfc": 15,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 3.5,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "missingFields": [
+          "sizeBytes"
+        ]
+      }
+    },
+    {
+      "id": "15-invalid-size-9007199254740992",
+      "rfc": 15,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 9007199254740992,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "missingFields": [
+          "sizeBytes"
+        ]
+      }
+    },
+    {
+      "id": "16-unparseable-expiry",
+      "rfc": 16,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never",
+          "expiresAt": "not-a-date"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": false,
+        "requests": 0
+      },
+      "maxBytes": 128
+    },
+    {
+      "id": "17-oversized-name",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": {
+            "$repeat": "x",
+            "count": 1048576
+          },
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "bounded": true
+      }
+    },
+    {
+      "id": "17-oversized-mimeType",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": {
+            "$repeat": "x",
+            "count": 1048576
+          },
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "bounded": true
+      }
+    },
+    {
+      "id": "18-label-controls",
+      "rfc": 18,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "bad\u0000\u0007\u0085\u202ename",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": true,
+        "requests": 1,
+        "storageFromId": true,
+        "cleanLabel": true
+      },
+      "maxBytes": 128,
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+      }
+    },
+    {
+      "id": "18-label-device",
+      "rfc": 18,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "CON",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": true,
+        "requests": 1,
+        "storageFromId": true,
+        "cleanLabel": true
+      },
+      "maxBytes": 128,
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+      }
+    },
+    {
+      "id": "19-gzip-identity",
+      "rfc": 19,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 512,
+          "disposition": "never",
+          "digest": "sha256:lpLtodXIVBMEdKIHuQpBcKep8qRs7_PZ2yMPG55ZsIU"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": true,
+        "requests": 1,
+        "decodedBase64": "UklGRjAwMDBXQVZFeHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=",
+        "digestVerified": true
+      },
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFeHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=",
+        "gzip": true
+      },
+      "maxBytes": 1024
+    },
+    {
+      "id": "19-gzip-decoded-ceiling",
+      "rfc": 19,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 1,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "ok": false,
+        "requests": 1
+      },
+      "response": {
+        "bodyBase64": "UklGRjAwMDBXQVZFeHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=",
+        "gzip": true
+      },
+      "maxBytes": 64
+    },
+    {
+      "id": "20-eviction-and-unknown",
+      "rfc": 20,
+      "operation": "registry",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": false,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      },
+      "registrations": 2100
+    },
+    {
+      "id": "schema-uri-4096",
+      "rfc": 1,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": {
+            "$repeat": "a",
+            "count": 4096
+          },
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      }
+    },
+    {
+      "id": "schema-uri-4097",
+      "rfc": 1,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": {
+            "$repeat": "a",
+            "count": 4097
+          },
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": false,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "kind": "invalid"
+      }
+    },
+    {
+      "id": "schema-name-255",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": {
+            "$repeat": "a",
+            "count": 255
+          },
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "displayField": "name"
+      }
+    },
+    {
+      "id": "schema-name-256",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": {
+            "$repeat": "a",
+            "count": 256
+          },
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      }
+    },
+    {
+      "id": "schema-mimeType-255",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": {
+            "$repeat": "a",
+            "count": 255
+          },
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "displayField": "mimeType"
+      }
+    },
+    {
+      "id": "schema-mimeType-256",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": {
+            "$repeat": "a",
+            "count": 256
+          },
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      }
+    },
+    {
+      "id": "schema-expiresAt-64",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never",
+          "expiresAt": {
+            "$repeat": "a",
+            "count": 64
+          }
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      }
+    },
+    {
+      "id": "schema-expiresAt-65",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never",
+          "expiresAt": {
+            "$repeat": "a",
+            "count": 65
+          }
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      }
+    },
+    {
+      "id": "schema-both-uri-and-data",
+      "rfc": 2,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "image",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never",
+          "data": "U0VDUkVU"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": false,
+        "hidden": [
+          "U0VDUkVU",
+          "SECRET",
+          "$ORIGIN/case/$CASE/payload"
+        ]
+      }
+    },
+    {
+      "id": "schema-unknown-property",
+      "rfc": 7,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never",
+          "extension": {
+            "unused": true
+          }
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ]
+      }
+    },
+    {
+      "id": "field-rule-name",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": {
+            "$repeat": "a",
+            "count": 1024
+          },
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "missingFields": [
+          "name"
+        ]
+      }
+    },
+    {
+      "id": "field-rule-mimeType",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": {
+            "$repeat": "a",
+            "count": 1024
+          },
+          "sizeBytes": 12,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "missingFields": [
+          "mimeType"
+        ]
+      }
+    },
+    {
+      "id": "field-rule-expiresAt",
+      "rfc": 17,
+      "operation": "render",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "$ORIGIN/case/$CASE/payload",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 12,
+          "disposition": "never",
+          "expiresAt": {
+            "$repeat": "a",
+            "count": 1024
+          }
+        }
+      ],
+      "schemaValid": [
+        false
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret"
+        ],
+        "missingFields": [
+          "expiresAt"
+        ]
+      }
+    }
+  ]
+}

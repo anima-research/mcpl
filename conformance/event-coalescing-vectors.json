@@ -1,0 +1,1583 @@
+{
+  "format": "mcpl-event-coalescing-1",
+  "source": "RFC-006 revision 7 \u00a714",
+  "profileNotes": "Known-none cases assume initial establishes history; conservative recovery is declared. Conditional requirements are capabilities of the test profile, not exemptions from mandatory protocol behavior. Unsupported preconditions are unexercised, never passes.",
+  "cases": [
+    {
+      "id": "1",
+      "contract": "1. **First.** Unseen subject with history established as `none` \u2192 appended; `\"first\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "first"}],"id": "s0"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST"]}],"id": "s1"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1a",
+      "contract": "1a. **Unknown first occurrence.** Untracked subject without `initial` or complete history\n    \u2192 appended; `\"appended\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["untracked-history-unknown"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s0"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST"]}],"id": "s1"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "contract": "2. **Replace.** E1(K), no inference, E2(K) \u2192 next request contains E2's content and no byte\n   of E1's; `\"replaced\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s1"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["SECOND"]},{"path": "allRequestText","excludes": ["FIRST"]}],"id": "s2"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "contract": "3. **Consumed.** E1(K), inference, E2(K) \u2192 history holds E1 unchanged, then E2; `\"appended\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST"]}],"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","order": ["FIRST","SECOND"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "contract": "4. **Consumption at assembly.** E1(K); an inference including E1 fails before output;\n   E2(K) \u2192 `\"appended\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"errorPolicy": "no-retry"},
+          "requires": [],
+          "steps": [
+            {"op": "failNextModel","id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s1"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 1},{"path": "modelFailures","eq": 1},{"path": "requestText","includes": ["FIRST"]}],"id": "s2","expectedModelFailureSince": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","SECOND"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "contract": "5. **Compression consumes.** E1(K) is summarized before any agent inference; E2(K) \u2192\n   `\"appended\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"compression": true},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FOLDED_ORIGINAL"}]}},"id": "s0"},
+            {"op": "compress","checks": [{"path": "summaryLevel","gte": 1}],"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "AFTER_FOLD"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["AFTER_FOLD"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "contract": "6. **Repeated edits.** Create, edit\u2081, edit\u2082, edit\u2083, no inference \u2192 one occurrence in the\n   next request, edit\u2083's content, `\"replaced\"` \u00d73.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT_1"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT_2"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "3","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT_3"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["EDIT_3"]},{"path": "allRequestText","excludes": ["FIRST","EDIT_1","EDIT_2"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "7",
+      "contract": "7. **Restart with conservative delivery.** E1(K); host restarts, preserving E1 as an\n   ordinary occurrence rather than replaceable work; E2(K) \u2192 `\"appended\"`, and the next\n   request contains E1 then E2 (vector 40). Retry deduplication still holds (\u00a73.1).",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["conservative-recovery"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "restart","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","order": ["FIRST","SECOND"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "8",
+      "contract": "8. **Occurrence dedup.** `channels/incoming` with (`messageId` M, `eventId` a) then\n   (M, b) \u2192 second is admitted as a new occurrence; (M, a) again \u2192 duplicate, same result\n   as the first.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"id": "first"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "b","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "EDIT"}],"coalesce": {"key": "K"}}]},"checks": [{"path": "reply.result.results.0.coalesce.outcome","eq": "replaced"}],"id": "s2"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"checks": [{"path": "reply.result","sameAs": "first.reply.result"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"EDIT": 1}},{"path": "allRequestText","excludes": ["FIRST"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "9",
+      "contract": "9. **Scope isolation.** Same key across two servers, two feature sets, two channels, and\n   feature-set vs channel scope of one server \u2192 no cross-replacement.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"servers": ["editor","other"]},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "SERVER_A"}]}},"server": "editor","id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "SERVER_B"}]}},"server": "other","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "other","eventId": "otherfs","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "OTHER_FEATURE"}]}},"id": "s2"},
+            {"op": "register","channel": "chat","id": "s3"},
+            {"op": "register","channel": "otherchat","id": "s4"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "c","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "CHANNEL_A"}],"coalesce": {"key": "K","initial": true}}]},"id": "s5"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "otherchat","messageId": "M","eventId": "d","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "CHANNEL_B"}],"coalesce": {"key": "K","initial": true}}]},"id": "s6"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "edit","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SERVER_A_NEW"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s7"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["SERVER_A_NEW","SERVER_B","OTHER_FEATURE","CHANNEL_A","CHANNEL_B"]},{"path": "allRequestText","excludes": ["\"SERVER_A\""]}],"id": "s8"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "contract": "10. **Create via channel, edit/delete via push.** Open channel: create via\n    `channels/incoming` (key K), edit via `push/event` with `coalesce.channelId` (K) \u2192\n    `\"replaced\"`; delete via push retract \u2192 `\"retracted\"`; the model sees nothing.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","channelId": "chat"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true,"channelId": "chat"},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["FIRST","EDIT","DELETED"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "11",
+      "contract": "11. **Create via push, edit via channel.** Closed channel: create via channel-scoped push;\n    channel opens; edit via `channels/incoming` (same `channelId`, K) \u2192 `\"replaced\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "channelTool","name": "channel_close","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","channelId": "chat","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s2"},
+            {"op": "channelTool","name": "channel_open","id": "s3"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "b","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "EDIT"}],"coalesce": {"key": "K"}}]},"checks": [{"path": "reply.result.results.0.coalesce.outcome","eq": "replaced"}],"id": "s4"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["EDIT"]},{"path": "allRequestText","excludes": ["FIRST"]}],"id": "s5"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "12",
+      "contract": "12. **Open/close transition, audience.** Create delivered to context A while channel open;\n    channel closes; edit (admitted) \u2192 replaces in A only; the edit is not delivered to any\n    context A did not include.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"agents": ["agent","b"],"conversations": {"templateAgent": "agent","bind": {"channel": "always"},"trigger": {"channel": "always"}}},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"id": "s1"},
+            {"op": "observe","id": "audience"},
+            {"op": "channelTool","name": "channel_close","id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","channelId": "chat"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s4"},
+            {"op": "observe","checks": [{"audienceFrom": "audience","original": "FIRST","replacement": "EDIT"}],"id": "s5"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "13",
+      "contract": "13. **Revoked channel authority.** Create (K); `channels.incoming` narrowed away from the\n    channel; edit via channel-scoped push \u2192 `-32017`; pending create untouched. Retract \u2192\n    `-32017`; nothing removed, nothing appended.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"id": "s1"},
+            {"op": "grant","leaves": ["pushEvents"],"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","channelId": "chat"},"payload": {"content": [{"type": "text","text": "REFUSED_EDIT"}]}},"checks": [{"path": "reply.error.code","eq": -32017}],"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true,"channelId": "chat"},"payload": {"content": [{"type": "text","text": "REFUSED_DELETE"}]}},"checks": [{"path": "reply.error.code","eq": -32017}],"id": "s4"},
+            {"op": "observe","checks": [{"path": "allContextText","includes": ["FIRST"]},{"path": "allContextText","excludes": ["REFUSED_EDIT","REFUSED_DELETE"]}],"id": "s5"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "14",
+      "contract": "14. **Scope not inferable.** `push/event` with `origin.channelId` = C but no\n    `coalesce.channelId`, key K \u2192 feature-set scope; does not touch channel-scoped (C, K).\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "CHANNEL_FIRST"}],"coalesce": {"key": "K","initial": true}}]},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "FEATURE_ONLY"}]},"origin": {"channelId": "chat"}},"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["CHANNEL_FIRST","FEATURE_ONLY"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "15",
+      "contract": "15. **Unadvertised leaf.** `coalesce.channelId` to a host without `channelScopedPush` \u2192\n    `-32602`; nothing appended.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"eventCoalescing": {"pushEvents": true,"channelScopedPush": false}},
+          "requires": ["unadvertised-channel-scoped-push"],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","channelId": "chat"},"payload": {"content": [{"type": "text","text": "REFUSED"}]}},"checks": [{"path": "reply.error.code","eq": -32602}],"id": "s1"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["REFUSED"]}],"id": "s2"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "15a",
+      "contract": "15a. **Coalesced channel message without `eventId`.** `channels/incoming` message with\n    `coalesce` and no `eventId` (or empty) \u2192 `{ accepted: false, reason: \"coalesce_invalid\" }`;\n    subject untouched; siblings in the batch processed. The same message with a fresh\n    `eventId` and a previously seen `messageId` \u2192 admitted as an edit, `\"replaced\"` or\n    `\"appended\"`.",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"id": "s1"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "INVALID"}],"coalesce": {"key": "K"}},{"channelId": "chat","messageId": "S","eventId": "sibling","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "VALID_SIBLING"}],"coalesce": {"key": "sibling","initial": true}},{"channelId": "chat","messageId": "M","eventId": "","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "INVALID_EMPTY"}],"coalesce": {"key": "K"}}]},"checks": [{"path": "reply.result.results.0.accepted","eq": false},{"path": "reply.result.results.0.reason","eq": "coalesce_invalid"},{"path": "reply.result.results.1.accepted","eq": true},{"path": "reply.result.results.2.accepted","eq": false},{"path": "reply.result.results.2.reason","eq": "coalesce_invalid"}],"id": "s2"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "b","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "EDIT"}],"coalesce": {"key": "K"}}]},"checks": [{"path": "reply.result.results.0.coalesce.outcome","eq": "replaced"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["EDIT","VALID_SIBLING"]},{"path": "allRequestText","excludes": ["INVALID"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "16",
+      "contract": "16. **One batch.** N1(K), N2(K), N3(K), no inference \u2192 exactly one `push/render` at next\n    assembly; the request contains the rendered content once and no fallback text.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n3","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s3"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "requestText","counts": {"RENDERED": 1}},{"path": "allRequestText","excludes": ["FALLBACK"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "17",
+      "contract": "17. **Notices returned.** In vector 16 the params carry N1\u2013N3 oldest-first, each with its\n    `data` byte-equivalent; `dropped: 0`. With 100 notices and a host retaining 64,\n    `notices.length + dropped == 100`, newest retained. No `data` appears in any request.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["retain-64-notices"],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n0","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_0"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_1"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_2"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n3","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_3"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n4","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_4"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s5"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n5","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_5"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s6"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n6","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_6"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s7"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n7","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_7"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s8"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n8","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_8"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s9"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n9","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_9"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s10"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n10","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_10"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s11"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n11","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_11"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s12"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n12","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_12"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s13"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n13","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_13"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s14"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n14","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_14"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s15"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n15","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_15"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s16"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n16","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_16"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s17"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n17","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_17"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s18"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n18","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_18"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s19"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n19","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_19"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s20"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n20","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_20"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s21"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n21","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_21"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s22"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n22","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_22"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s23"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n23","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_23"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s24"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n24","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_24"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s25"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n25","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_25"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s26"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n26","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_26"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s27"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n27","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_27"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s28"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n28","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_28"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s29"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n29","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_29"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s30"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n30","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_30"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s31"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n31","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_31"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s32"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n32","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_32"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s33"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n33","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_33"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s34"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n34","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_34"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s35"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n35","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_35"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s36"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n36","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_36"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s37"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n37","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_37"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s38"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n38","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_38"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s39"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n39","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_39"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s40"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n40","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_40"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s41"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n41","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_41"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s42"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n42","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_42"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s43"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n43","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_43"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s44"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n44","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_44"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s45"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n45","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_45"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s46"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n46","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_46"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s47"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n47","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_47"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s48"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n48","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_48"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s49"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n49","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_49"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s50"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n50","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_50"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s51"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n51","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_51"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s52"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n52","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_52"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s53"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n53","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_53"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s54"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n54","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_54"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s55"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n55","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_55"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s56"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n56","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_56"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s57"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n57","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_57"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s58"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n58","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_58"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s59"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n59","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_59"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s60"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n60","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_60"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s61"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n61","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_61"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s62"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n62","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_62"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s63"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n63","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_63"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s64"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n64","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_64"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s65"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n65","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_65"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s66"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n66","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_66"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s67"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n67","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_67"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s68"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n68","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_68"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s69"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n69","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_69"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s70"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n70","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_70"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s71"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n71","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_71"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s72"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n72","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_72"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s73"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n73","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_73"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s74"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n74","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_74"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s75"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n75","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_75"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s76"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n76","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_76"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s77"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n77","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_77"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s78"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n78","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_78"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s79"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n79","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_79"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s80"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n80","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_80"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s81"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n81","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_81"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s82"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n82","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_82"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s83"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n83","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_83"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s84"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n84","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_84"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s85"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n85","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_85"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s86"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n86","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_86"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s87"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n87","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_87"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s88"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n88","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_88"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s89"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n89","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_89"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s90"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n90","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_90"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s91"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n91","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_91"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s92"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n92","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_92"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s93"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n93","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_93"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s94"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n94","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_94"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s95"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n95","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_95"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s96"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n96","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_96"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s97"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n97","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_97"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s98"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n98","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_98"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s99"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n99","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_99"}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s100"},
+            {"op": "assemble","checks": [{"path": "renders.0.params.notices","eq": [{"eventId": "n36","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_36"}},{"eventId": "n37","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_37"}},{"eventId": "n38","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_38"}},{"eventId": "n39","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_39"}},{"eventId": "n40","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_40"}},{"eventId": "n41","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_41"}},{"eventId": "n42","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_42"}},{"eventId": "n43","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_43"}},{"eventId": "n44","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_44"}},{"eventId": "n45","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_45"}},{"eventId": "n46","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_46"}},{"eventId": "n47","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_47"}},{"eventId": "n48","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_48"}},{"eventId": "n49","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_49"}},{"eventId": "n50","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_50"}},{"eventId": "n51","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_51"}},{"eventId": "n52","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_52"}},{"eventId": "n53","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_53"}},{"eventId": "n54","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_54"}},{"eventId": "n55","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_55"}},{"eventId": "n56","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_56"}},{"eventId": "n57","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_57"}},{"eventId": "n58","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_58"}},{"eventId": "n59","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_59"}},{"eventId": "n60","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_60"}},{"eventId": "n61","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_61"}},{"eventId": "n62","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_62"}},{"eventId": "n63","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_63"}},{"eventId": "n64","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_64"}},{"eventId": "n65","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_65"}},{"eventId": "n66","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_66"}},{"eventId": "n67","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_67"}},{"eventId": "n68","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_68"}},{"eventId": "n69","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_69"}},{"eventId": "n70","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_70"}},{"eventId": "n71","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_71"}},{"eventId": "n72","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_72"}},{"eventId": "n73","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_73"}},{"eventId": "n74","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_74"}},{"eventId": "n75","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_75"}},{"eventId": "n76","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_76"}},{"eventId": "n77","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_77"}},{"eventId": "n78","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_78"}},{"eventId": "n79","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_79"}},{"eventId": "n80","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_80"}},{"eventId": "n81","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_81"}},{"eventId": "n82","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_82"}},{"eventId": "n83","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_83"}},{"eventId": "n84","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_84"}},{"eventId": "n85","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_85"}},{"eventId": "n86","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_86"}},{"eventId": "n87","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_87"}},{"eventId": "n88","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_88"}},{"eventId": "n89","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_89"}},{"eventId": "n90","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_90"}},{"eventId": "n91","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_91"}},{"eventId": "n92","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_92"}},{"eventId": "n93","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_93"}},{"eventId": "n94","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_94"}},{"eventId": "n95","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_95"}},{"eventId": "n96","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_96"}},{"eventId": "n97","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_97"}},{"eventId": "n98","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_98"}},{"eventId": "n99","timestamp": "2026-01-01T00:00:00Z","data": {"private": "PRIVATE_99"}}]},{"path": "renders.0.params.dropped","eq": 36},{"path": "allRequestText","excludes": ["PRIVATE_"]}],"id": "s101"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "18",
+      "contract": "18. **Render is history.** After vector 16, a second inference with no new notice issues no\n    `push/render` and its request contains the same materialized occurrence, byte-identical.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"RENDERED": 1}}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "requestText","counts": {"RENDERED": 1}}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "19",
+      "contract": "19. **New batch after consumption.** N1(K), inference, N2(K) \u2192 `\"first\"`; second render.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "RENDER_ONE"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "assemble","id": "s2"},
+            {"op": "render","plan": {"mode": "immediate","text": "RENDER_TWO"},"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_TWO"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "first"}],"id": "s4"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 2},{"path": "requestText","order": ["RENDER_ONE","RENDER_TWO"]}],"id": "s5"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "20",
+      "contract": "20. **Empty render.** Result `content: []` \u2192 nothing appended; batch closed.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "empty","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "allRequestText","excludes": ["RENDERED","FALLBACK"]}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "21",
+      "contract": "21. **Fallback.** Render times out / errors / server disconnected \u2192 fallback materialized;\n    inference proceeds within the timeout bound.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "rpc-error",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "error","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FALLBACK"]}],"id": "s2"}
+          ]
+        },
+        {
+          "name": "timeout",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "joinTurn","checks": [{"path": "requestText","includes": ["FALLBACK"]}],"id": "s4"},
+            {"op": "releaseRender","text": "TOO_LATE","id": "s5"}
+          ]
+        },
+        {
+          "name": "disconnected",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "admitted","checks": [{"path": "reply.result.accepted","eq": true},{"path": "servers.editor.connected","eq": true},{"path": "servers.editor.policyEstablished","eq": true}]},
+            {"op": "disconnect","id": "s1"},
+            {"op": "wait","ms": 100,"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FALLBACK"]}],"id": "s3"},
+            {"op": "reconnect","id": "s4","checks": [{"path": "servers.editor.connected","eq": true},{"path": "servers.editor.policyEstablished","eq": true},{"path": "servers.editor.binding","sameAs": "admitted.servers.editor.binding"},{"path": "servers.editor.grant","sameAs": "admitted.servers.editor.grant"},{"path": "servers.editor.operatorPolicy","sameAs": "admitted.servers.editor.operatorPolicy"},{"path": "servers.editor.enabledFeatures","sameAs": "admitted.servers.editor.enabledFeatures"}]},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "retry-original","checks": [{"path": "reply.result","sameAs": "admitted.reply.result"}]},
+            {"op": "send","id": "admission-restored","method": "push/event","params": {"featureSet": "doc","eventId": "ordinary","timestamp": "2026-01-01T00:00:00Z","payload": {"content": [{"type": "text","text": "RECONNECTED_ADMISSION"}]}},"checks": [{"path": "reply.result.accepted","eq": true}]},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"FALLBACK": 1}},{"path": "requestText","includes": ["RECONNECTED_ADMISSION"]}],"id": "s5"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "22",
+      "contract": "22. **Notices during render.** N1(K); render starts; N2(K) arrives \u2192 `\"first\"`; render\n    params contain N1 only; result materialized; next assembly renders a batch containing\n    N2 only.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_ONE"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_TWO"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "first"},{"path": "renders.0.params.eventId","eq": "n1"}],"id": "s4"},
+            {"op": "render","plan": {"mode": "immediate","text": "RENDER_TWO"},"id": "s5"},
+            {"op": "releaseRender","text": "RENDER_ONE","id": "s6"},
+            {"op": "joinTurn","id": "s7"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 2},{"path": "renders.1.params.notices","eq": [{"eventId": "n2","timestamp": "2026-01-01T00:00:00Z"}]},{"path": "requestText","includes": ["RENDER_ONE","RENDER_TWO"]}],"id": "s8"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "23",
+      "contract": "23. **Late result.** Render times out, fallback materialized (still unconsumed); result\n    arrives \u2192 discarded (audit per \u00a711); model-visible content is the fallback.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["materialized-unread"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "materializeWithoutConsume","id": "s2"},
+            {"op": "releaseRender","text": "TOO_LATE","id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FALLBACK"]},{"path": "allRequestText","excludes": ["TOO_LATE"]}],"id": "s4"}
+          ]
+        },
+        {
+          "name": "supporting-after-consumption",
+          "setup": {},
+          "requires": [],
+          "evidenceBoundary": "Fallback has been consumed. Supports late-result rejection, not the unread-fallback precondition of the principal variant.",
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "joinTurn","id": "s4"},
+            {"op": "releaseRender","text": "TOO_LATE","id": "s5"},
+            {"op": "wait","ms": 50,"id": "s6"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FALLBACK"]},{"path": "allRequestText","excludes": ["TOO_LATE"]}],"id": "s7"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "24",
+      "contract": "24. **Authority re-checked at response.** Feature set disabled (or channel authority\n    revoked, for a channel-scoped batch) while render in flight \u2192 result discarded; nothing\n    materialized; batch dropped. Disabled *before* assembly \u2192 no `push/render`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "during-render",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"channelId": "chat"},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s2"},
+            {"op": "startTurn","id": "s3"},
+            {"op": "waitRender","count": 1,"id": "s4"},
+            {"op": "grant","leaves": ["pushEvents"],"id": "s5"},
+            {"op": "releaseRender","text": "REVOKED_RENDER","id": "s6"},
+            {"op": "joinTurn","id": "s7"},
+            {"op": "observe","checks": [{"path": "allContextText","excludes": ["FALLBACK","REVOKED_RENDER"]},{"path": "allRequestText","excludes": ["FALLBACK","REVOKED_RENDER"]}],"id": "s8"}
+          ]
+        },
+        {
+          "name": "before-assembly",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s0"},
+            {"op": "disableFeature","id": "s1"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 0},{"path": "allRequestText","excludes": ["FALLBACK"]}],"id": "s2"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "25",
+      "contract": "25. **Render once.** Batch delivered to two contexts \u2192 one `push/render`; both receive the\n    same materialized occurrence.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"agents": ["agent","b"]},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "turn","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 2},{"path": "requests","everyIncludes": "RENDERED"},{"model": "fixture-agent","requestCount": 1,"includes": ["RENDERED"]},{"model": "fixture-b","requestCount": 1,"includes": ["RENDERED"]},{"path": "contexts.agent","includes": ["RENDERED"]},{"path": "contexts.b","includes": ["RENDERED"]}],"id": "s2"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "26",
+      "contract": "26. **No inference from render.** `inference/request` issued while handling `push/render`\n    is refused (\u00a710.7).\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "inference-request","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "assemble","checks": [{"path": "renders.0.inferenceResponse.error.code","eq": -32600}],"id": "s2"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27",
+      "contract": "27. **Dropped coverage.** `dropped > 0` \u2192 a notice-only conformance server's result content\n    mentions the count.\n",
+      "kind": "server-fixture",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["retain-64-notices"],
+          "steps": [
+            {"op": "render","plan": {"mode": "notice-summary","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n0","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 0}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 1}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 2}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n3","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 3}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n4","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 4}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s5"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n5","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 5}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s6"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n6","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 6}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s7"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n7","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 7}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s8"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n8","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 8}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s9"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n9","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 9}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s10"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n10","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 10}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s11"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n11","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 11}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s12"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n12","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 12}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s13"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n13","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 13}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s14"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n14","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 14}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s15"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n15","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 15}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s16"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n16","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 16}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s17"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n17","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 17}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s18"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n18","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 18}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s19"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n19","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 19}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s20"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n20","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 20}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s21"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n21","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 21}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s22"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n22","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 22}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s23"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n23","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 23}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s24"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n24","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 24}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s25"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n25","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 25}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s26"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n26","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 26}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s27"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n27","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 27}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s28"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n28","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 28}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s29"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n29","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 29}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s30"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n30","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 30}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s31"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n31","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 31}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s32"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n32","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 32}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s33"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n33","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 33}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s34"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n34","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 34}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s35"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n35","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 35}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s36"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n36","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 36}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s37"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n37","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 37}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s38"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n38","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 38}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s39"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n39","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 39}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s40"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n40","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 40}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s41"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n41","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 41}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s42"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n42","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 42}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s43"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n43","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 43}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s44"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n44","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 44}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s45"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n45","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 45}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s46"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n46","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 46}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s47"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n47","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 47}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s48"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n48","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 48}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s49"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n49","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 49}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s50"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n50","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 50}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s51"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n51","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 51}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s52"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n52","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 52}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s53"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n53","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 53}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s54"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n54","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 54}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s55"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n55","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 55}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s56"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n56","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 56}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s57"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n57","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 57}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s58"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n58","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 58}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s59"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n59","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 59}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s60"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n60","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 60}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s61"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n61","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 61}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s62"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n62","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 62}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s63"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n63","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 63}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s64"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n64","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 64}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s65"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n65","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 65}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s66"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n66","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 66}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s67"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n67","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 67}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s68"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n68","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 68}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s69"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n69","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 69}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s70"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n70","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 70}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s71"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n71","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 71}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s72"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n72","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 72}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s73"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n73","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 73}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s74"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n74","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 74}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s75"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n75","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 75}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s76"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n76","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 76}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s77"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n77","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 77}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s78"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n78","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 78}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s79"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n79","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 79}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s80"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n80","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 80}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s81"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n81","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 81}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s82"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n82","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 82}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s83"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n83","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 83}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s84"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n84","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 84}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s85"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n85","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 85}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s86"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n86","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 86}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s87"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n87","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 87}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s88"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n88","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 88}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s89"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n89","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 89}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s90"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n90","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 90}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s91"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n91","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 91}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s92"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n92","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 92}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s93"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n93","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 93}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s94"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n94","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 94}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s95"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n95","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 95}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s96"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n96","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 96}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s97"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n97","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 97}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s98"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n98","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 98}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s99"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n99","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": 99}},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s100"},
+            {"op": "assemble","checks": [{"path": "renders.0.params.dropped","eq": 36},{"path": "requestText","includes": ["DROPPED=36"]}],"id": "s101"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27a",
+      "contract": "27a. **Retract during render, late result.** N1(K); render starts; retract K with notice\n    (history `none`) \u2192 `\"retracted\"`; result arrives \u2192 discarded (audit per \u00a711); next request\n    contains nothing from K \u2014 neither rendered content nor fallback nor notice.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s4"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s5"},
+            {"op": "joinTurn","id": "s6"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK","DELETED"]}],"id": "s7"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27b",
+      "contract": "27b. **Retract during render, timeout.** As 27a but the render times out \u2192 no fallback\n    materialized; next request contains nothing from K.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s4"},
+            {"op": "joinTurn","id": "s5"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s6"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK","DELETED"]}],"id": "s7"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27c",
+      "contract": "27c. **Plain replacement during render, late result.** N1(K); render starts; plain E(K) \u2192\n    `\"replaced\"`; result arrives \u2192 discarded; next request contains E's content and no byte\n    of the render result or fallback.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "p","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "PLAIN_NEW"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s4"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s5"},
+            {"op": "joinTurn","id": "s6"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK","DELETED"]},{"path": "requestText","includes": ["PLAIN_NEW"]}],"id": "s7"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27d",
+      "contract": "27d. **Plain replacement during render, timeout.** As 27c but the render times out \u2192 the\n    request contains E's content only; no fallback.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "p","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "PLAIN_NEW"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s4"},
+            {"op": "joinTurn","id": "s5"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s6"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK","DELETED"]},{"path": "requestText","includes": ["PLAIN_NEW"]}],"id": "s7"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27e",
+      "contract": "27e. **Materialization wins.** N1(K); render completes and is materialized (unconsumed);\n    retract K \u2192 `\"retracted\"`, materialized occurrence removed. Same but materialized and\n    consumed before the retract \u2192 `\"noted\"`, materialized occurrence retained, notice\n    appended.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "before-consumption",
+          "setup": {},
+          "requires": ["materialized-unread","initial-history-none"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s0"},
+            {"op": "materializeWithoutConsume","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["RENDERED","FALLBACK","DELETED"]}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "after-consumption",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "assemble","id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["RENDERED","DELETED"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27f",
+      "contract": "27f. **Cancel and new pending.** N1(K); render starts; N2(K) (`\"first\"`, new pending\n    batch); retract K \u2192 both the frozen and the pending batch are removed; result arrives \u2192\n    discarded; next assembly issues no `push/render` for K.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK_ONE"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_TWO"}]}},"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s5"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s6"},
+            {"op": "joinTurn","id": "s7"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK_ONE","FALLBACK_TWO","DELETED"]}],"id": "s8"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27g",
+      "contract": "27g. **Plain supersedes frozen and pending, late result.** N1(K); render starts; N2(K)\n    opens a new pending batch; plain E(K) \u2192 `\"replaced\"`. Both batches are superseded.\n    The late result is discarded; assembly contains E only and issues no render for N2.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK_ONE"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_TWO"}]}},"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "p","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "PLAIN_NEW"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s5"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s6"},
+            {"op": "joinTurn","id": "s7"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK_ONE","FALLBACK_TWO","DELETED"]},{"path": "requestText","includes": ["PLAIN_NEW"]}],"id": "s8"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27h",
+      "contract": "27h. **Plain supersedes frozen and pending, timeout.** As 27g, but the first render\n    times out. Neither batch's fallback appears; assembly contains E only.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"initial": true},"payload": {"content": [{"type": "text","text": "FALLBACK_ONE"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_TWO"}]}},"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "p","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "PLAIN_NEW"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s5"},
+            {"op": "joinTurn","id": "s6"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s7"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK_ONE","FALLBACK_TWO","DELETED"]},{"path": "requestText","includes": ["PLAIN_NEW"]}],"id": "s8"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27i",
+      "contract": "27i. **Plain \u2192 deferred before consumption.** Plain E(K); N(K) with `deferred: true`\n    \u2192 `\"replaced\"`. E is removed unread; the next assembly renders N and contains only\n    its result (or its fallback), not E. If E was consumed first, it remains history.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "render","plan": {"mode": "immediate","text": "RENDERED"},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["RENDERED"]},{"path": "allRequestText","excludes": ["FIRST","FALLBACK"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "27j",
+      "contract": "27j. **New notice after replacement.** N1(K); render starts; N2(K); plain E(K); N3(K).\n    N1 and N2 stay cancelled; N3 displaces E if unread and opens a fresh batch. Completing\n    or timing out N1 cannot discard N3. Its render receives N3 only.",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_ONE"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_TWO"}]}},"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "p","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "PLAIN_NEW"}]}},"id": "s5"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n3","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_THREE"}]}},"id": "s6"},
+            {"op": "render","plan": {"mode": "immediate","text": "RENDER_THREE"},"id": "s7"},
+            {"op": "releaseRender","text": "LATE_RENDER","id": "s8"},
+            {"op": "joinTurn","id": "s9"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 2},{"path": "renders.1.params.eventId","eq": "n3"},{"path": "requestText","includes": ["RENDER_THREE"]},{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK_ONE","FALLBACK_TWO","PLAIN_NEW"]}],"id": "s10"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "28",
+      "contract": "28. **Never consumed.** Create, edit (pending), retract with notice \u2192 `\"retracted\"`; next\n    request contains nothing from K.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "edit","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["FIRST","EDIT","DELETED"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "29",
+      "contract": "29. **Read original \u2192 unread edit \u2192 delete.** Create; inference; edit (`\"appended\"`);\n    retract with notice \u2192 `\"noted\"`; next request contains the original, no byte of the\n    edit, and the notice.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "assemble","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "edit","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","order": ["FIRST","DELETED"]},{"path": "allRequestText","excludes": ["EDIT"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "30",
+      "contract": "30. **Consumed, pure withdrawal.** Create; inference; retract with empty content \u2192\n    `\"consumed\"`; nothing appended.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "assemble","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": []}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "consumed"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"FIRST": 1}},{"path": "allRequestText","excludes": ["DELETED"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "31",
+      "contract": "31. **Restart before deletion.** Create; inference or not; host restarts without durable\n    history; retract with notice \u2192 `\"noted\"` (history `unknown`).\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["restart-without-history"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "assemble","id": "s1"},
+            {"op": "restartWithoutHistory","id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["DELETED"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "32",
+      "contract": "32. **Unknown subject.** Retract with notice for a key never seen \u2192 `\"noted\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s0"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["DELETED"]}],"id": "s1"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "33",
+      "contract": "33. **Pure withdrawal in channel scope.** Retract on a channel-scoped subject with empty\n    content and history `some` \u2192 `\"consumed\"`; nothing appended. (Revision 6 rejected this\n    with `-32602`.) Earlier consumed content remains unchanged; this operation makes no\n    claim that the model learned the subject disappeared.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"id": "s1"},
+            {"op": "assemble","id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true,"channelId": "chat"},"payload": {"content": []}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "consumed"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST"]},{"path": "allRequestText","excludes": ["DELETED"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "34",
+      "contract": "34. **History persists past slot.** Create; inference; retract (`\"noted\"`); new create\n    under the same K; retract \u2192 `\"noted\"` (bit is `some`, not reset by the empty slot).\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "assemble","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "NEW_CREATE"}]}},"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "again","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "SECOND_NOTICE"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s4"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","SECOND_NOTICE"]},{"path": "allRequestText","excludes": ["NEW_CREATE"]}],"id": "s5"}
+          ]
+        },
+        {
+          "name": "empty-slot-after-retraction",
+          "setup": {},
+          "requires": [],
+          "contractSupplement": "RFC-006 \u00a76: After a retraction the subject slot is empty; the consumed-history bit persists. The deletion notice is an ordinary occurrence.",
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "baseline","checks": [{"path": "reply.result.accepted","eq": true}]},
+            {"op": "assemble","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"id": "s2","checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"},{"path": "allContextText","includes": ["DELETED"]}]},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "NEW_CREATE"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"},{"path": "servers.editor.operatorPolicy","sameAs": "baseline.servers.editor.operatorPolicy"},{"path": "agents","sameAs": "baseline.agents"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","DELETED","NEW_CREATE"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "34a",
+      "contract": "34a. **Initial after loss of history.** A host using `initial` has evicted history or\n    restarted without it; create with `initial: true` under a fresh key; edit; retract with\n    notice \u2192 `\"retracted\"`; the next request contains nothing from K. Without `initial`\n    or independent complete history, the same sequence \u2192 `\"noted\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["restart-without-history","initial-history-none"],
+          "steps": [
+            {"op": "restartWithoutHistory","id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "edit","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["FIRST","EDIT","DELETED"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "34b",
+      "contract": "34b. **Initial cannot lower history.** Create; inference; a second occurrence with\n    `initial: true` under the same K; retract with notice \u2192 `\"noted\"`.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "assemble","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "second","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "NEW_INITIAL"}]}},"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","DELETED"]},{"path": "allRequestText","excludes": ["NEW_INITIAL"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "34c",
+      "contract": "34c. **Capacity degrades, never refuses.** With the host at its subject limit, a new\n    channel-scoped create \u2192 `accepted: true`, `\"appended\"`; the content reaches the next\n    request. A retract for an untracked subject with notice at the limit \u2192 `\"noted\"`,\n    notice delivered. A deferred occurrence at the limit \u2192 `\"appended\"`, fallback delivered\n    without rendering. These outcomes assume ordinary admission would accept the event.",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["hard-subject-limit"],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "CONTROL_BEFORE","eventId": "control-before","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "ORDINARY_BEFORE"}]}]},"checks": [{"path": "reply.result.results.0","ordinaryAdmission": true}],"id": "s1"},
+            {"op": "fillCapacity","channel": "chat","checks": [{"path": "capacity","capacitySaturated": true}],"id": "s2"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "CONTROL_AFTER","eventId": "control-after","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "ORDINARY_AFTER"}]}]},"checks": [{"path": "reply.result.results.0","ordinaryAdmission": true}],"id": "s3"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true}}]},"checks": [{"path": "reply.result.results.0.coalesce.outcome","eq": "appended"}],"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "untracked","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "untracked","retract": true,"channelId": "chat"},"payload": {"content": [{"type": "text","text": "CAPACITY_NOTICE"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "noted"}],"id": "s5"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "deferred-new","deferred": true,"channelId": "chat"},"payload": {"content": [{"type": "text","text": "CAPACITY_FALLBACK"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s6"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["FIRST","CAPACITY_NOTICE","CAPACITY_FALLBACK"]},{"path": "renders.length","eq": 0}],"id": "s7"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "35",
+      "contract": "35. **Idempotent retry.** Same `eventId` twice \u2192 one effect; equal results.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "first"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"checks": [{"path": "reply.result","sameAs": "first.reply.result"}],"id": "s1"},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"FIRST": 1}},{"path": "modelCalls","eq": 1}],"id": "s2"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "36",
+      "contract": "36. **No starvation.** With delivery available and wake eligibility maintained,\n    replacements arrive faster than the host's quiet period \u2192 the subject's current content\n    reaches a request within the host's stated bound. A subject deliberately matching\n    `skip` is not forced to wake by this vector.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"background": true,"gate": {"policies": [{"name": "timing-subject","match": {"tagsAny": ["doc:wake"]},"behavior": {"debounce": 300}}],"default": "skip"}},
+          "requires": ["timing-observation"],
+          "steps": [
+            {"op": "continuousReplacements","id": "s0","quietMs": 300,"intervalMs": 40,"count": 25,"checks": [{"path": "timing","timing": "replacement"}]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "37",
+      "contract": "37. **Audit** (illustrative; host policy). After vectors 2, 16, 23 and 29 a host that keeps\n    an audit record shows E1; N1\u2013N3 with rendered and fallback content; the discarded late\n    result; and the removed edit \u2014 each marked displaced/folded/discarded.\n",
+      "kind": "advisory",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"id": "s1"},
+            {"op": "assemble","id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"id": "s3"},
+            {"op": "observe","id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "38",
+      "contract": "38. **Malformed, per lane.** 257-byte key on `push/event` \u2192 `-32602`. In a\n    `channels/incoming` batch of three where the second has `deferred: true` \u2192 results\n    `[accepted, {accepted:false, reason:\"coalesce_invalid\"}, accepted]`.",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "bad","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"payload": {"content": [{"type": "text","text": "TOO_LONG_KEY"}]}},"checks": [{"path": "reply.error.code","eq": -32602}],"id": "s0"},
+            {"op": "register","channel": "chat","id": "s1"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "A","eventId": "good1","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "GOOD_ONE"}],"coalesce": {"key": "one","initial": true}},{"channelId": "chat","messageId": "B","eventId": "bad","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "MALFORMED"}],"coalesce": {"key": "K","deferred": true}},{"channelId": "chat","messageId": "C","eventId": "good2","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "GOOD_TWO"}],"coalesce": {"key": "two","initial": true}}]},"checks": [{"path": "reply.result.results.0.accepted","eq": true},{"path": "reply.result.results.1.reason","eq": "coalesce_invalid"},{"path": "reply.result.results.2.accepted","eq": true}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["GOOD_ONE","GOOD_TWO"]},{"path": "allRequestText","excludes": ["TOO_LONG_KEY","MALFORMED"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "39",
+      "contract": "39. **Reconnect retry.** E1 accepted; receipt lost; transport reconnects and policy completes;\n    retry E1 within the retry window \u2192 original receipt; the next request contains E1's\n    content exactly once.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "first"},
+            {"op": "disconnect","id": "s1"},
+            {"op": "reconnect","id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"checks": [{"path": "reply.result","sameAs": "first.reply.result"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"FIRST": 1}}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "40",
+      "contract": "40. **Nothing accepted is lost.** E1 accepted; transport drops, or the host restarts, before\n    any inference; the producer returns \u2192 the next request contains E1's content (as the\n    pending occupant or as an ordinary occurrence \u2014 either conforms). E2 for the same\n    subject after recovery but before the next assembly has two conforming outcomes:\n    if E1 remains replaceable, `\"replaced\"` and only E2 reaches the request; if recovery\n    sealed E1 as an ordinary occurrence, `\"appended\"` and E1 then E2 both reach it. Neither\n    outcome duplicates an occurrence. Revocation and later sender retraction/replacement\n    still apply; the preservation guarantee does not override them.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "restart",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "restart","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","oneOf": ["replaced","appended"]}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["SECOND"]},{"path": "requestText","recoveryContent": ["FIRST","SECOND"],"recoveryFrom": "s2.reply.result.coalesce.outcome"}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "kill",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "kill","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "SECOND"}]}},"checks": [{"path": "reply.result.coalesce.outcome","oneOf": ["replaced","appended"]}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["SECOND"]},{"path": "requestText","recoveryContent": ["FIRST","SECOND"],"recoveryFrom": "s2.reply.result.coalesce.outcome"}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "kill-pending-deferred",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "RECOVERED_RENDER"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_RECOVERY"}},"payload": {"content": [{"type": "text","text": "RECOVERED_FALLBACK"}]}},"id": "s1"},
+            {"op": "kill","id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","exactlyOneOf": ["RECOVERED_FALLBACK","RECOVERED_RENDER"]},{"path": "allRequestText","excludes": ["PRIVATE_RECOVERY"]},{"path": "renders.length","oneOf": [0,1]}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "kill-rendering-deferred",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "held","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true,"data": {"private": "PRIVATE_INTERRUPTED"}},"payload": {"content": [{"type": "text","text": "INTERRUPTED_FALLBACK"}]}},"id": "s1"},
+            {"op": "startTurn","id": "s2"},
+            {"op": "waitRender","count": 1,"id": "s3"},
+            {"op": "kill","id": "s4"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "requestText","counts": {"INTERRUPTED_FALLBACK": 1}},{"path": "allRequestText","excludes": ["PRIVATE_INTERRUPTED"]}],"id": "s5"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "41",
+      "contract": "41. **Ordinary traffic unaffected by reconnect.** A registered channel; transport drops and\n    reconnects; a `channels/incoming` message without `coalesce` \u2192 accepted exactly as it\n    would have been under SPEC \u00a714 before this RFC. This RFC adds no registration step.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "disconnect","id": "s1"},
+            {"op": "reconnect","id": "s2"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "ORDINARY"}]}]},"checks": [{"path": "reply.result.results.0.accepted","eq": true}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["ORDINARY"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "42",
+      "contract": "42. **Binding reassignment.** Reuse a configured label for another endpoint/principal;\n    its events cannot replace, retract, or deduplicate the old binding's occurrences.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "ENDPOINT_A"}]}},"id": "s0"},
+            {"op": "reassign","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "ENDPOINT_B"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "first"}],"id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "edit","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "ENDPOINT_B_NEW"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["ENDPOINT_A","ENDPOINT_B_NEW"]},{"path": "allRequestText","excludes": ["\"ENDPOINT_B\""]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "43",
+      "contract": "43. **Current wake treatment.** Under a policy where `skip` is non-qualifying, replace\n    the sole cause of an unstarted inference with a `skip` occurrence (or retract it\n    unread) \u2192 no inference starts solely for the displaced cause. Another eligible cause\n    may still start one. Reverse the transition \u2192 normal qualifying wake treatment.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "skip-control",
+          "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "SKIP"}]}},"id": "s0"},
+            {"op": "wait","ms": 200,"id": "s1"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 0}],"id": "s2"}
+          ]
+        },
+        {
+          "name": "qualifying-control",
+          "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "QUALIFYING"}]},"tags": ["probe:wake"]},"id": "s0"},
+            {"op": "wait","ms": 200,"id": "s1"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 1}],"id": "s2"}
+          ]
+        },
+        {
+          "name": "qualifying-to-skip",
+          "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "QUALIFYING"}]},"tags": ["probe:wake"]},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "NEW_NONQUALIFYING"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "replaced"},{"path": "modelCalls","eq": 0}],"id": "s1"},
+            {"op": "wait","ms": 200,"id": "s2"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 0}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "qualifying-retracted",
+          "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
+          "requires": ["initial-history-none"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "QUALIFYING"}]},"tags": ["probe:wake"]},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"},{"path": "modelCalls","eq": 0}],"id": "s1"},
+            {"op": "wait","ms": 200,"id": "s2"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 0}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "skip-to-qualifying",
+          "setup": {"gate": {"policies": [{"name": "qualifying","match": {"tagsAny": ["probe:wake"]},"behavior": {"debounce": 100}}],"default": "skip"}},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "SKIP"}]}},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "b","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "QUALIFYING"}]},"tags": ["probe:wake"]},"id": "s1"},
+            {"op": "wait","ms": 200,"id": "s2"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 1}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "44",
+      "contract": "44. **Unrelated debounce.** A coalesced subject reaches its postponement bound while an\n    unrelated ordinary event is awaiting its configured quiet period \u2192 coalescing does\n    not shorten or extend the ordinary event's deadline. Timer layout is unrestricted.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"wakePolicy": "debounce"},
+          "requires": ["finite-wake-postponement-bound","paired-debounce-control"],
+          "steps": [
+            {"op": "unrelatedDebounce","ordinaryQuietMs": 200,"checks": [{"path": "timing","timing": "ordinary-preserved"}],"id": "s0"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "45",
+      "contract": "45. **Stable reply target across lanes.** Create M via `channels/incoming`; edit via a\n    channel-scoped push without a new platform message identity \u2192 M remains the reply\n    target, regardless of whether the create was already consumed.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "register","channel": "chat","id": "s0"},
+            {"op": "send","method": "channels/incoming","params": {"messages": [{"channelId": "chat","messageId": "M","eventId": "a","timestamp": "2026-01-01T00:00:00Z","author": {"id": "u","name": "User"},"tags": ["chat:mention"],"content": [{"type": "text","text": "FIRST"}],"coalesce": {"key": "K","initial": true},"threadId": "THREAD"}]},"id": "s1"},
+            {"op": "assemble","id": "s2"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "edit","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","channelId": "chat"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"checks": [{"event": "edit","metadata": {"messageId": "M","threadId": "THREAD"}}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "requestText","includes": ["EDIT"]}],"id": "s4"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "46",
+      "contract": "46. **Per-context replacement** (only for hosts that track contexts separately). E1\n    delivered to contexts A and B; A consumes it; E2 \u2192 A holds E1 then E2, B holds E2 only;\n    `outcome` is `\"appended\"`.",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"agents": ["agent","b"]},
+          "requires": ["per-context-consumption"],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s0"},
+            {"op": "consumeContext","agent": "agent","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "edit","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K"},"payload": {"content": [{"type": "text","text": "EDIT"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "appended"}],"id": "s2"},
+            {"op": "observe","checks": [{"path": "contexts.agent","includes": ["FIRST","EDIT"]},{"path": "contexts.b","includes": ["EDIT"]},{"path": "contexts.b","excludes": ["FIRST"]}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "47",
+      "contract": "47. **Host-restart retry.** E1 accepted, reply lost; host restarts; current policy restored;\n    retry E1 within the advertised window \u2192 original receipt, no second occurrence.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "first"},
+            {"op": "kill","id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"checks": [{"path": "reply.result","sameAs": "first.reply.result"}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"FIRST": 1}}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "48",
+      "contract": "48. **Window changes.** E1 admitted and acknowledged under a two-hour advertised window;\n    reconnect advertises one hour; retry E1 after 90 minutes \u2192 still deduplicated. A producer\n    uncertain which session admitted E1 uses the shorter advertised window and stops its retries earlier.\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {},
+          "requires": ["changing-advertised-retry-window"],
+          "steps": [
+            {"op": "advertiseWindow","ms": 7200000,"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"id": "s1"},
+            {"op": "reconnectWithWindow","ms": 3600000,"id": "s2"},
+            {"op": "advanceClock","ms": 5400000,"id": "s3"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "a","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","initial": true},"payload": {"content": [{"type": "text","text": "FIRST"}]}},"checks": [{"path": "reply.result","sameAs": "s1.reply.result"}],"id": "s4"},
+            {"op": "assemble","checks": [{"path": "requestText","counts": {"FIRST": 1}}],"id": "s5"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "49",
+      "contract": "49. **Shared render baseline.** Deferred R1 is materialized for contexts A and B; A consumes\n    R1, B has not. R2 is rendered relative to R1 \u2192 B retains R1 before R2. Optional\n    per-context replacement cannot discard R1 from B and strand R2 without its baseline.",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "default",
+          "setup": {"agents": ["agent","b"]},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "immediate","text": "BASELINE_ONE"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "suppressWake","agent": "b","id": "s2"},
+            {"op": "turn","checks": [{"path": "modelCalls","eq": 1},{"model": "fixture-agent","requestCount": 1,"includes": ["BASELINE_ONE"]},{"model": "fixture-b","requestCount": 0},{"path": "contexts.b","includes": ["BASELINE_ONE"]}],"id": "s3"},
+            {"op": "render","plan": {"mode": "immediate","text": "DELTA_TWO"},"id": "s4"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s5"},
+            {"op": "turn","id": "s6"},
+            {"op": "observe","checks": [{"model": "fixture-b","order": ["BASELINE_ONE","DELTA_TWO"]},{"path": "renders.length","eq": 2}],"id": "s7"}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -242,6 +242,41 @@ executable vectors under `conformance/` (the RFC-003 §3.1 precedent, as RFC-005
 requires) and run against at least one host implementation. agent-framework PR #199
 implements this revision's host side.
 
+### Running the executable vectors
+
+The frozen cases are in [`conformance/tool-class-vectors.json`](./conformance/tool-class-vectors.json). They retain the eleven case numbers above. Case 5 includes a files-only positive control, and case 9 checks all ten known classes, for 23 stages in total. Expected class and argument-treatment outcomes are stored in the JSON rather than derived by a reference implementation.
+
+Run the [checker](./conformance/check-tool-classes.mjs) with Bun against a local Agent Framework checkout. This adapter imports that checkout's TypeScript source and dependencies; no model API call is made.
+
+```sh
+git clone https://github.com/anima-research/agent-framework /tmp/mcpl-tool-class-host
+git -C /tmp/mcpl-tool-class-host checkout --detach 03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc
+(cd /tmp/mcpl-tool-class-host && bun install)
+bun run conformance/check-tool-classes.mjs --host /tmp/mcpl-tool-class-host
+```
+
+The checker prints the Host's Git revision, tracked-file dirty status, Bun version, and resolved Chronicle, context-manager, and Membrane versions. It then reports each case and finishes with `TOOL CLASS CONFORMANCE OK (11 RFC cases, 23 stages)`. A failed assertion exits nonzero. The optional `--vectors PATH` selects another case file; `--adapter PATH` selects another implementation adapter.
+
+The recorded run used clean Host revision `03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc`, Bun 1.4.2, `@animalabs/chronicle` 0.4.0, `@animalabs/context-manager` 0.11.0, and `@animalabs/membrane` 0.5.86. The Host does not commit a dependency lock, so a fresh installation may resolve other permitted versions; the checker reports the actual versions used.
+
+### Evidence boundary
+
+The [Agent Framework adapter](./conformance/agent-framework-tool-classes.mjs) creates an actual Framework with a temporary Chronicle store, a synthetic model transport, and a [synthetic stdio tool provider](./conformance/tool-class-provider.mjs). The provider supplies data and emits real `notifications/tools/list_changed` notifications. It implements no class policy.
+
+The checks read the Host's actual tool ingestion, re-list handler, lifecycle descriptor, and agent-facing tool projection. Input-schema and description expectations stay on the checker side of the process boundary, so an in-place Host mutation cannot change both actual and expected values. Source attribution comes from the Host's own resolver using its populated tables and declaration cache. Argument exclusion is checked against the actual `openingFor()` decision routine with both grants, a requesting filter, and Host-derived tool metadata. The runner asserts that a `started` payload exists before inspecting its arguments; suppressing the whole event cannot pass an exclusion case.
+
+The adapter's argument checks exercise Host policy output, not notification delivery to another observer. The projection checks inspect the Host's model-facing definitions, not a live model provider. These boundaries are independent of RFC-007's larger delivery/pairing suite.
+
+Recommended diagnostics are reported separately from required behavior. At the recorded Host revision, unknown and malformed class diagnostics were present; the undefined `mcpl/priority` slot was ignored correctly but produced no recommended diagnostic. The checker exposes that SHOULD-level observation in its summary. Supplying this evidence leaves Draft→Accepted to protocol review.
+
+### Consuming the vectors in another Host
+
+Each vector starts with a fresh Host. Its `origin` selects a provider tool or an embedding-Host tool; `overrides` and `hostClasses` are the fixture's operator and Host knowledge tables. `inputsPolicy` gives the argument-observation narrowing, and `input` is synthetic tool input. Both lifecycle capabilities and a matching `input:true` filter are preconditions.
+
+Each stage supplies a complete tool definition, its model-facing name, and explicit expected classes, source, and argument treatment. Effective and reported class arrays must contain known strings and match the expected membership; their order is not a protocol requirement. Later server stages replace the listing and announce the change. Compare description strings and serialized input schemas with the submitted values. A `diagnosticHint` records a recommended diagnostic observation; it is not a new required error-message spelling.
+
+To reuse the checker, an adapter exports async `loadHost(root)`, returning `{info, observe(vector)}`. `info` identifies the implementation and revision. `observe` returns one observation per stage with `descriptor`, `effective:{classes,source}`, `model`, `opening`, `diagnostics`, and `listedRevisions`. These are observations from the Host, not copies of the vector's expected outcome. A later server stage must include its zero-based stage number among the observed listing revisions.
+
 ## 11. Decisions and open questions
 
 Decided:

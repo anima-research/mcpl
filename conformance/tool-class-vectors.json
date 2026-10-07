@@ -1,0 +1,1262 @@
+{
+  "profile": "rfc-008-revision-2",
+  "referenceHost": {
+    "repository": "https://github.com/anima-research/agent-framework",
+    "revision": "03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc"
+  },
+  "vocabulary": [
+    "comms",
+    "memory",
+    "notes",
+    "files",
+    "shell",
+    "web",
+    "computer",
+    "media",
+    "body",
+    "control"
+  ],
+  "description": "Portable synthetic RFC-008 §10 vectors. Each vector starts a fresh Host; later stages replace the same tool listing and announce tools/list_changed. Both lifecycle grants and a matching input:true filter are test preconditions. Model description/schema fidelity and non-null started events are asserted at every stage. diagnosticHint records SHOULD-level observability rather than determining the pass result.",
+  "vectors": [
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-01-declared",
+      "rfcVector": 1,
+      "description": "A declared shell class reaches the Host's effective descriptor.",
+      "stages": [
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-02-unclassed",
+      "rfcVector": 2,
+      "description": "An unclassed tool emits metadata while its requested arguments remain withheld.",
+      "stages": [
+        {
+          "tool": {
+            "name": "go",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "expect": {
+            "classes": [],
+            "source": "none",
+            "input": "withheld"
+          },
+          "modelName": "s--go"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-03-unknown",
+      "rfcVector": 3,
+      "description": "An unknown class supplies no effective class; diagnostics remain a SHOULD observation.",
+      "stages": [
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "quantum"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [],
+            "source": "none",
+            "input": "withheld"
+          },
+          "diagnosticHint": "quantum",
+          "modelName": "s--run"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-04-mixed",
+      "rfcVector": 4,
+      "description": "Unknown names are ignored without removing a recognized class.",
+      "stages": [
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell",
+                "quantum"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "diagnosticHint": "quantum",
+          "modelName": "s--run"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "classes": [
+          "files"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-05-union",
+      "rfcVector": 5,
+      "description": "Files-only arguments are observable; adding comms overrides that permission by union of restrictions.",
+      "stages": [
+        {
+          "tool": {
+            "name": "send_file",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "files"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "files"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--send_file"
+        },
+        {
+          "tool": {
+            "name": "send_file",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "files",
+                "comms"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "files",
+              "comms"
+            ],
+            "source": "server",
+            "input": "withheld"
+          },
+          "modelName": "s--send_file"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-06-override",
+      "rfcVector": 6,
+      "description": "The operator's classes replace rather than merge with the declaration.",
+      "overrides": {
+        "s--speak": [
+          "comms"
+        ]
+      },
+      "stages": [
+        {
+          "tool": {
+            "name": "speak",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "body"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "comms"
+            ],
+            "source": "override",
+            "input": "withheld"
+          },
+          "modelName": "s--speak"
+        }
+      ]
+    },
+    {
+      "origin": "host",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-07-host-built-in",
+      "rfcVector": 7,
+      "description": "An embedding Host classifies the say tool it implements as comms.",
+      "hostClasses": {
+        "host--say": [
+          "comms"
+        ]
+      },
+      "stages": [
+        {
+          "tool": {
+            "name": "say",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "expect": {
+            "classes": [
+              "comms"
+            ],
+            "source": "host",
+            "input": "withheld"
+          },
+          "modelName": "host--say"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-08-relist",
+      "rfcVector": 8,
+      "description": "A tools/list_changed notification causes the actual Host to replace its cached declaration.",
+      "stages": [
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell",
+                "files"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell",
+              "files"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-09-model-surface",
+      "rfcVector": 9,
+      "description": "Every known class preserves the provider's exact description and serialized input schema through the Host's model-facing projection.",
+      "stages": [
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "comms"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "comms"
+            ],
+            "source": "server",
+            "input": "withheld"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "memory"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "memory"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "notes"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "notes"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "files"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "files"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "web"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "web"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "computer"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "computer"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "media"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "media"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "body"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "body"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "control"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "control"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-10-malformed",
+      "rfcVector": 10,
+      "description": "A non-array class slot leaves the tool unclassed.",
+      "stages": [
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": "shell"
+            }
+          },
+          "expect": {
+            "classes": [],
+            "source": "none",
+            "input": "withheld"
+          },
+          "diagnosticHint": "not an array",
+          "modelName": "s--run"
+        }
+      ]
+    },
+    {
+      "origin": "server",
+      "inputsPolicy": {
+        "tools": [
+          "*"
+        ]
+      },
+      "input": {
+        "path": "synthetic-private-path",
+        "target": {
+          "label": "é"
+        }
+      },
+      "id": "rfc008-11-reserved-prefix",
+      "rfcVector": 11,
+      "description": "An undefined mcpl/priority slot changes neither an existing class nor an otherwise unclassed tool; it grants no argument access and does not alter model-facing content.",
+      "stages": [
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell"
+              ],
+              "mcpl/priority": "high"
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "diagnosticHint": "mcpl/priority",
+          "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/priority": "high"
+            }
+          },
+          "expect": {
+            "classes": [],
+            "source": "none",
+            "input": "withheld"
+          },
+          "diagnosticHint": "mcpl/priority",
+          "modelName": "s--run"
+        }
+      ]
+    }
+  ]
+}

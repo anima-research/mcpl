@@ -1,10 +1,12 @@
 # MCPL RFC-011: Targeted Publish
 
-**Status:** Draft (revision 2). Draft→Accepted is gated on [RFC §10's executable-vector criterion](#10-conformance-vectors).
+**Status:** Draft (revision 3). Draft→Accepted is gated on [RFC §10's executable-vector criterion](#10-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code (Petra), from the Connectome communication lane (Tessa, Agnes, Basil reviewing)
 **Date:** 2026-10-07
-**Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (channel descriptor `capabilities`) and §14.3 (`channels/publish` params and result, `channels/incoming` thread ids, and the `channels/outgoing/*` stream).
+**Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (channel descriptor `capabilities`), §14.3 (`channels/publish` params and result, `channels/incoming` thread ids, and the `channels/outgoing/*` stream) and §9.2 (the thread a channel-bearing `push/event` origin names).
+
+> **Revision 3 note.** Binds the thread of a message a server announces by `push/event` the same way as one it delivers by `channels/incoming` (RFC §3). A host infers routes from channel-bearing pushes too, and a thread named only in a server-specific `origin` field made a host answer a thread at the channel root. That was found by composing a host with a declaring connector.
 
 > **Revision 2 note.** Applies Basil's review of revision 1: the host rule is MUST NOT (RFC §4), a refusal is a result with `reason` rather than an error (RFC §4, §5), incoming thread ids are tied to publish targets (RFC §3), a server that implements this RFC never ignores `threadId` even on a channel it stopped declaring (RFC §3), `threadId` travels only in the Request form (RFC §4), the outgoing stream carries the same target (RFC §6), and the value domain is closed (RFC §4). Vectors are added for each (RFC §10).
 
@@ -45,10 +47,15 @@ A channel descriptor's optional `capabilities` object (alongside `history` and `
 
 The declaration is per-channel descriptor data. It is **not** a capability path, it is not in the §6.2 vocabulary, and no advertisement shorthand (such as `channels: true`) implies it. A server sends it in `channels/register` and `channels/changed`, and changing it is an ordinary descriptor update.
 
-**Incoming thread ids are publish targets.** A host learns thread ids from `channels/incoming`, so a declaration binds them:
+**Inbound thread ids are publish targets.** A host learns thread ids from what the server sends it about messages, so a declaration binds them:
 
 - on an `exact` channel, every `threadId` the server sends on `channels/incoming` for that channel MUST be accepted as a publish target for as long as that thread takes posts;
 - on a `root` channel, `channels/incoming` messages MUST NOT carry `threadId`. A channel whose messages can sit in threads is not `root`.
+- a `push/event` whose `origin` names a declared channel (SPEC §9.2 leaves `origin` server-defined, but hosts infer routes from channel-bearing pushes) is bound the same way:
+  - a push about a message inside a thread of an `exact` channel MUST carry that thread as `origin.threadId`, in the same id space a publish to that channel accepts;
+  - a push about a message at the channel root, or in a `root` channel, MUST NOT carry `origin.threadId`.
+
+  A thread named only in some other `origin` field is invisible to a host, which then answers at the root.
 
 **A server that implements this RFC never ignores `threadId`.** On any channel, declared or not (including one whose declaration it has just withdrawn), it either honors the target as RFC §3 defines or refuses it as RFC §4 defines. The host acts on the declaration it holds when it sends, and there is no acknowledgement to wait for in the Notification form of `channels/changed`. So a withdrawal that races a targeted publish fails safe rather than posting somewhere unasked.
 
@@ -153,10 +160,12 @@ Draft→Accepted requires executable vectors under `conformance/rfc-011/`, run a
 11. Invalid values (a number, `''`, an object) are refused with `{delivered: false, reason}`, with nothing posted and no `messageId`.
 12. Host: a `channels/publish` carrying `threadId` is always a Request.
 13. Stream: the chunks and the completion carry the final publish's `threadId`, and a rendering server keeps visible streamed text in that place.
+14. Push: a `push/event` about a message inside a thread of an `exact` channel carries `origin.threadId`, and a host's reply to it lands in that thread. One about a root message, or about a message in a `root` channel, carries none.
 
 Each vector names the platform boundary it used: a real platform, or a stub at the platform client. Behavior that only a real platform can establish (for example, what Slack does with a stale `thread_ts`) is marked as such.
 
 ## 11. Changelog
 
 - Revision 1 (2026-10-07): initial draft.
+- Revision 3 (2026-10-07): the thread binding extends to channel-bearing `push/event` origins (`origin.threadId`), with vector 14. This was found by composing a host with a declaring connector whose pushes named the thread in a server-specific field.
 - Revision 2 (2026-10-07): from Basil's review. The host rule becomes MUST NOT, and the refusal is a `{delivered: false, reason}` result. Incoming thread ids are bound to publish targets, a server never ignores `threadId` on a withdrawn declaration, `threadId` is Request-only, the stream carries the target, and the value domain is closed. Vectors 9–13 are added.

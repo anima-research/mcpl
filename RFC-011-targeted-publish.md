@@ -1,10 +1,12 @@
 # MCPL RFC-011: Targeted Publish
 
-**Status:** Draft (revision 1). Draft→Accepted is gated on [RFC §9's executable-vector criterion](#9-conformance-vectors).
+**Status:** Draft (revision 2). Draft→Accepted is gated on [RFC §10's executable-vector criterion](#10-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code (Petra), from the Connectome communication lane (Tessa, Agnes, Basil reviewing)
 **Date:** 2026-10-07
-**Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (channel descriptor `capabilities`) and §14.3 (`channels/publish` params and result).
+**Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (channel descriptor `capabilities`) and §14.3 (`channels/publish` params and result, `channels/incoming` thread ids, and the `channels/outgoing/*` stream).
+
+> **Revision 2 note.** Applies Basil's review of revision 1: the host rule is MUST NOT (RFC §4), a refusal is a result with `reason` rather than an error (RFC §4, §5), incoming thread ids are tied to publish targets (RFC §3), a server that implements this RFC never ignores `threadId` even on a channel it stopped declaring (RFC §3), `threadId` travels only in the Request form (RFC §4), the outgoing stream carries the same target (RFC §6), and the value domain is closed (RFC §4). Vectors are added for each (RFC §10).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
 
@@ -41,7 +43,14 @@ A channel descriptor's optional `capabilities` object (alongside `history` and `
 - **`root`**: the channel contains no threads, and every publish lands in the channel itself. A string `threadId` is refused with nothing posted, while `null` is honored. This is the fixed-channel case: Discord channels, DMs, and Discord threads, which are channels in their own right; single-channel worlds; a device's home channel.
 - **absent**: no guarantee. A host that needs to know where its post lands MUST NOT rely on this channel's publication.
 
-The declaration is per-channel descriptor data. It is **not** a capability path, it is not in the §6.2 vocabulary, and no advertisement shorthand (such as `channels: true`) implies it. A server sends it in `channels/register` and `channels/changed`. Changing it is an ordinary descriptor update, and it applies to publishes made after the host has accepted the update.
+The declaration is per-channel descriptor data. It is **not** a capability path, it is not in the §6.2 vocabulary, and no advertisement shorthand (such as `channels: true`) implies it. A server sends it in `channels/register` and `channels/changed`, and changing it is an ordinary descriptor update.
+
+**Incoming thread ids are publish targets.** A host learns thread ids from `channels/incoming`, so a declaration binds them:
+
+- on an `exact` channel, every `threadId` the server sends on `channels/incoming` for that channel MUST be accepted as a publish target for as long as that thread takes posts;
+- on a `root` channel, `channels/incoming` messages MUST NOT carry `threadId`. A channel whose messages can sit in threads is not `root`.
+
+**A server that implements this RFC never ignores `threadId`.** On any channel, declared or not (including one whose declaration it has just withdrawn), it either honors the target as RFC §3 defines or refuses it as RFC §4 defines. The host acts on the declaration it holds when it sends, and there is no acknowledgement to wait for in the Notification form of `channels/changed`. So a withdrawal that races a targeted publish fails safe rather than posting somewhere unasked.
 
 ## 4. Request (amends §14.3 `channels/publish` params)
 
@@ -57,21 +66,31 @@ The declaration is per-channel descriptor data. It is **not** a capability path,
 }
 ```
 
-- **a string**: post in exactly that thread.
+- **a non-empty string**: post in exactly that thread.
 - **`null`**: post at the channel root, never inside a thread.
 - **absent**: legacy. The server chooses, exactly as before this RFC.
 
-The distinction between `null` and absent is normative. An older caller never sends the field, so an upgraded server keeps its old behavior for that caller.
+The distinction between `null` and absent is normative. An older caller never sends the field, so an upgraded server keeps its old behavior for that caller. Any other value (a number, an empty string, an object, …) is invalid, and the server refuses it.
 
-A host SHOULD send `threadId` only to channels that declare `capabilities.publish.target`. When a server declares the channel, it MUST honor `threadId` as RFC §3 states. In particular, a target it cannot honor MUST fail without posting, and it MUST NOT fall back to the root or to another thread. Examples are a thread that does not exist, is not a thread of this channel, or is archived and closed to posting; or a string `threadId` on a `root` channel. A failure SHOULD carry a `reason`.
+**Host rules.**
+- A host MUST NOT send `threadId` to a channel whose descriptor declares no `capabilities.publish.target`. An older server ignores the field and posts where it likes, so only the host can keep the guarantee.
+- A host MUST send a `channels/publish` that carries `threadId` as a Request. A Notification has no result, so its placement could never be confirmed (RFC §5).
+
+**Server rules.** A server honors `threadId` as RFC §3 states. A target it cannot honor MUST be refused without posting, and the server MUST NOT fall back to the root or to another thread. Such targets include:
+- a thread that does not exist, is not a thread of this channel, or is archived and closed to posting;
+- a string `threadId` on a `root` channel;
+- an invalid value.
+
+**The refusal is a result, not an error.** It takes the form `{ "delivered": false, "reason": "…" }`, with no `messageId`. That result is the definitive statement that nothing was posted. A server that answers a targeted publish with a JSON-RPC error instead forfeits that statement: the host cannot tell an error from a partial post, so it treats the outcome as unconfirmed (RFC §5).
 
 ## 5. Result and host verification (amends §14.3 result)
 
 ```jsonc
 { "delivered": true, "messageId": "…", "threadId": "1728291000.000100" }   // or null
+{ "delivered": false, "reason": "thread 1728291000.000100 is archived" }   // a refusal: nothing posted
 ```
 
-`threadId` in the result names where the post landed: the thread, or `null` for the root. It is REQUIRED whenever the request carried `threadId`, and it is taken from the platform's own response where the platform reports one.
+`threadId` in the result names where the post landed: the thread, or `null` for the root. It is REQUIRED whenever the request carried `threadId` and something was posted, and it is taken from the platform's own response where the platform reports one. `reason` is optional on any result. On a refusal it says why.
 
 A host that sent `threadId` treats the outcome as follows:
 
@@ -79,24 +98,30 @@ A host that sent `threadId` treats the outcome as follows:
 | --- | --- |
 | `delivered: true` with an echoed `threadId` equal to the request | delivered, at that place |
 | `delivered: true` with `threadId` missing or different | **unconfirmed**: something was posted, but not provably where asked |
-| `delivered: false` with no `messageId` | failed, with nothing posted |
+| `delivered: false` with no `messageId` (a refusal, RFC §4) | failed, with nothing posted |
 | `delivered: false` with a `messageId` (contradictory evidence) | unconfirmed, as the host already classifies it |
 | an error response, timeout, or lost connection after dispatch | unconfirmed |
 
-A request without `threadId` has a result without `threadId`. Its outcome follows the host's existing rules.
+A request without `threadId` needs no `threadId` in its result, and its outcome follows the host's existing rules.
 
-## 6. Compatibility
+## 6. The outgoing stream (amends §14.3 `channels/outgoing/*`)
+
+`channels/outgoing/chunk` and `channels/outgoing/complete` gain the same optional `threadId`, with the same values and meanings as RFC §4. A host sends it on a stream exactly when the stream's final `channels/publish` will carry it, with the same value. A server that renders streamed text visibly (a live message, for example) MUST render it only in that place, and MUST NOT render it visibly when the place is one it would refuse.
+
+The stream stays advisory: delivery remains the final `channels/publish`. By §14.3's fail-closed rule, a host does not stream text it would not publish, so a host following RFC §8 streams nothing to an undeclared channel.
+
+## 7. Compatibility
 
 | Host | Server | Behavior |
 | --- | --- | --- |
 | old (never sends `threadId`) | old | unchanged |
 | old | new (declares) | unchanged: the absent field keeps the legacy path |
-| new | old (no declaration) | the host knows it has no guarantee, so it does not rely on that channel's publication (RFC §7) |
+| new | old (no declaration) | the host knows it has no guarantee, so it does not rely on that channel's publication (RFC §8) |
 | new | new | exact targeting where declared |
 
-The change is additive: no existing field changes meaning, and an old server never receives `threadId` from a conforming host. Servers can therefore release first. A host that adopts this RFC changes what *it* publishes to undeclared channels. That is a host decision, and RFC §7 states the rule this RFC recommends.
+The change is additive: no existing field changes meaning, and an old server never receives `threadId` from a conforming host. Servers can therefore release first. A host that adopts this RFC changes what *it* publishes to undeclared channels. That is a host decision, and RFC §8 states the rule this RFC recommends.
 
-## 7. Host guidance (non-normative)
+## 8. Host guidance (non-normative)
 
 A host that routes a model's plain speech to the conversation it is answering (for example, Agent Framework's speech routes):
 
@@ -105,11 +130,11 @@ A host that routes a model's plain speech to the conversation it is answering (f
 - never substitutes the root for a thread it cannot reach;
 - checks the echo (RFC §5) before treating a post as delivered.
 
-## 8. Security and privacy
+## 9. Security and privacy
 
 No new authority: `channels.publish` gates the method as before. The declaration is a server's statement about its own behavior, and RFC §5's echo lets the host check that statement post by post. Targeting a thread reveals nothing the channel did not already expose to the server.
 
-## 9. Conformance vectors
+## 10. Conformance vectors
 
 Draft→Accepted requires executable vectors under `conformance/rfc-011/`, run against at least one `exact` server and one `root` server through a real host:
 
@@ -121,9 +146,15 @@ Draft→Accepted requires executable vectors under `conformance/rfc-011/`, run a
 6. Absent `threadId` on a declaring server: the legacy result shape (no `threadId`), with the legacy placement.
 7. Host verification: a `delivered: true` result with a missing or different echo is unconfirmed, and `delivered: false` with a `messageId` is unconfirmed.
 8. Host: a channel with no declaration receives no `threadId`, and plain speech the host routes to it is held, not published.
+9. `exact`: every `threadId` the server sent on incoming for the channel is accepted as a publish target. `root`: no incoming message carries `threadId`.
+10. A declaration withdrawn by `channels/changed` while a targeted publish is in flight: the publish is honored or refused, never posted elsewhere.
+11. Invalid values (a number, `''`, an object) are refused with `{delivered: false, reason}`, with nothing posted and no `messageId`.
+12. Host: a `channels/publish` carrying `threadId` is always a Request.
+13. Stream: the chunks and the completion carry the final publish's `threadId`, and a rendering server keeps visible streamed text in that place.
 
 Each vector names the platform boundary it used: a real platform, or a stub at the platform client. Behavior that only a real platform can establish (for example, what Slack does with a stale `thread_ts`) is marked as such.
 
-## 10. Changelog
+## 11. Changelog
 
 - Revision 1 (2026-10-07): initial draft.
+- Revision 2 (2026-10-07): from Basil's review. The host rule becomes MUST NOT, and the refusal is a `{delivered: false, reason}` result. Incoming thread ids are bound to publish targets, a server never ignores `threadId` on a withdrawn declaration, `threadId` is Request-only, the stream carries the target, and the value domain is closed. Vectors 9–13 are added.

@@ -56,6 +56,8 @@ The declaration is per-channel descriptor data. It is **not** a capability path,
 
 ```jsonc
 {
+  "jsonrpc": "2.0",
+  "id": 1,
   "method": "channels/publish",
   "params": {
     "conversationId": "conv_123",

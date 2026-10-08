@@ -1,10 +1,12 @@
 # MCPL RFC-011: Targeted Publish
 
-**Status:** Draft (revision 3). Draft→Accepted is gated on [RFC §10's executable-vector criterion](#10-conformance-vectors).
+**Status:** Draft (revision 4). Draft→Accepted is gated on [RFC §10's executable-vector criterion](#10-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code (Petra), from the Connectome communication lane (Tessa, Agnes, Basil reviewing)
 **Date:** 2026-10-07
 **Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (channel descriptor `capabilities`), §14.3 (`channels/publish` params and result, `channels/incoming` thread ids, and the `channels/outgoing/*` stream) and §9.2 (the channel and thread a channel-bearing `push/event` origin names).
+
+> **Revision 4 note.** From slimepriestess's review of revision 3: RFC §8 names a migration setting a host may offer, keeping legacy publication (never carrying `threadId`) on undeclared servers or channels an operator names until they declare. A conversation the host knows to be in a thread stays held there. Without the setting, a host that follows RFC §8 holds plain speech on every undeclared server at once. The guidance stays non-normative, and RFC §4's host rule holds under the setting. Vector 8 now covers a host with or without it.
 
 > **Revision 3 note.** Binds a message a server delivers by `push/event` the same way as one it delivers by `channels/incoming` (RFC §3): the push names its channel as `origin.mcplChannelId` and its thread as `origin.threadId`. A host infers routes from channel-bearing pushes too. Composing a host with declaring connectors showed both halves failing: a thread named only in a server-specific `origin` field was answered at the channel root, and a channel named only that way left the host nowhere to answer.
 
@@ -118,7 +120,7 @@ A request without `threadId` needs no `threadId` in its result, and its outcome 
 
 `channels/outgoing/chunk` and `channels/outgoing/complete` gain the same optional `threadId`, with the same values and meanings as RFC §4. A host sends it on a stream exactly when the stream's final `channels/publish` will carry it, with the same value. A server that renders streamed text visibly (a live message, for example) MUST render it only in that place, and MUST NOT render it visibly when the place is one it would refuse.
 
-The stream stays advisory: delivery remains the final `channels/publish`. By §14.3's fail-closed rule, a host does not stream text it would not publish, so a host following RFC §8 streams nothing to an undeclared channel.
+The stream stays advisory: delivery remains the final `channels/publish`. By §14.3's fail-closed rule, a host does not stream text it would not publish, so a host streams nothing to a channel where RFC §8 has it hold speech.
 
 ## 7. Compatibility
 
@@ -126,10 +128,10 @@ The stream stays advisory: delivery remains the final `channels/publish`. By §1
 | --- | --- | --- |
 | old (never sends `threadId`) | old | unchanged |
 | old | new (declares) | unchanged: the absent field keeps the legacy path |
-| new | old (no declaration) | the host knows it has no guarantee, so it does not rely on that channel's publication (RFC §8) |
+| new | old (no declaration) | the host knows it has no guarantee, so it does not rely on that channel's publication, unless an operator's migration setting keeps legacy publication there (RFC §8) |
 | new | new | exact targeting where declared |
 
-The change is additive: no existing field changes meaning, and an old server never receives `threadId` from a conforming host. Servers can therefore release first. A host that adopts this RFC changes what *it* publishes to undeclared channels. That is a host decision, and RFC §8 states the rule this RFC recommends.
+The change is additive: no existing field changes meaning, and an old server never receives `threadId` from a conforming host. Servers can therefore release first. A host that adopts this RFC changes what *it* publishes to undeclared channels. That is a host decision. RFC §8 states the rule this RFC recommends, and the migration setting a host may offer while undeclared servers catch up.
 
 ## 8. Host guidance (non-normative)
 
@@ -139,6 +141,15 @@ A host that routes a model's plain speech to the conversation it is answering (f
 - treats a thread conversation as reachable only on an `exact` channel, and any conversation on a channel with no declaration as unreachable by its own publication. It holds such speech for the resident to deliver deliberately, and points to the server's own send tools where the server lists them;
 - never substitutes the root for a thread it cannot reach;
 - checks the echo (RFC §5) before treating a post as delivered.
+
+**Migration.** Followed alone, these rules make adopting a host all-or-nothing: once it upgrades, plain speech is held on every server that has not yet declared, including servers no coordinated release covers, such as third-party connectors, operator-local servers and test rigs. A host may therefore offer operators a migration setting that keeps legacy publication on undeclared servers or channels they name, while those servers catch up:
+
+- the host still never sends `threadId` there, so RFC §4's host rule holds, and the server chooses where each post lands, as before this RFC;
+- a conversation the host knows to be in a thread stays held there, as on any channel that is not `exact`. Legacy publication cannot place a post in a particular thread, so the setting covers speech to the channel itself;
+- RFC §2's root race remains on those channels, and so does the thread race wherever the server does not name a thread to the host. There is no echo to check: a result says whether something was posted, not where. So the host reports such a post as placed by the server, not as delivered to the conversation it answered. Wherever it tells the model where its speech will go, it also says that on these channels the server chooses the place;
+- the setting covers a channel only while the channel is undeclared. Once the channel's descriptor declares a target, the rules above apply to it.
+
+The setting is an operator's acceptance of that risk for the servers or channels it names, so it is opt-in per server or channel, never a default.
 
 ## 9. Security and privacy
 
@@ -155,7 +166,7 @@ Draft→Accepted requires executable vectors under `conformance/rfc-011/`, run a
 5. `root`, with a string `threadId`: refused with nothing posted. With `null`: posted, and the echo is `null`.
 6. Absent `threadId` on a declaring server: the legacy result shape (no `threadId`), with the legacy placement.
 7. Host verification: a `delivered: true` result with a missing or different echo is unconfirmed, and `delivered: false` with a `messageId` is unconfirmed.
-8. Host: a channel with no declaration receives no `threadId`, and plain speech the host routes to it is held, not published.
+8. Host: a channel with no declaration receives no `threadId`, whether or not a migration setting names it (RFC §8). Without the setting, plain speech the host routes to it is held, not published. With it, a conversation the host knows to be in a thread is still held.
 9. `exact`: every `threadId` the server sent on incoming for the channel is accepted as a publish target. `root`: no incoming message carries `threadId`.
 10. A declaration withdrawn by `channels/changed` while a targeted publish is in flight: the publish is honored or refused, never posted elsewhere.
 11. Invalid values (a number, `''`, an object) are refused with `{delivered: false, reason}`, with nothing posted and no `messageId`.
@@ -170,3 +181,4 @@ Each vector names the platform boundary it used: a real platform, or a stub at t
 - Revision 1 (2026-10-07): initial draft.
 - Revision 2 (2026-10-07): from Basil's review. The host rule becomes MUST NOT, and the refusal is a `{delivered: false, reason}` result. Incoming thread ids are bound to publish targets, a server never ignores `threadId` on a withdrawn declaration, `threadId` is Request-only, the stream carries the target, and the value domain is closed. Vectors 9–13 are added.
 - Revision 3 (2026-10-07): the binding extends to `push/event`s that deliver a message from a declared channel: the push names its channel as `origin.mcplChannelId` (agreeing with `coalesce.channelId` when RFC-006 channel-scoped) and its thread as `origin.threadId`, with vector 14. This was found by composing a host with declaring connectors whose pushes named the thread, or the channel, only in server-specific fields.
+- Revision 4 (2026-10-08): from slimepriestess's review of revision 3. RFC §8 names a migration setting a host may offer: legacy publication, never carrying `threadId`, on undeclared servers or channels an operator names until they declare, with thread conversations still held and its cost stated. RFC §6 and §7 are worded to match, and vector 8 covers a host with or without it.

@@ -4,7 +4,7 @@
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code (Petra), from the Connectome communication lane (Tessa, Agnes, Basil reviewing)
 **Date:** 2026-10-07
-**Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (channel descriptor `capabilities`), §14.3 (`channels/publish` params and result, `channels/incoming` thread ids, and the `channels/outgoing/*` stream) and §9.2 (the channel and thread a channel-bearing `push/event` origin names).
+**Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (an optional `capabilities` object on the channel descriptor), §14.3 (`channels/publish` params and result, `channels/incoming` thread ids, and the `channels/outgoing/*` stream) and §9.2 (the channel and thread a channel-bearing `push/event` origin names).
 
 > **Revision 4 note.** From slimepriestess's review of revision 3: RFC §8 names a migration setting a host may offer, keeping legacy publication (never carrying `threadId`) on undeclared servers or channels an operator names until they declare. A conversation the host knows to be in a thread stays held there. Without the setting, a host that follows RFC §8 holds plain speech on every undeclared server at once. The guidance stays non-normative, and RFC §4's host rule holds under the setting. Vector 8 now covers a host with or without it.
 
@@ -35,7 +35,7 @@ A field the server is free to ignore is not enough either. Old servers would sil
 
 ## 3. Declaration (amends §14.2)
 
-A channel descriptor's optional `capabilities` object (alongside `history` and `acknowledgment`) gains:
+A channel descriptor gains an optional `capabilities` object, and this RFC defines its `publish` member. SPEC §14.2 does not yet show a descriptor `capabilities` object. mcpl-core-ts already types one, with `history` and `acknowledgment` members, and `publish` sits beside them:
 
 ```jsonc
 "capabilities": {
@@ -159,7 +159,7 @@ No new authority: `channels.publish` gates the method as before. The declaration
 
 Draft→Accepted requires executable vectors under `conformance/rfc-011/`, run against at least one `exact` server and one `root` server through a real host:
 
-1. A descriptor with `capabilities.publish.target` is accepted with the other capabilities intact. The declaration appears in neither the advertisement walk nor the grant.
+1. A descriptor with `capabilities.publish.target` is accepted with any other members of `capabilities` intact. The declaration appears in neither the advertisement walk nor the grant.
 2. `exact`, with a string `threadId`: posted in that thread, and the echo is equal.
 3. `exact`, with `null`: posted at the root, and the echo is `null`, even when a newer incoming message sits in a thread (the root race).
 4. `exact`, with an unknown or non-thread `threadId`: `delivered: false` with no `messageId`, and nothing posted at the root.
@@ -182,3 +182,4 @@ Each vector names the platform boundary it used: a real platform, or a stub at t
 - Revision 2 (2026-10-07): from Basil's review. The host rule becomes MUST NOT, and the refusal is a `{delivered: false, reason}` result. Incoming thread ids are bound to publish targets, a server never ignores `threadId` on a withdrawn declaration, `threadId` is Request-only, the stream carries the target, and the value domain is closed. Vectors 9–13 are added.
 - Revision 3 (2026-10-07): the binding extends to `push/event`s that deliver a message from a declared channel: the push names its channel as `origin.mcplChannelId` (agreeing with `coalesce.channelId` when RFC-006 channel-scoped) and its thread as `origin.threadId`, with vector 14. This was found by composing a host with declaring connectors whose pushes named the thread, or the channel, only in server-specific fields.
 - Revision 4 (2026-10-08): from slimepriestess's review of revision 3. RFC §8 names a migration setting a host may offer: legacy publication, never carrying `threadId`, on undeclared servers or channels an operator names until they declare, with thread conversations still held and its cost stated. RFC §6 and §7 are worded to match, and vector 8 covers a host with or without it.
+- Revision 4, continued (2026-10-09): RFC §3, the header and vector 1 no longer imply that SPEC §14.2 already has a descriptor `capabilities` object. It doesn't. mcpl-core-ts types one, with `history` and `acknowledgment`, and this RFC adds `publish` beside them. No rule changes.

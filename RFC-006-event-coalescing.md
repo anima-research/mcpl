@@ -1,15 +1,24 @@
 # MCPL RFC-006: Event Coalescing
 
-**Status:** Draft (revision 7)
+**Status:** Draft (revision 8)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra; revised after review
-**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revisions 5, 6, 7)
+**Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revisions 5, 6, 7); 2026-10-06 (revision 8)
 **Depends on:** nothing for authority — RFC-002 / SPEC §5.4 remains the sole source of what
 a connected server may do, and this RFC adds no `uses` path (§10). Amends SPEC §9
 (`push/event` params and result; new `push/render` method), §9.4 (idempotency), §14.3
 (`channels/incoming` message and per-message result). Interacts with §10.6 (hook
 timeouts), §10.7 (loop prevention), §13.2 (audit), §13.3 (hook failure policy), §14.5
 (channel scoping), §16 (tags), Appendix A (error codes).
+
+> **Revision 8 note.** An inference whose only causes are deferred batches that
+> materialize nothing no longer runs. Revision 7 appended nothing for an empty render but let
+> the inference proceed ("a wake that already fired is not undone"). The model then saw
+> only older context, which invites it to invent a cause for the wake
+> (anima-research/agent-framework#235). Hosts now SHOULD NOT run such an inference. A cause
+> that is not a deferred batch, or any content materialized at its assembly, keeps it (§5.2).
+> Vectors 20, 20a, 27a and 27b say so. Companion host change:
+> anima-research/agent-framework#236.
 
 > **Revision 7 note.** Two kinds of change, from reading revision 6 with channels as the
 > primary lane.
@@ -412,6 +421,7 @@ requirements; hosts may implement them with shared timers, separate timers, or n
 - The host MUST NOT start an inference whose sole pending cause has been replaced by a
   non-qualifying occurrence or retracted unread. Other causes can still start inference;
   this does not undo one already begun or prevent eligible content from entering it.
+  §5.2 covers an inference whose deferred causes all come to nothing at assembly.
 - **No starvation.** For a subject eligible for wake under the current policy, continued
   replacements MUST NOT postpone delivery without bound; the host MUST set a finite
   bound. A deliberate `skip`, revoked authority, or operator pause does not create an
@@ -512,7 +522,11 @@ materialized occurrence is consumed by that request. If the batch was delivered 
 contexts, one render serves all of them at the first consumption by any.
 
 **Empty content means nothing happened.** The subject returned to its baseline (the user
-typed `cat` and deleted it). Nothing is appended. A wake that already fired is not undone.
+typed `cat` and deleted it). Nothing is appended. If every cause of the inference being
+assembled was a deferred batch, and its assembly materialized nothing (each batch rendered
+empty, or was cancelled or dropped under §5.4), the host SHOULD NOT run that inference: a
+model woken with nothing new is invited to invent a cause. An inference with a cause that
+is not a deferred batch, or whose assembly materialized any content, proceeds normally.
 
 Rendered content is subject to every check a pushed payload would get (§19.5 stubbing, size
 limits, content-block validation).
@@ -1032,7 +1046,12 @@ Deferred:
 18. **Render is history.** After vector 16, a second inference with no new notice issues no
     `push/render` and its request contains the same materialized occurrence, byte-identical.
 19. **New batch after consumption.** N1(K), inference, N2(K) → `"first"`; second render.
-20. **Empty render.** Result `content: []` → nothing appended; batch closed.
+20. **Empty render.** Result `content: []` → nothing appended; batch closed. If the batch
+    was the inference's only cause → no inference runs. With a pending cause that is not a
+    deferred batch → the inference proceeds and contains nothing from K.
+20a. **Several empty renders.** N(K1) and N(K2) are the inference's only causes; both
+    renders return `content: []` → nothing appended; no inference runs. If K2's render
+    returns content instead → the inference proceeds with K2's content and nothing from K1.
 21. **Fallback.** Render times out / errors / server disconnected → fallback materialized;
     inference proceeds within the timeout bound.
 22. **Notices during render.** N1(K); render starts; N2(K) arrives → `"first"`; render
@@ -1050,10 +1069,12 @@ Deferred:
 27. **Dropped coverage.** `dropped > 0` → a notice-only conformance server's result content
     mentions the count.
 27a. **Retract during render, late result.** N1(K); render starts; retract K with notice
-    (history `none`) → `"retracted"`; result arrives → discarded (audit per §11); next request
-    contains nothing from K — neither rendered content nor fallback nor notice.
+    (history `none`) → `"retracted"`; result arrives → discarded (audit per §11). If every
+    cause of the inference was a deferred batch and its assembly materialized nothing, no
+    inference runs (§5.2); otherwise the request contains nothing from K — neither
+    rendered content nor fallback nor notice.
 27b. **Retract during render, timeout.** As 27a but the render times out → no fallback
-    materialized; next request contains nothing from K.
+    materialized; as in 27a, either no inference runs or the request contains nothing from K.
 27c. **Plain replacement during render, late result.** N1(K); render starts; plain E(K) →
     `"replaced"`; result arrives → discarded; next request contains E's content and no byte
     of the render result or fallback.

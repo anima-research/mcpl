@@ -515,8 +515,9 @@
           "steps": [
             {"op": "render","plan": {"mode": "empty","text": "RENDERED"},"id": "s0"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
-            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "allRequestText","excludes": ["RENDERED","FALLBACK"]}],"id": "s2"},
-            {"op": "assemble","checks": [{"path": "renders.length","eq": 1}],"id": "s3"}
+            {"op": "queueInference","id": "s2"},
+            {"op": "turn","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 1},{"path": "allRequestText","excludes": ["RENDERED","FALLBACK"]}],"id": "s3"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 2}],"id": "s4"}
           ]
         }
       ]

@@ -21,7 +21,10 @@ export const TIMESTAMP = '2026-01-01T00:00:00Z';
 
 // This is the same peer response handler used by the live WebSocket fixture.
 // Each overlapping request owns its entry across awaits and completion order.
-export async function respondToRender({ renders, server, params, plan, held, reply, replyError, send }) {
+export async function respondToRender({ renders, server, params, plan: given, held, reply, replyError, send }) {
+  // A plan may answer each subject differently (RFC-006 vector 20a): `byKey`
+  // overrides the plan for a render request carrying that `key`.
+  const plan = given.byKey && Object.hasOwn(given.byKey, params?.key) ? { ...given, ...given.byKey[params.key] } : given;
   const entry = { server, params };
   renders.push(entry);
   if (plan.mode === 'held') held.push({ reply, params });

@@ -197,7 +197,7 @@ export async function main(argv) {
     assert.equal(normalize(vectors.cases[index].contract), normalize(contract), 'source contract drift for row ' + match[1]);
   }
   assert.deepEqual(vectors.cases.map(entry => entry.id), ids, 'every labeled RFC vector must occur once, in order');
-  assert.equal(ids.length, 64);
+  assert.equal(ids.length, 65);
   for (const entry of vectors.cases) for (const variant of entry.variants) {
     assert.equal(new Set(variant.steps.map(step => step.id)).size, variant.steps.length, 'duplicate step ids');
     assert.ok(variant.steps.length > 0);

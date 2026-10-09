@@ -1,6 +1,6 @@
 {
   "format": "mcpl-event-coalescing-1",
-  "source": "RFC-006 revision 7 \u00a714",
+  "source": "RFC-006 revision 8 \u00a714",
   "profileNotes": "Known-none cases assume initial establishes history; conservative recovery is declared. Conditional requirements are capabilities of the test profile, not exemptions from mandatory protocol behavior. Unsupported preconditions are unexercised, never passes.",
   "cases": [
     {
@@ -494,11 +494,22 @@
     },
     {
       "id": "20",
-      "contract": "20. **Empty render.** Result `content: []` \u2192 nothing appended; batch closed.\n",
+      "contract": "20. **Empty render.** Result `content: []` \u2192 nothing appended; batch closed. If the batch\n    was the inference's only cause \u2192 no inference runs. With a pending cause that is not a\n    deferred batch \u2192 the inference proceeds and contains nothing from K.\n\n",
       "kind": "host",
       "variants": [
         {
-          "name": "default",
+          "name": "only-cause",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "empty","text": "RENDERED"},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
+            {"op": "turn","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 0},{"path": "contexts.agent","excludes": ["RENDERED","FALLBACK"]}],"id": "s2"},
+            {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "allRequestText","excludes": ["RENDERED","FALLBACK"]}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "host-cause",
           "setup": {},
           "requires": [],
           "steps": [
@@ -506,6 +517,35 @@
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK"}]}},"id": "s1"},
             {"op": "assemble","checks": [{"path": "renders.length","eq": 1},{"path": "allRequestText","excludes": ["RENDERED","FALLBACK"]}],"id": "s2"},
             {"op": "assemble","checks": [{"path": "renders.length","eq": 1}],"id": "s3"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "20a",
+      "contract": "20a. **Several empty renders.** N(K1) and N(K2) are the inference's only causes; both\n    renders return `content: []` \u2192 nothing appended; no inference runs. If K2's render\n    returns content instead \u2192 the inference proceeds with K2's content and nothing from K1.\n\n",
+      "kind": "host",
+      "variants": [
+        {
+          "name": "all-empty",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "empty","text": "RENDERED","byKey": {"K1": {"mode": "empty"},"K2": {"mode": "empty"}}},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K1","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_K1"}]}},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K2","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_K2"}]}},"id": "s2"},
+            {"op": "turn","checks": [{"path": "renders.length","eq": 2},{"path": "modelCalls","eq": 0},{"path": "contexts.agent","excludes": ["FALLBACK_K1","FALLBACK_K2"]}],"id": "s3"}
+          ]
+        },
+        {
+          "name": "one-renders",
+          "setup": {},
+          "requires": [],
+          "steps": [
+            {"op": "render","plan": {"mode": "empty","text": "RENDERED","byKey": {"K1": {"mode": "empty"},"K2": {"mode": "immediate","text": "K2_RENDERED"}}},"id": "s0"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n1","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K1","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_K1"}]}},"id": "s1"},
+            {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "n2","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K2","deferred": true},"payload": {"content": [{"type": "text","text": "FALLBACK_K2"}]}},"id": "s2"},
+            {"op": "turn","checks": [{"path": "renders.length","eq": 2},{"path": "modelCalls","eq": 1},{"path": "allRequestText","includes": ["K2_RENDERED"],"excludes": ["FALLBACK_K1","FALLBACK_K2"]}],"id": "s3"}
           ]
         }
       ]
@@ -798,7 +838,7 @@
     },
     {
       "id": "27a",
-      "contract": "27a. **Retract during render, late result.** N1(K); render starts; retract K with notice\n    (history `none`) \u2192 `\"retracted\"`; result arrives \u2192 discarded (audit per \u00a711); next request\n    contains nothing from K \u2014 neither rendered content nor fallback nor notice.\n",
+      "contract": "27a. **Retract during render, late result.** N1(K); render starts; retract K with notice\n    (history `none`) \u2192 `\"retracted\"`; result arrives \u2192 discarded (audit per \u00a711). If every\n    cause of the inference was a deferred batch and its assembly materialized nothing, no\n    inference runs (\u00a75.2); otherwise the request contains nothing from K \u2014 neither\n    rendered content nor fallback nor notice.\n\n",
       "kind": "host",
       "variants": [
         {
@@ -812,7 +852,7 @@
             {"op": "waitRender","count": 1,"id": "s3"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s4"},
             {"op": "releaseRender","text": "LATE_RENDER","id": "s5"},
-            {"op": "joinTurn","id": "s6"},
+            {"op": "joinTurn","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 0}],"id": "s6"},
             {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK","DELETED"]}],"id": "s7"}
           ]
         }
@@ -820,7 +860,7 @@
     },
     {
       "id": "27b",
-      "contract": "27b. **Retract during render, timeout.** As 27a but the render times out \u2192 no fallback\n    materialized; next request contains nothing from K.\n",
+      "contract": "27b. **Retract during render, timeout.** As 27a but the render times out \u2192 no fallback\n    materialized; as in 27a, either no inference runs or the request contains nothing from K.\n\n",
       "kind": "host",
       "variants": [
         {
@@ -833,7 +873,7 @@
             {"op": "startTurn","id": "s2"},
             {"op": "waitRender","count": 1,"id": "s3"},
             {"op": "send","method": "push/event","params": {"featureSet": "doc","eventId": "z","timestamp": "2026-01-01T00:00:00Z","coalesce": {"key": "K","retract": true},"payload": {"content": [{"type": "text","text": "DELETED"}]}},"checks": [{"path": "reply.result.coalesce.outcome","eq": "retracted"}],"id": "s4"},
-            {"op": "joinTurn","id": "s5"},
+            {"op": "joinTurn","checks": [{"path": "renders.length","eq": 1},{"path": "modelCalls","eq": 0}],"id": "s5"},
             {"op": "releaseRender","text": "LATE_RENDER","id": "s6"},
             {"op": "assemble","checks": [{"path": "allRequestText","excludes": ["LATE_RENDER","FALLBACK","DELETED"]}],"id": "s7"}
           ]

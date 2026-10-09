@@ -31,3 +31,18 @@ for (const order of [[0, 1], [1, 0]]) {
     }
   });
 }
+
+test('a per-subject plan answers each render by its key, and any other key by the plan itself', async () => {
+  const renders = [], replies = {};
+  const plan = { mode: 'empty', text: 'RENDERED', byKey: { K1: { mode: 'empty' }, K2: { mode: 'immediate', text: 'K2_RENDERED' } } };
+  for (const key of ['K1', 'K2', 'K3']) {
+    await respondToRender({
+      renders, server: 'editor', params: { key, eventId: 'n-' + key }, plan, held: [],
+      reply: result => { replies[key] = result; },
+      replyError() { throw new Error('unexpected error'); },
+      send() { throw new Error('unexpected send'); },
+    });
+  }
+  assert.deepEqual(replies, { K1: { content: [] }, K2: { content: [{ type: 'text', text: 'K2_RENDERED' }] }, K3: { content: [] } });
+  assert.deepEqual(renders.map(entry => entry.params.key), ['K1', 'K2', 'K3']);
+});

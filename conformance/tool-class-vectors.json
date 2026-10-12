@@ -2,7 +2,7 @@
   "profile": "rfc-008-revision-2",
   "referenceHost": {
     "repository": "https://github.com/anima-research/agent-framework",
-    "revision": "03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc"
+    "revision": "02adf27f953da0669ee6febf36a3131c5d324c44"
   },
   "vocabulary": [
     "comms",
@@ -16,7 +16,7 @@
     "body",
     "control"
   ],
-  "description": "Portable synthetic RFC-008 §10 vectors. Each vector starts a fresh Host; later stages replace the same tool listing and announce tools/list_changed. Both lifecycle grants and a matching input:true filter are test preconditions. Model description/schema fidelity and non-null started events are asserted at every stage. diagnosticHint records SHOULD-level observability rather than determining the pass result.",
+  "description": "Portable synthetic RFC-008 §10 vectors. Each vector starts a fresh Host; later stages replace the same tool listing and announce tools/list_changed. Each stage's description and input schema name its case and stage, so a Host still showing an earlier listing fails that stage. Both lifecycle grants and a matching input:true filter are test preconditions. Model description/schema fidelity and non-null started events are asserted at every stage. diagnosticHint records SHOULD-level observability rather than determining the pass result.",
   "vectors": [
     {
       "origin": "server",
@@ -38,13 +38,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-01-declared, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-01-declared, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -100,13 +100,13 @@
         {
           "tool": {
             "name": "go",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-02-unclassed, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-02-unclassed, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -155,13 +155,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-03-unknown, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-03-unknown, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -216,13 +216,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-04-mixed, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-04-mixed, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -275,18 +275,18 @@
       },
       "id": "rfc008-05-union",
       "rfcVector": 5,
-      "description": "Files-only arguments are observable; adding comms overrides that permission by union of restrictions.",
+      "description": "Files-only arguments are observable, and a shell-only tool falls outside the files narrowing. Adding comms to files withholds the arguments by union of restrictions.",
       "stages": [
         {
           "tool": {
             "name": "send_file",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-05-union, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-05-union, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -323,13 +323,56 @@
         {
           "tool": {
             "name": "send_file",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-05-union, stage 2.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-05-union, stage 2."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "shell"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "shell"
+            ],
+            "source": "server",
+            "input": "withheld"
+          },
+          "modelName": "s--send_file"
+        },
+        {
+          "tool": {
+            "name": "send_file",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-05-union, stage 3.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-05-union, stage 3."
                 },
                 "target": {
                   "type": "object",
@@ -392,13 +435,13 @@
         {
           "tool": {
             "name": "speak",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-06-override, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-06-override, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -459,13 +502,13 @@
         {
           "tool": {
             "name": "say",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-07-host-built-in, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-07-host-built-in, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -511,18 +554,18 @@
       },
       "id": "rfc008-08-relist",
       "rfcVector": 8,
-      "description": "A tools/list_changed notification causes the actual Host to replace its cached declaration.",
+      "description": "A tools/list_changed notification causes the actual Host to replace its cached declaration: shell, then shell and files, then files alone, so a Host that merges declarations fails the third stage.",
       "stages": [
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-08-relist, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-08-relist, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -559,13 +602,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-08-relist, stage 2.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-08-relist, stage 2."
                 },
                 "target": {
                   "type": "object",
@@ -600,6 +643,49 @@
             "input": "sent"
           },
           "modelName": "s--run"
+        },
+        {
+          "tool": {
+            "name": "run",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-08-relist, stage 3.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-08-relist, stage 3."
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "enum": [
+                        "é",
+                        "é",
+                        "\n"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "_meta": {
+              "mcpl/class": [
+                "files"
+              ]
+            }
+          },
+          "expect": {
+            "classes": [
+              "files"
+            ],
+            "source": "server",
+            "input": "sent"
+          },
+          "modelName": "s--run"
         }
       ]
     },
@@ -623,13 +709,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -666,13 +752,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 2.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 2."
                 },
                 "target": {
                   "type": "object",
@@ -709,13 +795,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 3.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 3."
                 },
                 "target": {
                   "type": "object",
@@ -752,13 +838,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 4.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 4."
                 },
                 "target": {
                   "type": "object",
@@ -795,13 +881,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 5.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 5."
                 },
                 "target": {
                   "type": "object",
@@ -838,13 +924,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 6.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 6."
                 },
                 "target": {
                   "type": "object",
@@ -881,13 +967,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 7.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 7."
                 },
                 "target": {
                   "type": "object",
@@ -924,13 +1010,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 8.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 8."
                 },
                 "target": {
                   "type": "object",
@@ -967,13 +1053,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 9.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 9."
                 },
                 "target": {
                   "type": "object",
@@ -1010,13 +1096,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-09-model-surface, stage 10.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-09-model-surface, stage 10."
                 },
                 "target": {
                   "type": "object",
@@ -1072,13 +1158,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-10-malformed, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-10-malformed, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -1131,13 +1217,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-11-reserved-prefix, stage 1.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-11-reserved-prefix, stage 1."
                 },
                 "target": {
                   "type": "object",
@@ -1174,13 +1260,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-11-reserved-prefix, stage 2.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-11-reserved-prefix, stage 2."
                 },
                 "target": {
                   "type": "object",
@@ -1219,13 +1305,13 @@
         {
           "tool": {
             "name": "run",
-            "description": "A tool.\nExact description: `x` $HOME 🙂 é.",
+            "description": "A tool.\nExact description: `x` $HOME 🙂 é.\nCase rfc008-11-reserved-prefix, stage 3.",
             "inputSchema": {
               "type": "object",
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged."
+                  "description": "Keep \\ paths, `ticks`, $dollars, and 🙂 unchanged. Case rfc008-11-reserved-prefix, stage 3."
                 },
                 "target": {
                   "type": "object",

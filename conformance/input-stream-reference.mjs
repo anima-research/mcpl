@@ -5,7 +5,9 @@ import { createHash } from "node:crypto";
 const BASE = "channels.incoming";
 const STREAM = "channels.incoming.streaming";
 const METHODS = new Set(["open", "update", "complete", "abort"]);
-const MODES = new Set(["final-only", "volatile", "prepare", "incremental"]);
+// Each mode permits everything the ones before it do (RFC §9).
+const MODE_ORDER = ["final-only", "volatile", "prepare", "incremental"];
+const MODES = new Set(MODE_ORDER);
 const REASONS = new Set(["cancelled", "no_speech", "superseded", "source_error"]);
 const ENVELOPE = ["streamId", "transportEpoch", "leaseId", "channelId", "senderId",
   "contentType", "startedAt", "expiresAt", "revision"];
@@ -41,6 +43,30 @@ const granted = (patterns, capability) => patterns.some(pattern => {
   const got = pattern.split(".");
   return got.length === want.length && got.every((part, index) => part === "*" || part === want[index]);
 });
+const positiveInteger = value => Number.isSafeInteger(value) && value > 0;
+const flag = value => typeof value === "boolean";
+const channelEntry = value => knownKeys(value, ["identity", "generation", "direction", "permitted", "senders"])
+  && identifier(value.identity) && Number.isSafeInteger(value.generation)
+  && ["inbound", "outbound", "bidirectional"].includes(value.direction)
+  && flag(value.permitted) && Array.isArray(value.senders) && value.senders.every(identifier);
+// What each fixture setting must be, when the Host is built and when a control
+// step changes it. A setting given, even as null, is checked, never replaced by
+// its default.
+const SETTINGS = {
+  now: timestamp,
+  transportEpoch: identifier,
+  serverPrincipal: identifier,
+  ready: flag,
+  advertisement: object,
+  grants: value => Array.isArray(value) && value.every(pattern => typeof pattern === "string"),
+  channels: value => object(value) && Object.values(value).every(channelEntry),
+  maxChars: positiveInteger,
+  maxUpdateHz: value => Number.isFinite(value) && value > 0,
+  maxDurationMs: positiveInteger,
+  maxStreams: positiveInteger,
+  mode: value => MODES.has(value),
+  finalAccepted: flag,
+};
 
 class Rejection extends Error {
   constructor(code, message, data) {
@@ -53,8 +79,9 @@ const reject = reason => { throw new Rejection(-32025, "Input stream rejected", 
 
 // Advertisement is separate from the grant. The new explicit member is a local
 // exception to SPEC 5.1 shorthand: legacy booleans never advertise input streaming.
-export function advertised(capabilities) {
-  const channels = object(capabilities) && Object.hasOwn(capabilities, "channels") ? capabilities.channels : undefined;
+// `mcpl` is the object a peer advertises under capabilities.experimental.mcpl.
+export function advertised(mcpl) {
+  const channels = object(mcpl) && Object.hasOwn(mcpl, "channels") ? mcpl.channels : undefined;
   return {
     incoming: channels === true || (object(channels) && Object.hasOwn(channels, "incoming") && channels.incoming === true),
     streaming: object(channels) && Object.hasOwn(channels, "inputStreaming") && channels.inputStreaming === true,
@@ -63,24 +90,30 @@ export function advertised(capabilities) {
 
 export class InputStreamHost {
   constructor(config = {}) {
-    this.now = config.now ?? 1000;
-    this.epoch = config.transportEpoch ?? "epoch-1";
-    this.serverPrincipal = config.serverPrincipal ?? "server-1";
-    this.ready = config.ready ?? true;
-    this.advertisement = config.advertisement ?? { channels: { incoming: true, inputStreaming: true } };
-    this.grants = config.grants ?? [BASE, STREAM];
-    this.channels = copy(config.channels ?? {
+    const setting = (key, fallback) => {
+      const value = Object.hasOwn(config, key) ? config[key] : fallback;
+      if (!SETTINGS[key](value)) throw Error("Invalid fixture configuration: " + key);
+      return value;
+    };
+    this.now = setting("now", 1000);
+    this.epoch = setting("transportEpoch", "epoch-1");
+    this.serverPrincipal = setting("serverPrincipal", "server-1");
+    this.ready = setting("ready", true);
+    // The Server's advertisement. The Host under test implements this profile and
+    // advertises it, so admission requires the Server's as well (RFC §2.2).
+    this.advertisement = setting("advertisement", { channels: { incoming: true, inputStreaming: true } });
+    // The effective grant: a change applies once its policy exchange completes.
+    this.grants = setting("grants", [BASE, STREAM]);
+    this.channels = copy(setting("channels", {
       "voice:lobby": { identity: "channel-lobby", generation: 1, direction: "inbound", permitted: true, senders: ["alice"] },
-    });
-    this.maxChars = config.maxChars ?? 100;
-    this.maxUpdateHz = config.maxUpdateHz ?? 10;
-    this.maxDurationMs = config.maxDurationMs ?? 10000;
-    this.maxStreams = config.maxStreams ?? 16;
-    this.mode = config.mode ?? "volatile";
-    this.finalAccepted = config.finalAccepted ?? true;
-    if (!MODES.has(this.mode) || !Number.isFinite(this.maxUpdateHz) || this.maxUpdateHz <= 0
-      || !Number.isSafeInteger(this.maxChars) || this.maxChars <= 0
-      || !Number.isSafeInteger(this.maxDurationMs) || this.maxDurationMs <= 0) throw Error("Invalid fixture configuration");
+    }));
+    this.maxChars = setting("maxChars", 100);
+    this.maxUpdateHz = setting("maxUpdateHz", 10);
+    this.maxDurationMs = setting("maxDurationMs", 10000);
+    this.maxStreams = setting("maxStreams", 16);
+    // The Host's own treatment policy; choosing incremental is its explicit opt-in (RFC §9).
+    this.mode = setting("mode", "volatile");
+    this.finalAccepted = setting("finalAccepted", true);
     this.streams = new Map();
     this.messages = [];
     this.committedKeys = new Set();
@@ -89,7 +122,8 @@ export class InputStreamHost {
     this.nextLease = 1;
   }
 
-  authority(channelId, senderId) {
+  // Ready state and the grant, which need nothing from the params (RFC §11).
+  admit() {
     if (!this.ready) reject("not_ready");
     const support = advertised(this.advertisement);
     for (const [capability, supported] of [[BASE, support.incoming], [STREAM, support.streaming]]) {
@@ -97,6 +131,14 @@ export class InputStreamHost {
         throw new Rejection(-32002, "Capability denied", { capability });
       }
     }
+  }
+
+  authority(channelId, senderId) {
+    this.admit();
+    return this.channelFor(channelId, senderId);
+  }
+
+  channelFor(channelId, senderId) {
     const channel = Object.hasOwn(this.channels, channelId) ? this.channels[channelId] : undefined;
     if (!channel) throw new Rejection(-32023, "Unknown channel");
     if (!["inbound", "bidirectional"].includes(channel.direction)
@@ -132,6 +174,9 @@ export class InputStreamHost {
           if (!this.bindingMatches(stream, channel)) this.terminate(stream, "aborted");
         } catch (error) {
           if (!(error instanceof Rejection)) throw error;
+          // Policy that isn't ready rejects calls meanwhile, but it isn't one of
+          // RFC §8's invalidations: the lease stands, and its deadline still runs.
+          if (error.result.error.data?.reason === "not_ready") continue;
           this.terminate(stream, "aborted");
         }
       }
@@ -139,13 +184,25 @@ export class InputStreamHost {
   }
 
   control(change) {
+    for (const key of ["now", "ready", "grants", "channels", "finalAccepted", "serverPrincipal", "transportEpoch", "mode"]) {
+      if (key in change && !SETTINGS[key](change[key])) throw Error("Invalid fixture control: " + key);
+    }
     if ("now" in change) {
-      if (!timestamp(change.now) || change.now < this.now) throw Error("Fixture clock must be monotonic");
+      if (change.now < this.now) throw Error("Fixture clock must be monotonic");
       this.now = change.now;
     }
     if ("serverPrincipal" in change && !("transportEpoch" in change)) throw Error("A principal change requires a fresh connection");
-    for (const key of ["ready", "grants", "channels", "finalAccepted", "serverPrincipal"]) {
+    for (const key of ["ready", "grants", "channels", "finalAccepted", "serverPrincipal", "mode"]) {
       if (key in change) this[key] = copy(change[key]);
+    }
+    if ("mode" in change) {
+      // A policy that no longer permits a lease's mode invalidates the lease
+      // rather than leaving a wider receipt standing (RFC §9).
+      for (const stream of this.streams.values()) {
+        if (stream.status === "open" && MODE_ORDER.indexOf(stream.receipt.mode) > MODE_ORDER.indexOf(this.mode)) {
+          this.terminate(stream, "aborted");
+        }
+      }
     }
     if ("transportEpoch" in change) {
       if (change.transportEpoch === this.epoch) throw Error("Reconnect needs a fresh epoch");
@@ -163,6 +220,8 @@ export class InputStreamHost {
     this.sweep();
     try {
       if (!METHODS.has(method)) throw new Rejection(-32601, "Method not found");
+      // Whether params is an object is part of parsing the JSON-RPC envelope,
+      // which precedes authorization (RFC §4.1 and §11).
       if (!object(params)) invalid();
       return { result: method === "open" ? this.open(params) : this.step(method, params) };
     } catch (error) {
@@ -172,20 +231,25 @@ export class InputStreamHost {
   }
 
   open(params) {
+    // Ready state and grant first, then the channel and sender, then the rest of
+    // the params (RFC §11).
+    this.admit();
+    if (!identifier(params.channelId) || !object(params.sender) || !identifier(params.sender.id)) invalid();
+    const channel = this.channelFor(params.channelId, params.sender.id);
     const keys = ["streamId", "channelId", "messageId", "sender", "threadId",
       "contentType", "startedAt", "expiresAt"];
-    if (!knownKeys(params, keys) || !["streamId", "channelId", "messageId"].every(key => identifier(params[key]))
-      || !knownKeys(params.sender, ["id", "name"]) || !identifier(params.sender.id)
+    if (!knownKeys(params, keys) || !["streamId", "messageId"].every(key => identifier(params[key]))
+      || !knownKeys(params.sender, ["id", "name"])
       || ("name" in params.sender && (scalarLength(params.sender.name) === null || scalarLength(params.sender.name) > 256))
       || ("threadId" in params && !identifier(params.threadId))
       || params.contentType !== "text/plain" || !timestamp(params.startedAt)
       || !timestamp(params.expiresAt) || params.startedAt > params.expiresAt) invalid();
-    const channel = this.authority(params.channelId, params.sender.id);
     if (this.now >= params.expiresAt) reject("expired");
     const existing = this.streams.get(params.streamId);
     if (existing) {
-      if (!same(existing.open, params)) reject("conflict");
+      // Expiry precedes replay handling (RFC §4.3).
       if (this.now >= existing.expiresAt) reject("expired");
+      if (!same(existing.open, params)) reject("conflict");
       if (existing.status !== "open") reject("terminal");
       return copy(existing.receipt);
     }
@@ -209,12 +273,15 @@ export class InputStreamHost {
   }
 
   lease(params, method) {
+    // Ready state and grant, the channel and sender, then the envelope (RFC §11).
+    this.admit();
+    if (!identifier(params.channelId) || !identifier(params.senderId)) invalid();
+    this.channelFor(params.channelId, params.senderId);
     const keys = [...ENVELOPE, method === "abort" ? "reason" : "text"];
     if (!knownKeys(params, keys)
-      || !["streamId", "transportEpoch", "leaseId", "channelId", "senderId"].every(key => identifier(params[key]))
+      || !["streamId", "transportEpoch", "leaseId"].every(key => identifier(params[key]))
       || params.contentType !== "text/plain" || !timestamp(params.startedAt)
       || !timestamp(params.expiresAt) || !revision(params.revision)) invalid();
-    this.authority(params.channelId, params.senderId);
     if (params.transportEpoch !== this.epoch) reject("lease_mismatch");
     const stream = this.streams.get(params.streamId);
     if (!stream) reject("unknown_stream");
@@ -284,7 +351,9 @@ export class InputStreamHost {
       result = { accepted: true, status: "completed", messageId: stream.open.messageId,
         revision: params.revision, contentDigest };
     } else result = { accepted: true, status: "aborted" };
-    stream.revision = params.revision;
+    // A final is accepted at its revision; an abort accepts no snapshot, so the
+    // accepted revision stays where the last update left it.
+    if (method === "complete") stream.revision = params.revision;
     this.terminate(stream, method === "complete" ? "completed" : "aborted");
     stream.terminal = { method, params: copy(params), result: copy(result) };
     return result;
@@ -293,7 +362,7 @@ export class InputStreamHost {
   prepare(streamId) {
     const stream = this.streams.get(streamId);
     if (!stream || stream.status !== "open" || stream.text === null
-      || !["prepare", "incremental"].includes(this.mode)) throw Error("Preparation stimulus has no permitted snapshot");
+      || !["prepare", "incremental"].includes(stream.receipt.mode)) throw Error("Preparation stimulus has no permitted snapshot");
     this.prepared.set(streamId, {
       revision: stream.revision, contentDigest: digest(stream.text),
     });
@@ -305,7 +374,7 @@ export class InputStreamHost {
         status: stream.status, revision: stream.revision,
         // final-only has no presentation consumer even though the protocol model
         // keeps the latest snapshot to detect conflicting equal revisions.
-        provisional: stream.status === "open" && this.mode !== "final-only" ? stream.text : null,
+        provisional: stream.status === "open" && stream.receipt.mode !== "final-only" ? stream.text : null,
       }])),
       messages: copy(this.messages),
       prepared: Object.fromEntries(this.prepared),

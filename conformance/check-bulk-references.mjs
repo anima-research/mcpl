@@ -1,26 +1,34 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const corpusPath = resolve(here, 'bulk-reference-vectors.json');
+const corpusURL = pathToFileURL(corpusPath).href;
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'));
+const pause = ms => new Promise(done => setTimeout(done, ms));
 
+// $ORIGIN is the case's loopback origin, $CASE its URL-encoded id, and $CORPUS the
+// file URL of this corpus, an existing file that a refused file: URI names.
 export function expand(value, origin, caseId = value?.id) {
   if (typeof value === 'string') {
     if (value.includes('$CASE')) assert.ok(typeof caseId === 'string' && caseId.length > 0, 'case namespace requires a case id');
-    return value.replaceAll('$ORIGIN', origin).replaceAll('$CASE', encodeURIComponent(caseId ?? ''));
+    return value.replaceAll('$ORIGIN', () => origin)
+      .replaceAll('$CASE', () => encodeURIComponent(caseId ?? ''))
+      .replaceAll('$CORPUS', () => corpusURL);
   }
   if (Array.isArray(value)) return value.map(x => expand(x, origin, caseId));
   if (value && typeof value === 'object') {
     if ('$repeat' in value) {
-      assert.equal(typeof value.$repeat, 'string');
-      assert.ok(Number.isSafeInteger(value.count) && value.count >= 0 && value.count <= 2 ** 21);
-      return value.$repeat.repeat(value.count);
+      assert.deepEqual(Object.keys(value).sort(), ['$repeat', 'count'], '$repeat takes only count beside it');
+      assert.equal(typeof value.$repeat, 'string', '$repeat unit must be a string');
+      assert.ok(Number.isSafeInteger(value.count) && value.count >= 0 && value.count <= 2 ** 21, '$repeat count must be an integer from 0 to 2^21');
+      return expand(value.$repeat, origin, caseId).repeat(value.count);
     }
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, expand(v, origin, caseId)]));
   }
@@ -38,7 +46,7 @@ async function listen(server) {
 // All network endpoints are loopback. The second server is a cross-origin trap.
 export async function fixture(response = {}) {
   const requests = [], redirected = [];
-  let chunksSent = 0, streamClosed = false;
+  let chunksSent = 0, streamClosed = false, current = response ?? {};
   const timers = new Set();
   const target = createServer((req, res) => {
     redirected.push({ authorization: req.headers.authorization ?? null });
@@ -47,11 +55,11 @@ export async function fixture(response = {}) {
   const targetOrigin = await listen(target);
   const server = createServer((req, res) => {
     requests.push({ url: req.url, authorization: req.headers.authorization ?? null });
-    if (response.redirect) {
+    if (current.redirect) {
       res.writeHead(302, { location: targetOrigin + '/target' });
       res.end();
-    } else if (response.stream) {
-      const { chunks, chunkBytes, intervalMs } = response.stream;
+    } else if (current.stream) {
+      const { chunks, chunkBytes, intervalMs } = current.stream;
       res.writeHead(200, { 'content-type': 'application/octet-stream' });
       const timer = setInterval(() => {
         chunksSent++;
@@ -66,11 +74,11 @@ export async function fixture(response = {}) {
         timers.delete(timer);
       });
     } else {
-      const body = Buffer.from(response.bodyBase64 ?? '', 'base64');
-      const headers = { 'content-type': response.contentType ?? 'application/octet-stream' };
-      if (response.gzip) headers['content-encoding'] = 'gzip';
+      const body = Buffer.from(current.bodyBase64 ?? '', 'base64');
+      const headers = { 'content-type': current.contentType ?? 'application/octet-stream' };
+      if (current.gzip) headers['content-encoding'] = 'gzip';
       res.writeHead(200, headers);
-      res.end(response.gzip ? gzipSync(body) : body);
+      res.end(current.gzip ? gzipSync(body) : body);
     }
   });
   let origin;
@@ -80,7 +88,20 @@ export async function fixture(response = {}) {
     origin, requests, redirected,
     get chunksSent() { return chunksSent; },
     get streamClosed() { return streamClosed; },
-    async settle() { await new Promise(done => setTimeout(done, 30)); },
+    // Serve another case's own response from the same origin.
+    respond(next) { current = next ?? {}; },
+    // Wait for the stream's close event when an abort is expected, then for a quiet
+    // window with no new request; a deadline bounds both.
+    async settle({ closed = false, quietMs = 100, deadlineMs = 5000 } = {}) {
+      const deadline = Date.now() + deadlineMs;
+      while (closed && !streamClosed && Date.now() < deadline) await pause(5);
+      let seen = requests.length + redirected.length, quietSince = Date.now();
+      while (Date.now() - quietSince < quietMs && Date.now() < deadline) {
+        await pause(10);
+        const now = requests.length + redirected.length;
+        if (now !== seen) { seen = now; quietSince = Date.now(); }
+      }
+    },
     async close() {
       for (const timer of timers) clearInterval(timer);
       await Promise.all([server, target].map(s => new Promise(done => {
@@ -91,24 +112,74 @@ export async function fixture(response = {}) {
 }
 
 // Inspect values as the model receives them, rather than JSON escape sequences.
+// Object keys count, since a Host can put a value in a key.
 export function semanticStrings(value) {
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) return value.flatMap(semanticStrings);
-  if (value && typeof value === 'object') return Object.values(value).flatMap(semanticStrings);
+  if (value && typeof value === 'object') return Object.entries(value).flatMap(([key, v]) => [key, ...semanticStrings(v)]);
   return [];
 }
 
-export function checkObservation(c, out, network, adapter) {
+// The corpus's shape, frozen: the cases per RFC row, and the expectation keys the checker reads.
+const CASES_PER_ROW = { 1: 4, 2: 3, 3: 1, 4: 2, 5: 1, 6: 1, 7: 2, 8: 2, 9: 3, 10: 1, 11: 1, 12: 1, 13: 1, 14: 1, 15: 3, 16: 1, 17: 11, 18: 2, 19: 2, 20: 1 };
+const STAGE_KEYS = ['stub', 'hidden', 'includes', 'stubOrInlineBase64', 'displayField', 'cleanLabel'];
+const EXPECT_KEYS = [...STAGE_KEYS, 'kind', 'missingFields', 'ok', 'requests', 'redirectSafe', 'decodedBase64',
+  'savedMime', 'digestVerified', 'storageFromId', 'abortStream', 'unchanged', 'before', 'after'];
+// A run this long of a rejected value doesn't occur in a stub by chance.
+const REJECTED_RUN = 16;
+
+export function assertCorpus(vectors) {
+  assert.equal(vectors.format, 'mcpl-bulk-references-1');
+  assert.equal(new Set(vectors.cases.map(c => c.id)).size, vectors.cases.length, 'duplicate case ids');
+  const rows = {};
+  for (const c of vectors.cases) rows[c.rfc] = (rows[c.rfc] ?? 0) + 1;
+  assert.deepEqual(rows, CASES_PER_ROW, 'the frozen cases per RFC row');
+  const uris = new Map();
+  for (const c of vectors.cases) {
+    for (const key of Object.keys(c.expect)) assert.ok(EXPECT_KEYS.includes(key), c.id + ': unknown expectation ' + key);
+    for (const stage of ['before', 'after']) {
+      for (const key of Object.keys(c.expect[stage] ?? {})) assert.ok(STAGE_KEYS.includes(key), c.id + ': unknown ' + stage + ' expectation ' + key);
+    }
+    for (const stub of [c.expect.stub, c.expect.before?.stub, c.expect.after?.stub]) {
+      assert.ok(stub === undefined || stub === true, c.id + ': a stub expectation is true or absent');
+    }
+    // Process-global Host caches key references by URI, so no two cases share one.
+    for (const block of expand(c.blocks, 'http://origin.invalid', c.id)) {
+      if (typeof block.uri !== 'string') continue;
+      assert.ok(!uris.has(block.uri), c.id + ': URI shared with ' + uris.get(block.uri));
+      uris.set(block.uri, c.id);
+    }
+  }
+}
+
+function forbiddenForms(value) {
+  // Also the JSON-escaped form, as a serialized history lane shows it.
+  return [...new Set([value, JSON.stringify(value).slice(1, -1)])];
+}
+
+export function checkObservation(c, out, network, adapter, token) {
   const e = c.expect;
+  // The joined text catches a value within one piece and one split across two.
+  const checkHidden = (pieces, hidden, where) => {
+    const text = pieces.join('');
+    hidden.forEach((value, index) => {
+      for (const form of forbiddenForms(value)) {
+        assert.ok(!text.includes(form), 'model-visible forbidden value #' + (index + 1) + ' in ' + where);
+      }
+    });
+  };
   if (c.operation === 'registry') {
     assert.equal(out.stableId, out.firstId, 'registration keeps a live reference stable');
+    assert.equal(out.live, out.fresh.refId, 'a live id resolves to its own record');
     assert.equal(out.evicted, null, 'evicted reference must be a defined miss');
     assert.equal(out.unknown, null, 'unknown reference must be a defined miss');
     for (const error of [out.evictedError, out.unknownError]) {
-      assert.equal(error.success, false);
-      assert.equal(error.isError, true);
-      assert.match(error.error, /unknown reference/i);
+      assert.equal(error.success, false, 'lookup error reports failure');
+      assert.equal(error.isError, true, 'lookup error is an error');
+      assert.match(error.error, /unknown reference/i, 'lookup error says unknown reference');
     }
+    checkHidden([out.evictedError.error], e.hidden ?? [], 'the evicted lookup error');
+    checkHidden([out.unknownError.error], e.hidden ?? [], 'the unknown lookup error');
     assert.notEqual(out.fresh.refId, out.firstId, 'evicted id must not be reused');
     assert.equal(new Set(out.ids).size, out.ids.length, 'each new record must have a distinct id');
     assert.equal(out.fresh.testimony.uri, c.blocks[0].uri);
@@ -119,11 +190,17 @@ export function checkObservation(c, out, network, adapter) {
   const views = [['before', out.before], ...(out.after ? [['after', out.after]] : [])];
   for (const [stage, view] of views) {
     const visible = { ...e, ...e[stage], hidden: [...(e.hidden ?? []), ...(e[stage]?.hidden ?? [])] };
-    for (const text of [semanticStrings(view.push).join(''), view.wake, view.history]) {
+    const lanes = [['push', semanticStrings(view.push)], ['wake', [view.wake]], ['history', [view.history]]];
+    for (const [lane, pieces] of lanes) {
+      const text = pieces.join('');
+      const where = stage + ' ' + lane;
       assert.ok(text.length <= adapter.maxViewChars, 'view exceeds declared Host display bound');
-      for (const forbidden of visible.hidden ?? []) assert.ok(!text.includes(forbidden), 'model-visible forbidden value: ' + forbidden);
-      for (const included of visible.includes ?? []) assert.ok(text.includes(included), 'missing text: ' + included);
+      checkHidden(pieces, visible.hidden, where);
+      // An included text appears within one piece, not across two.
+      for (const included of visible.includes ?? []) assert.ok(pieces.some(piece => piece.includes(included)), 'missing text: ' + included);
       if (visible.stub) {
+        // Registering the same testimony returns the Host's record, so a stub
+        // that names any other id fails here.
         assert.ok(out.records.length > 0, 'reference record absent');
         for (const record of out.records) assert.ok(text.includes(record.refId), 'stub must identify its Host record');
       }
@@ -135,13 +212,27 @@ export function checkObservation(c, out, network, adapter) {
         // This case uses a schema-valid ASCII label. Its shortening threshold
         // and recognized marks belong to the declared Host profile, not MCPL.
         const profile = adapter.displayProfile;
-        assert.ok(profile && Number.isSafeInteger(profile.fieldChars[visible.displayField]) && profile.fieldChars[visible.displayField] > 0, 'missing Host field display limit');
-        const original = c.blocks[0][visible.displayField];
-        if (original.length > profile.fieldChars[visible.displayField]) {
-          assert.ok(profile.truncationMarkers.some(mark => text.includes(mark)), 'display truncation must be marked according to the declared Host profile');
+        const limit = profile?.fieldChars?.[visible.displayField];
+        assert.ok(Number.isSafeInteger(limit) && limit > 0, 'missing Host field display limit');
+        const label = c.blocks[0][visible.displayField];
+        if (label.length > limit) {
+          assert.ok(!text.includes(label.slice(0, limit + 1)), visible.displayField + ' shown past the declared display limit in ' + where);
+          // The longest prefix of the label shown must end in a declared mark.
+          let shown = 0;
+          while (shown < limit && text.includes(label.slice(0, shown + 1))) shown++;
+          assert.ok(profile.truncationMarkers.some(mark => text.includes(label.slice(0, shown) + mark)), 'display truncation must be marked according to the declared Host profile');
+        } else {
+          assert.ok(text.includes(label), visible.displayField + ' within the display limit must be shown whole in ' + where);
         }
       }
-      if (visible.cleanLabel) assert.ok(!/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(text), 'unsafe display-label characters');
+      if (visible.cleanLabel) assert.ok(!/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(text), 'unsafe display-label characters');
+      // A field rejected as invalid is absent everywhere, not only from testimony.
+      for (const field of visible.missingFields ?? []) {
+        const value = c.blocks.find(block => block[field] !== undefined)?.[field];
+        if (typeof value === 'string' && value.length >= REJECTED_RUN) {
+          assert.ok(!text.includes(value.slice(0, REJECTED_RUN)), 'rejected ' + field + ' shown in ' + where);
+        }
+      }
     }
   }
   if (e.kind) assert.equal(out.parsed[0].kind, e.kind);
@@ -157,13 +248,17 @@ export function checkObservation(c, out, network, adapter) {
   }
   assert.equal(c.operation, 'fetch');
   assert.ok(out.outcome && Array.isArray(out.saves), 'fetch observation missing');
-  if ('ok' in e) assert.equal(out.outcome.ok, e.ok, out.outcome.error ?? 'unexpected successful fetch');
+  // The fetch_reference result is model-visible too.
+  assert.ok(out.tool && typeof out.tool.success === 'boolean', 'fetch must observe the fetch_reference result');
+  assert.equal(out.tool.success, out.outcome.ok, 'fetch_reference reports the fetch outcome');
+  checkHidden([out.tool.success ? out.tool.data : out.tool.error], [...(e.hidden ?? []), ...(e.after?.hidden ?? [])], 'the fetch_reference result');
+  if ('ok' in e) assert.equal(out.outcome.ok, e.ok, 'fetch outcome ' + (out.outcome.ok ? 'succeeded' : 'failed: ' + out.outcome.error));
   if ('requests' in e) assert.equal(network.requests.length, e.requests, 'request count');
   // §19.6.1 permits applying the connection credential; a Host may omit it.
   // This fixture is public, so credential use is an explicit tested profile.
   if (network.requests.length) {
     assert.ok(['connection-bearer', 'omit'].includes(adapter.credentialPolicy), 'declare the Host credential-use policy');
-    const authorization = adapter.credentialPolicy === 'connection-bearer' ? 'Bearer fixture-secret' : null;
+    const authorization = adapter.credentialPolicy === 'connection-bearer' ? 'Bearer ' + token : null;
     for (const request of network.requests) assert.equal(request.authorization, authorization, 'same-origin credential-use profile');
   }
   if (e.redirectSafe) {
@@ -174,24 +269,24 @@ export function checkObservation(c, out, network, adapter) {
   }
   if (!out.outcome.ok) {
     assert.equal(out.saves.length, 0, 'failed fetch must not present partial or mismatched bytes');
-    assert.equal(out.records[0].fetchedPath, undefined);
-    assert.equal(out.records[0].verifiedBytes, undefined);
+    assert.equal(out.records[0].fetchedPath, undefined, 'failed fetch leaves no fetched path');
+    assert.equal(out.records[0].verifiedBytes, undefined, 'failed fetch verifies no bytes');
   } else {
     assert.equal(out.saves.length, 1, 'successful fetch must materialize once');
     const saved = out.saves[0], record = out.records[0];
     const bytes = Buffer.from(saved.base64, 'base64');
-    assert.equal(out.outcome.bytes, bytes.length);
-    assert.equal(record.verifiedBytes, bytes.length);
-    assert.equal(record.fetchedPath, out.outcome.path);
+    assert.equal(out.outcome.bytes, bytes.length, 'outcome bytes match the saved bytes');
+    assert.equal(record.verifiedBytes, bytes.length, 'record verifiedBytes match the saved bytes');
+    assert.equal(record.fetchedPath, out.outcome.path, 'record fetchedPath is the outcome path');
     if (e.decodedBase64) assert.equal(saved.base64, e.decodedBase64, 'saved bytes must be decoded identity octets');
     if (e.savedMime) {
-      assert.equal(record.verifiedMimeType, e.savedMime);
-      assert.equal(out.outcome.mimeType, e.savedMime);
-      assert.equal(saved.mimeType, e.savedMime);
+      assert.equal(record.verifiedMimeType, e.savedMime, 'record stores the observed MIME type');
+      assert.equal(out.outcome.mimeType, e.savedMime, 'outcome MIME type');
+      assert.equal(saved.mimeType, e.savedMime, 'saved MIME type');
     }
     if (e.digestVerified) {
-      assert.equal(record.digestVerified, true);
-      assert.equal(out.outcome.digestVerified, true);
+      assert.equal(record.digestVerified, true, 'record digest verified');
+      assert.equal(out.outcome.digestVerified, true, 'outcome digest verified');
     }
     if (e.storageFromId) {
       assert.ok(saved.name.startsWith(record.refId + '.'), 'storage name must come from reference id');
@@ -215,6 +310,8 @@ export async function main(argv) {
     options[argv[i].slice(2)] = argv[i + 1];
   }
   assert.ok(options.framework && options.ajv, '--framework and --ajv are required');
+  const vectors = await readJson(corpusPath);
+  assertCorpus(vectors);
   const { default: Ajv } = await import(pathToFileURL(resolve(options.ajv)).href);
   const ajv = new Ajv({ strict: true, strictRequired: false, allErrors: true });
   const spec = await readFile(resolve(here, '../SPEC.md'), 'utf8');
@@ -222,37 +319,38 @@ export async function main(argv) {
   const validate = ajv.compile(schema);
   const legacy = await readJson(resolve(here, 'bulk-reference-legacy-schema.json'));
   const validateLegacy = ajv.compile(legacy.schema);
-  const vectors = await readJson(resolve(here, 'bulk-reference-vectors.json'));
-  assert.equal(vectors.format, 'mcpl-bulk-references-1');
-  assert.equal(new Set(vectors.cases.map(c => c.id)).size, vectors.cases.length, 'duplicate case ids');
-  assert.deepEqual([...new Set(vectors.cases.map(c => c.rfc))].sort((a, b) => a - b), Array.from({ length: 20 }, (_, i) => i + 1));
-  const module = await import(pathToFileURL(resolve(options.adapter ?? resolve(here, 'agent-framework-bulk-references.mjs'))).href);
+  const adapterPath = resolve(options.adapter ?? resolve(here, 'agent-framework-bulk-references.mjs'));
+  const module = await import(pathToFileURL(adapterPath).href);
   const adapter = await module.createAdapter(resolve(options.framework));
   assert.ok(Number.isSafeInteger(adapter.maxViewChars) && adapter.maxViewChars > 0);
   assert.ok(Array.isArray(adapter.displayProfile?.truncationMarkers) && adapter.displayProfile.truncationMarkers.length > 0 && adapter.displayProfile.truncationMarkers.every(mark => typeof mark === 'string' && mark.length > 0), 'adapter must declare nonempty truncation markers');
   assert.ok(['connection-bearer', 'omit'].includes(adapter.credentialPolicy), 'adapter must declare credentialPolicy');
+  assert.ok(Number.isSafeInteger(adapter.registryQuota) && adapter.registryQuota > 0, 'adapter must declare its registry quota');
+  for (const c of vectors.cases.filter(c => c.operation === 'registry')) {
+    assert.ok(Number.isSafeInteger(c.registrations) && c.registrations > adapter.registryQuota, c.id + ' must register more records than the declared registry quota');
+  }
   const ajvPackage = await readJson(resolve(dirname(options.ajv), '../package.json'));
+  // The suite is identified by its files' hashes, with or without a Git checkout.
   const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'check-bulk-references.mjs'];
   const suiteHashes = {};
   for (const file of suiteFiles) suiteHashes[file] = createHash('sha256').update(await readFile(resolve(here, file))).digest('hex');
   suiteHashes['SPEC.md'] = createHash('sha256').update(spec).digest('hex');
-  suiteHashes['adapter'] = createHash('sha256').update(await readFile(resolve(options.adapter ?? resolve(here, 'agent-framework-bulk-references.mjs')))).digest('hex');
+  suiteHashes['adapter'] = createHash('sha256').update(await readFile(adapterPath)).digest('hex');
   const report = {
     suiteHashes,
-    suiteWorktreeDirty: execFileSync('git', ['-C', here, 'status', '--porcelain'], { encoding: 'utf8' }).trim() !== '',
-    vectorRevision: execFileSync('git', ['-C', here, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     runtime: process.version, bun: process.versions.bun ?? null,
     validator: { name: 'Ajv', version: ajvPackage.version, strict: true, strictRequired: false, schema: 'SPEC.md Appendix B.1' },
-    legacySchemaRevision: legacy.sourceRevision, host: adapter.identity, displayProfile: adapter.displayProfile, credentialPolicy: adapter.credentialPolicy, results: [],
+    legacySchemaRevision: legacy.sourceRevision, host: adapter.identity, displayProfile: adapter.displayProfile,
+    credentialPolicy: adapter.credentialPolicy, registryQuota: adapter.registryQuota, results: [],
   };
   for (const raw of vectors.cases) {
-    const network = await fixture(raw.response);
-    const c = expand(raw, network.origin);
+    const result = { id: raw.id, rfc: raw.rfc, schema: null, host: null };
+    let network;
     try {
-      const schemaResults = c.blocks.map(block => validate(block));
-      const result = { id: c.id, rfc: c.rfc, schema: null, host: null };
+      network = await fixture(raw.response);
+      const c = expand(raw, network.origin);
       try {
-        assert.deepEqual(schemaResults, c.schemaValid, 'strict emitter-schema acceptance');
+        assert.deepEqual(c.blocks.map(block => validate(block)), c.schemaValid, 'strict emitter-schema acceptance');
         if (c.legacySchemaValid !== undefined) assert.equal(validateLegacy(c.blocks[0]), c.legacySchemaValid);
         if (c.knownEmbeddedCredential) {
           assert.equal(new URL(c.blocks[0].uri).searchParams.get('token'), c.knownEmbeddedCredential);
@@ -263,13 +361,20 @@ export async function main(argv) {
       } catch (error) { result.schema = 'fail'; result.schemaError = error.message; }
       try {
         const observation = await adapter.observe(c, { origin: network.origin, token: vectors.fixtures.token });
-        await network.settle();
-        checkObservation(c, observation, network, adapter);
+        await network.settle({ closed: Boolean(c.expect.abortStream) });
+        checkObservation(c, observation, network, adapter, vectors.fixtures.token);
         result.host = 'pass';
       } catch (error) { result.host = 'fail'; result.hostError = error.message; }
-      report.results.push(result);
-      console.log((result.schema === 'pass' && result.host === 'pass' ? 'PASS ' : 'FAIL ') + c.id + (result.schemaError ? '\n  schema: ' + result.schemaError : '') + (result.hostError ? '\n  host: ' + result.hostError : ''));
-    } finally { await network.close(); }
+    } catch (error) {
+      // A case that can't be set up fails alone; the others still run.
+      result.schema ??= 'fail';
+      result.host = 'fail';
+      result.hostError = 'setup: ' + error.message;
+    } finally { await network?.close(); }
+    report.results.push(result);
+    console.log((result.schema === 'pass' && result.host === 'pass' ? 'PASS ' : 'FAIL ') + raw.id
+      + (result.emitter ? '\n  note: ' + result.emitter : '')
+      + (result.schemaError ? '\n  schema: ' + result.schemaError : '') + (result.hostError ? '\n  host: ' + result.hostError : ''));
   }
   report.schemaPassed = report.results.filter(r => r.schema === 'pass').length;
   report.hostPassed = report.results.filter(r => r.host === 'pass').length;
@@ -278,6 +383,8 @@ export async function main(argv) {
   return report.results.some(r => r.schema === 'fail' || r.host === 'fail') ? 1 : 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Real paths on both sides, so a run through a symbolic link still runs.
+const real = path => { try { return realpathSync(path); } catch { return null; } };
+if (process.argv[1] && real(resolve(process.argv[1])) === real(fileURLToPath(import.meta.url))) {
   process.exitCode = await main(process.argv.slice(2));
 }

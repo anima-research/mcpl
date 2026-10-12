@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { createAdapter } from './agent-framework-bulk-references.mjs';
 import { expand, fixture, checkObservation } from './check-bulk-references.mjs';
 
-test('distinct cases cannot inherit a cached fetch when the origin is reused', async () => {
+test('distinct cases cannot inherit a cached fetch when the origin is reused', { timeout: 60000 }, async () => {
   assert.ok(process.env.MCPL_FRAMEWORK, 'Set MCPL_FRAMEWORK to the isolated Framework checkout');
   const vectors = JSON.parse(await readFile(new URL('./bulk-reference-vectors.json', import.meta.url), 'utf8'));
   const adapter = await createAdapter(process.env.MCPL_FRAMEWORK);
@@ -15,16 +15,19 @@ test('distinct cases cannot inherit a cached fetch when the origin is reused', a
   try {
     const observed = [];
     for (const raw of [first, second]) {
+      // Same origin, but each case is served its own declared response.
+      network.respond(raw.response);
       network.requests.length = 0;
       const c = expand(raw, network.origin);
       const out = await adapter.observe(c, { origin: network.origin, token: vectors.fixtures.token });
       await network.settle();
-      checkObservation(c, out, network, adapter);
+      checkObservation(c, out, network, adapter, vectors.fixtures.token);
       assert.equal(network.requests.length, 1, 'each case must exercise its own fetch');
       observed.push(out);
     }
     assert.equal(observed[0].outcome.ok, true);
     assert.equal(observed[1].outcome.ok, false);
+    assert.match(observed[1].outcome.error, /digest/i, 'the second case fails on its own digest');
     assert.equal(observed[1].saves.length, 0);
     assert.notEqual(observed[0].records[0].refId, observed[1].records[0].refId);
     assert.notEqual(observed[0].records[0].testimony.uri, observed[1].records[0].testimony.uri);

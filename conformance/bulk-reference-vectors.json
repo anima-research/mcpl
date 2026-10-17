@@ -523,10 +523,45 @@
         "stub": true,
         "hidden": [
           "$ORIGIN",
-          "fixture-secret"
+          "fixture-secret",
+          "$LOCAL_PAYLOAD",
+          "RIFF0000WAVEpayload",
+          "UklGRjAwMDBXQVZFcGF5bG9hZA=="
         ],
         "ok": false,
-        "requests": 0
+        "requests": 0,
+        "unchanged": true
+      },
+      "maxBytes": 128
+    },
+    {
+      "id": "11-data-refused",
+      "rfc": 11,
+      "operation": "fetch",
+      "blocks": [
+        {
+          "type": "resource",
+          "uri": "data:audio/wav;case=11-data-refused;base64,UklGRjAwMDBXQVZFcGF5bG9hZA==",
+          "name": "attachment.wav",
+          "mimeType": "audio/wav",
+          "sizeBytes": 19,
+          "disposition": "never"
+        }
+      ],
+      "schemaValid": [
+        true
+      ],
+      "expect": {
+        "stub": true,
+        "hidden": [
+          "$ORIGIN",
+          "fixture-secret",
+          "RIFF0000WAVEpayload",
+          "UklGRjAwMDBXQVZFcGF5bG9hZA=="
+        ],
+        "ok": false,
+        "requests": 0,
+        "unchanged": true
       },
       "maxBytes": 128
     },
@@ -618,6 +653,7 @@
           "fixture-secret"
         ],
         "ok": true,
+        "decodedBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
         "requests": 1,
         "storageFromId": true
       },
@@ -825,6 +861,7 @@
           "fixture-secret"
         ],
         "ok": true,
+        "decodedBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
         "requests": 1,
         "storageFromId": true,
         "cleanLabel": true
@@ -858,6 +895,7 @@
           "fixture-secret"
         ],
         "ok": true,
+        "decodedBase64": "UklGRjAwMDBXQVZFcGF5bG9hZA==",
         "requests": 1,
         "storageFromId": true,
         "cleanLabel": true

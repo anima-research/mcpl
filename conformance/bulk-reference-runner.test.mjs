@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expand, checkObservation, assertCorpus } from './check-bulk-references.mjs';
 
 const corpus = JSON.parse(readFileSync(new URL('./bulk-reference-vectors.json', import.meta.url), 'utf8'));
@@ -45,12 +46,21 @@ test('the frozen corpus has its documented shape', () => {
   assert.throws(() => assertCorpus(negative), /stub expectation is true or absent/);
   const shared = structuredClone(corpus); shared.cases[1].blocks[0].uri = '$ORIGIN/case/01-never/payload';
   assert.throws(() => assertCorpus(shared), /URI shared with 01-never/);
+  const undeclared = structuredClone(corpus); delete undeclared.cases.find(c => c.id === '03-verified-never').expect.decodedBase64;
+  assert.throws(() => assertCorpus(undeclared), /03-verified-never: a successful fetch declares its decodedBase64/);
+  const empty = structuredClone(corpus); empty.cases.find(c => c.expect.after?.stubOrInlineBase64).expect.after.stubOrInlineBase64 = '';
+  assert.throws(() => assertCorpus(empty), /stubOrInlineBase64 must decode to bytes/);
 });
-test('the refused file: case names a payload a Host could read whole', () => {
-  const ceiling = structuredClone(corpus); ceiling.cases.find(c => c.id === '11-file-refused').maxBytes = 8;
-  assert.throws(() => assertCorpus(ceiling), /11-file-refused: the local payload must be readable whole/);
-  const declared = structuredClone(corpus); declared.cases.find(c => c.id === '11-file-refused').blocks[0].sizeBytes = 12;
-  assert.throws(() => assertCorpus(declared), /11-file-refused: the local payload must be readable whole/);
+test('a refused local case names a payload a Host could read whole', () => {
+  const edited = (id, edit) => { const copy = structuredClone(corpus); edit(copy.cases.find(c => c.id === id)); return copy; };
+  for (const id of ['11-file-refused', '11-data-refused']) {
+    const fails = new RegExp(id + ': a local URI must name a payload readable whole within the case');
+    assert.throws(() => assertCorpus(edited(id, c => { c.maxBytes = 8; })), fails);
+    assert.throws(() => assertCorpus(edited(id, c => { c.blocks[0].sizeBytes = 12; })), fails);
+  }
+  // Any file: URI is held to it, however it is spelt: here the corpus itself, past the ceiling.
+  const literal = edited('11-file-refused', c => { c.blocks[0].uri = new URL('./bulk-reference-vectors.json', import.meta.url).href; });
+  assert.throws(() => assertCorpus(literal), /11-file-refused: a local URI must name a payload readable whole/);
 });
 test('an observed bounded reference stub passes', () => { check(); });
 for (const lane of ['push', 'wake', 'history']) {
@@ -95,6 +105,8 @@ test('optional-field truncation cannot pass as rejection', () => {
   const c = structuredClone(vector); c.expect.missingFields = ['name'];
   const out = observation(); out.parsed[0].testimony.name = 'truncated';
   assert.throws(() => check(c, out), /absent/);
+  const widened = observation(); delete widened.parsed[0].testimony.disposition;
+  assert.throws(() => check(c, widened), /subtractive disposition survives/);
 });
 test('a rejected field shown in a lane cannot pass', () => {
   const c = structuredClone(vector); c.expect.missingFields = ['name'];
@@ -105,11 +117,24 @@ test('a rejected field shown in a lane cannot pass', () => {
     else out.before[lane] += 'n'.repeat(120) + '…';
     assert.throws(() => check(c, out), /rejected name shown in before /, lane);
   }
+  // Shown in its JSON-escaped form, as a serialized lane carries it.
+  const quoted = structuredClone(c); quoted.blocks[0].name = 'say "hi" ' + 'n'.repeat(247);
+  const escaped = observation(); escaped.before.history += JSON.stringify({ name: quoted.blocks[0].name.slice(0, 120) });
+  assert.throws(() => check(quoted, escaped), /rejected name shown in before history/);
+  // Every block's rejected value counts, not only the first block's.
+  const second = structuredClone(c);
+  second.blocks = [{ ...c.blocks[0], name: 'short.wav' }, { ...c.blocks[0], uri: 'https://example.invalid/second', name: 'm'.repeat(256) }];
+  const out = observation(); out.before.wake += 'm'.repeat(120) + '…';
+  assert.throws(() => check(second, out), /rejected name shown in before wake/);
 });
 test('partial bytes from a refused fetch cannot pass', () => {
   const c = { ...vector, operation: 'fetch', expect: { ...vector.expect, ok: false, requests: 0 } };
   const out = { ...refused(), saves: [{ name: 'partial' }] };
   assert.throws(() => check(c, out), /partial/);
+  const pathed = refused(); pathed.records[0].fetchedPath = 'scratch/refs/ref_fixture.wav';
+  assert.throws(() => check(c, pathed), /failed fetch leaves no fetched path/);
+  const verified = refused(); verified.records[0].verifiedBytes = 19;
+  assert.throws(() => check(c, verified), /failed fetch verifies no bytes/);
 });
 test('the fetch_reference result is checked as model-visible text', () => {
   const c = { ...vector, operation: 'fetch', expect: { ...vector.expect, ok: false, requests: 0 } };
@@ -122,6 +147,10 @@ test('cross-origin forwarding of a connection credential cannot pass', () => {
   const c = { ...vector, operation: 'fetch', expect: { ...vector.expect, redirectSafe: true } };
   const net = { requests: [{ authorization: 'Bearer ' + token }], redirected: [{ authorization: 'Bearer ' + token }] };
   assert.throws(() => check(c, refused(), net), /credential leak/);
+  // The redirect is exercised, and followed at most one hop.
+  check(c, refused(), { requests: [{ authorization: 'Bearer ' + token }], redirected: [{ authorization: null }] });
+  assert.throws(() => check(c, refused(), { requests: [{ authorization: 'Bearer ' + token }], redirected: [{ authorization: null }, { authorization: null }] }), /redirect traversal must be bounded/);
+  assert.throws(() => check(c, refused(), { requests: [], redirected: [] }), /initial redirect response must be exercised/);
 });
 test('a continued stream must close before its producer finishes', () => {
   const c = { ...vector, operation: 'fetch', response: { stream: { chunks: 64 } }, expect: { ...vector.expect, abortStream: true } };
@@ -140,6 +169,22 @@ test('an evicted-id alias, a missing live id or an undefined tool error cannot p
   check(c, out);
   assert.throws(() => check(c, { ...out, fresh: { ...out.fresh, refId: 'old' }, live: 'old' }), /reused/);
   assert.throws(() => check(c, { ...out, live: null }), /live id resolves/);
+  // Each registry rule fails on its own fault.
+  const faults = [
+    [{ stableId: 'other' }, /keeps a live reference stable/],
+    [{ evicted: { refId: 'old' } }, /evicted reference must be a defined miss/],
+    [{ unknown: { refId: 'ref_unknown_fixture' } }, /unknown reference must be a defined miss/],
+    [{ ids: ['old', 'new', 'new'] }, /distinct id/],
+    [{ fresh: { ...out.fresh, testimony: { uri: 'https://example.invalid/b' } } }, /fresh record keeps its testimony/],
+  ];
+  for (const [fault, pattern] of faults) assert.throws(() => check(c, { ...out, ...fault }), pattern);
+  // A lookup error is model-visible: no unsafe label character, no rejected value.
+  const labelled = { ...c, expect: { ...c.expect, cleanLabel: true } };
+  check(labelled, out);
+  assert.throws(() => check(labelled, { ...out, unknownError: { ...error, error: 'unknown reference \u202e' } }), /unsafe display-label characters in the unknown lookup error/);
+  const rejected = { ...c, blocks: [{ ...c.blocks[0], name: 'n'.repeat(256) }], expect: { ...c.expect, missingFields: ['name'] } };
+  check(rejected, out);
+  assert.throws(() => check(rejected, { ...out, evictedError: { ...error, error: 'unknown reference ' + 'n'.repeat(16) } }), /rejected name shown in the evicted lookup error/);
   // Each of these errors is wrong in one way only.
   for (const wrong of [{ ...error, success: true }, { ...error, isError: false }, { ...error, error: 'not found' }]) {
     assert.throws(() => check(c, { ...out, unknownError: wrong }), JSON.stringify(wrong));
@@ -149,7 +194,8 @@ test('an evicted-id alias, a missing live id or an undefined tool error cannot p
 for (const lane of ['push', 'wake', 'history']) {
   test('raw control and bidi characters are checked in ' + lane + ' values', () => {
     const c = { ...vector, expect: { ...vector.expect, cleanLabel: true } };
-    for (const value of ['\u0000', '\u0007', '\u0085', '\u202e', '\u061c']) {
+    for (const value of ['\u0000', '\u0007', '\u0008', '\u000b', '\u001f', '\u007f', '\u0085', '\u009f', '\u061c',
+      '\u200e', '\u200f', '\u202a', '\u202d', '\u202e', '\u2066', '\u2069']) {
       const out = observation();
       if (lane === 'push') out.before.push[0].text += value;
       else out.before[lane] += value;
@@ -187,6 +233,8 @@ test('truncation markers and thresholds come from the declared display profile',
     // The mark belongs at the end of the label as shown, not elsewhere.
     assert.throws(() => check(c, render('[ref_fixture] ' + 'a'.repeat(100) + ' x' + marker), network, profile), /must be marked/);
     assert.throws(() => check(c, render('[ref_fixture] ' + label + marker), network, profile), /past the declared display limit/);
+    // A mark alone doesn't show the field, whether or not a label character occurs in the lane by chance.
+    assert.throws(() => check(c, render('[ref_fixture] ' + marker), network, profile), /over the display limit must still be shown|must be marked/);
   }
   const wider = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 255 }, truncationMarkers: ['[truncated]'] } };
   check(c, render('[ref_fixture] ' + label), network, wider);
@@ -205,6 +253,29 @@ function successfulVerifiedReference(c) {
   return out;
 }
 const authenticatedRequest = { requests: [{ authorization: 'Bearer ' + token }], redirected: [] };
+test('a Host that reads local URIs fails the refused file: and data: cases', async () => {
+  const readers = [
+    ['11-file-refused', 'opens the file: URI', async uri => readFileSync(fileURLToPath(uri))],
+    ['11-data-refused', 'fetches the data: URI', async uri => Buffer.from(await (await fetch(uri)).arrayBuffer())],
+  ];
+  for (const [id, how, read] of readers) {
+    const c = corpusCase(id);
+    const bytes = await read(c.blocks[0].uri);
+    assert.ok(bytes.length > 0 && bytes.length <= c.maxBytes, 'a Host that ' + how + ' reads the payload whole within the ceiling');
+    const out = successfulVerifiedReference({ ...c, expect: { ...c.expect, decodedBase64: bytes.toString('base64') } });
+    assert.throws(() => check(c, out, { requests: [], redirected: [] }), /fetch outcome succeeded/, 'a Host that ' + how + ' fails ' + id);
+  }
+});
+test('the refused local cases hide their payload and leave the stub unchanged', () => {
+  for (const id of ['11-file-refused', '11-data-refused']) {
+    const c = corpusCase(id);
+    check(c, refused());
+    const echoed = refused(); echoed.tool.error = 'refused: RIFF0000WAVEpayload';
+    assert.throws(() => check(c, echoed), /forbidden value #\d+ in the fetch_reference result/, id);
+    const restubbed = refused(); restubbed.after.wake += ' (refused)';
+    assert.throws(() => check(c, restubbed), /leave stub unchanged/, id);
+  }
+});
 test('a rejected field or an unsafe label in the fetch_reference result cannot pass', () => {
   // The refused fetch's error must not echo the rejected value.
   const field = corpusCase('field-rule-expiresAt');

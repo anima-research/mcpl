@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
-import { realpathSync, statSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -123,17 +123,31 @@ export function semanticStrings(value) {
 }
 
 // The corpus's shape, frozen: the cases per RFC row, and the expectation keys the checker reads.
-const CASES_PER_ROW = { 1: 4, 2: 3, 3: 1, 4: 2, 5: 1, 6: 1, 7: 2, 8: 2, 9: 3, 10: 1, 11: 1, 12: 1, 13: 1, 14: 1, 15: 3, 16: 1, 17: 11, 18: 2, 19: 2, 20: 1 };
+const CASES_PER_ROW = { 1: 4, 2: 3, 3: 1, 4: 2, 5: 1, 6: 1, 7: 2, 8: 2, 9: 3, 10: 1, 11: 2, 12: 1, 13: 1, 14: 1, 15: 3, 16: 1, 17: 11, 18: 2, 19: 2, 20: 1 };
 const STAGE_KEYS = ['stub', 'hidden', 'includes', 'stubOrInlineBase64', 'displayField', 'cleanLabel'];
 const EXPECT_KEYS = [...STAGE_KEYS, 'kind', 'missingFields', 'ok', 'requests', 'redirectSafe', 'decodedBase64',
   'savedMime', 'digestVerified', 'storageFromId', 'abortStream', 'unchanged', 'before', 'after'];
-// A run this long of a rejected value doesn't occur in a stub by chance.
+// A rejected string value of at least this many UTF-16 code units is looked for
+// by its first ones, as RFC-005 says: a run this long doesn't occur in a lane by
+// chance, where a number or a shorter string could.
 const REJECTED_RUN = 16;
 // Control and bidi characters a display label must not carry (row 18). A tab and
 // the line breaks also lay out a Host's own text, so they count only when the
 // case's label holds one.
 const UNSAFE_LABEL = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 const UNSAFE_BEYOND_LAYOUT = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+
+// The bytes a Host that dereferenced a local URI would read: a file: URI's file,
+// or a data: URI's own payload. Null for any other URI.
+function localPayload(uri) {
+  if (uri.startsWith('file:')) {
+    try { return readFileSync(fileURLToPath(uri)); } catch { return Buffer.alloc(0); }
+  }
+  if (!uri.startsWith('data:')) return null;
+  const comma = uri.indexOf(',');
+  const body = uri.slice(comma + 1);
+  return /;base64$/i.test(uri.slice(0, comma)) ? Buffer.from(body, 'base64') : Buffer.from(decodeURIComponent(body));
+}
 
 export function assertCorpus(vectors) {
   assert.equal(vectors.format, 'mcpl-bulk-references-1');
@@ -150,17 +164,26 @@ export function assertCorpus(vectors) {
     for (const stub of [c.expect.stub, c.expect.before?.stub, c.expect.after?.stub]) {
       assert.ok(stub === undefined || stub === true, c.id + ': a stub expectation is true or absent');
     }
-    // Process-global Host caches key references by URI, so no two cases share one.
+    // An inline form that decodes to nothing would be found in any view.
+    for (const inline of [c.expect.stubOrInlineBase64, c.expect.before?.stubOrInlineBase64, c.expect.after?.stubOrInlineBase64]) {
+      assert.ok(inline === undefined || Buffer.from(inline, 'base64').length > 0, c.id + ': stubOrInlineBase64 must decode to bytes');
+    }
+    // A successful fetch's saved bytes are always compared.
+    if (c.operation === 'fetch' && c.expect.ok === true) {
+      assert.equal(typeof c.expect.decodedBase64, 'string', c.id + ': a successful fetch declares its decodedBase64');
+    }
     for (const block of expand(c.blocks, 'http://origin.invalid', c.id)) {
       if (typeof block.uri !== 'string') continue;
+      // Process-global Host caches key references by URI, so no two cases share one.
       assert.ok(!uris.has(block.uri), c.id + ': URI shared with ' + uris.get(block.uri));
       uris.set(block.uri, c.id);
-    }
-    // A Host that reads local files could read this payload whole, so only refusing
-    // the scheme passes a case that names it.
-    if (c.blocks.some(block => typeof block.uri === 'string' && block.uri.startsWith('$LOCAL_PAYLOAD'))) {
-      const size = statSync(localPayloadPath).size;
-      assert.ok(c.blocks.every(block => block.sizeBytes === size) && c.maxBytes >= size, c.id + ': the local payload must be readable whole within the case');
+      // A Host that dereferenced a local URI would read its payload whole and
+      // succeed, so the case fails such a Host, whatever spells the URI.
+      const local = localPayload(block.uri);
+      if (local) {
+        assert.ok(local.length > 0 && block.sizeBytes === local.length && c.maxBytes >= local.length,
+          c.id + ': a local URI must name a payload readable whole within the case');
+      }
     }
   }
 }
@@ -190,9 +213,11 @@ export function checkObservation(c, out, network, adapter, token) {
       assert.ok(!(layoutInLabel ? UNSAFE_LABEL : UNSAFE_BEYOND_LAYOUT).test(text), 'unsafe display-label characters in ' + where);
     }
     for (const field of visible.missingFields ?? []) {
-      const value = c.blocks.find(block => block[field] !== undefined)?.[field];
-      if (typeof value === 'string' && value.length >= REJECTED_RUN) {
-        assert.ok(!text.includes(value.slice(0, REJECTED_RUN)), 'rejected ' + field + ' shown in ' + where);
+      for (const block of c.blocks) {
+        if (typeof block[field] !== 'string' || block[field].length < REJECTED_RUN) continue;
+        for (const form of forbiddenForms(block[field].slice(0, REJECTED_RUN))) {
+          assert.ok(!text.includes(form), 'rejected ' + field + ' shown in ' + where);
+        }
       }
     }
   };
@@ -208,11 +233,14 @@ export function checkObservation(c, out, network, adapter, token) {
       assert.equal(error.isError, true, 'lookup error is an error');
       assert.match(error.error, /unknown reference/i, 'lookup error says unknown reference');
     }
-    checkHidden([out.evictedError.error], e.hidden ?? [], 'the evicted lookup error');
-    checkHidden([out.unknownError.error], e.hidden ?? [], 'the unknown lookup error');
+    // A lookup error is model-visible, as the views are.
+    for (const [error, where] of [[out.evictedError, 'the evicted lookup error'], [out.unknownError, 'the unknown lookup error']]) {
+      checkHidden([error.error], e.hidden ?? [], where);
+      checkLabelsAndFields([error.error], e, where);
+    }
     assert.notEqual(out.fresh.refId, out.firstId, 'evicted id must not be reused');
     assert.equal(new Set(out.ids).size, out.ids.length, 'each new record must have a distinct id');
-    assert.equal(out.fresh.testimony.uri, c.blocks[0].uri);
+    assert.equal(out.fresh.testimony.uri, c.blocks[0].uri, 'the fresh record keeps its testimony');
     return;
   }
   assert.ok(out.before && typeof out.before.history === 'string' && typeof out.before.wake === 'string' && Array.isArray(out.before.push), 'adapter must observe both model-facing conversion paths');
@@ -250,6 +278,7 @@ export function checkObservation(c, out, network, adapter, token) {
           // The longest prefix of the label shown must end in a declared mark.
           let shown = 0;
           while (shown < limit && text.includes(label.slice(0, shown + 1))) shown++;
+          assert.ok(shown > 0, visible.displayField + ' over the display limit must still be shown, shortened, in ' + where);
           assert.ok(profile.truncationMarkers.some(mark => text.includes(label.slice(0, shown) + mark)), 'display truncation must be marked according to the declared Host profile');
         } else {
           assert.ok(text.includes(label), visible.displayField + ' within the display limit must be shown whole in ' + where);

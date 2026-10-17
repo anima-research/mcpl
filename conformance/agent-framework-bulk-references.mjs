@@ -38,8 +38,8 @@ export async function createAdapter(root) {
     return { push: event.content, wake, history: toolResultDataToHistoryString(blocks) };
   };
   // Run the actual fetch_reference dispatch: its registry lookup, max_bytes clamp and
-  // model-visible result. The fixture supplies the event and trace sinks and, for a
-  // live id, the fetcher with its server binding.
+  // model-visible result. This adapter supplies the event and trace sinks and, for a
+  // live id, the fetcher, which it builds from the fixture's origin and token.
   const viaTool = (input, fetcher) => new Promise((done, reject) => {
     const timer = setTimeout(() => reject(new Error('fetch_reference dispatch did not return')), 10000);
     AgentFramework.prototype.dispatchFetchReferenceToolCall.call({
@@ -77,9 +77,14 @@ export async function createAdapter(root) {
         }
         const fresh = registry.register(parsed[0].testimony, 'fixture');
         ids.push(fresh.refId);
+        const evicted = registry.get(firstId) ?? null;
+        // This lookup has no fetcher to give the dispatch, so it runs only once the
+        // first id is gone: a Host that kept the id fails on the eviction, not on a
+        // dispatch that can't answer.
+        const evictedError = evicted === null ? await viaTool({ ref_id: firstId }) : { notDispatched: 'the first id is still registered' };
         return { firstId, stableId, ids, fresh, live: registry.get(fresh.refId)?.refId ?? null,
-          evicted: registry.get(firstId) ?? null, unknown: registry.get('ref_unknown_fixture') ?? null,
-          evictedError: await viaTool({ ref_id: firstId }), unknownError: await viaTool({ ref_id: 'ref_unknown_fixture' }) };
+          evicted, unknown: registry.get('ref_unknown_fixture') ?? null,
+          evictedError, unknownError: await viaTool({ ref_id: 'ref_unknown_fixture' }) };
       }
       const before = await render(blocks);
       // Registering the same testimony returns the record the Host made while rendering.

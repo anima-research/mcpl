@@ -502,12 +502,12 @@ bun run conformance/check-bulk-references.mjs \
   --report /tmp/bulk-reference-report.json
 ```
 
-The measured baseline at Agent Framework `02adf27` is **44/44 schema expectations and 42/44 Host expectations**, with exit status **1**:
+The measured baseline at Agent Framework `02adf27` is **45/45 schema expectations and 43/45 Host expectations**, with exit status **1**:
 
 - `18-label-controls`: the Host strips C0 and C1 controls and the bidi marks, overrides and isolates from display labels, but not U+061C ARABIC LETTER MARK, which is also a bidi control.
 - `field-rule-expiresAt`: the Host rejects the 1,024-character `expiresAt` as a field, as §8 requires, but then treats the reference as never expiring and fetches it. The vectors read §7.4 and §8 together. An overlong `expiresAt` is unparseable, so the reference counts as already expired, and §8 says field invalidity never widens exposure. So the field is absent from testimony and the fetch is refused without dialing.
 
-At `03c31d9`, the revision these vectors were first run against, the Host passed 35 of 44. Besides the two above, it kept schema-invalid `name`, `mimeType` and `expiresAt` values, truncated, in testimony, and showed the names and media types in the model-visible lanes, failing the boundary, 1,024-character and 1 MiB cases. `REFERENCE_LIMITS` (255/255/64) matches the schema maxima: rejecting an over-maximum value is the §8 field rule, while shortening an in-schema label to `STUB_FIELD_CHARS` (120) is the separate, compliant §5 display layer.
+At `03c31d9`, the revision these vectors were first run against, the Host passed 36 of 45. Besides the two above, it kept schema-invalid `name`, `mimeType` and `expiresAt` values, truncated, in testimony, and showed the names and media types in the model-visible lanes, failing the boundary, 1,024-character and 1 MiB cases. `REFERENCE_LIMITS` (255/255/64) matches the schema maxima: rejecting an over-maximum value is the §8 field rule, while shortening an in-schema label to `STUB_FIELD_CHARS` (120) is the separate, compliant §5 display layer.
 
 The runner uses Ajv 8.17.1 on Appendix B.1 extracted directly from `SPEC.md`. Ajv strict mode is enabled; `strictRequired: false` permits the specification's nested `required` branches without requiring local duplicate property declarations. Unknown additional properties remain allowed by the schema. A negative schema expectation passing means the emitter's block was rejected, not that the block is conformant. The Host still receives the original input so invalid optional fields and inline-data contradictions exercise its defensive handling.
 

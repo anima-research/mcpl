@@ -1,6 +1,8 @@
-# RFC-003 §3.1 canonical manifest digest — conformance vectors
+# MCPL conformance vectors
 
-This directory freezes the interoperability vectors for
+For the experimental plain-text input-stream profile, see [RFC-012 vectors](#7-experimental-rfc-012-input-stream-vectors). The sections below document the existing RFC-003 digest artifacts.
+
+The RFC-003 artifacts freeze the interoperability vectors for
 
 ```
 revision = "sha256:" + base64url_unpadded( SHA-256( JCS( manifest_without_revision ) ) )
@@ -405,3 +407,55 @@ reproducing, if vector 0's canonical string drifts from the RFC text, or if any
 **The generator is not normative.** RFC-003 is normative and
 `manifest-digest-vectors.json` is the frozen artifact. If the generator and the
 RFC ever disagree, the generator is the bug.
+
+## 7. Experimental RFC-012 input-stream vectors
+
+[RFC-012](../RFC-012-input-streams.md) proposes leased, provisional plain-text input followed by one canonical final. These artifacts exercise its experimental contract:
+
+| File | Role |
+|---|---|
+| [input-stream-vectors.json](./input-stream-vectors.json) | Portable, synthetic request traces and explicit expected outcomes. |
+| [input-stream-reference.mjs](./input-stream-reference.mjs) | Non-normative deterministic Host treatment model. |
+| [check-input-streams.mjs](./check-input-streams.mjs) | Trace runner and assertions, using only runtime standard libraries. |
+
+### Run the traces
+
+From the repository root, run either command:
+
+```console
+bun run conformance/check-input-streams.mjs
+node conformance/check-input-streams.mjs
+```
+
+Success prints `INPUT STREAM CONFORMANCE OK` with the advertisement, trace, API-check, and assertion counts. The first failed assertion stops the run, which exits nonzero. The optional first argument selects another vector JSON file.
+
+The direct JavaScript API checks are separate from the wire traces. They cover inherited advertisement members and reference-model configuration, including non-JSON values such as NaN and Infinity. Every fixture setting is checked when the Host is built, and each of the eight a `control` step can change (`now`, `ready`, `grants`, `channels`, `finalAccepted`, `serverPrincipal`, `transportEpoch` and `mode`) is checked again when a step changes it: `maxChars`, `maxDurationMs` and `maxStreams` must be positive safe integers, `maxUpdateHz` a positive finite number, `now` a timestamp, `mode` one of RFC §9's four modes, `ready` and `finalAccepted` booleans, `transportEpoch` and `serverPrincipal` identifiers, `advertisement` an object, `grants` an array of strings, and each channel entry the five fields described below, with no others. An invalid setting throws a configuration error before requests are handled, and a setting given as `null` is refused rather than replaced by its default. A setting or `control` member the model doesn't know is refused too. A one-millisecond lease must open and complete before expiry, and a large valid duration remains capped by the requested deadline.
+
+The runner also checks the corpus's shape: it refuses a top-level, advertisement-vector, trace or step member it doesn't know, a corpus, advertisement vector or trace without a member it needs, an empty step, a request step without `params` or `expect`, a trace that sends no request, and one whose last step isn't checked by a receipt or an expected state. With the model's own refusals, a misspelt key can't silently skip its check. A failure in a trace names the trace and step, and a failed comparison shows the expected and actual values.
+
+### Consume the data in another implementation
+
+The file's `defaults` describe the synthetic Host environment. Each trace starts with a fresh Host. Its optional `config` shallowly overrides defaults, so a channel mapping replaces the whole default mapping. IDs and clock values are deterministic fixture inputs, not production ID-generation advice.
+
+Three of the settings say whose they are. `advertisement` is the Server's, the object it advertises under `capabilities.experimental.mcpl`; the Host under test implements this profile and advertises it, so admission requires both peers' advertisement, as RFC §2.2 says. `grants` is the effective grant, and a `control` step that changes it is when the change takes effect: for an expansion, once its policy exchange has completed (RFC §2.2); for a reduction, before its policy Request is sent (RFC §8). So an expanded grant applies only from that step, and a reduction ends the streams it no longer authorizes. `mode` is the Host's own treatment policy for new leases (RFC §9). The model has no recipients, so it can't show the per-recipient opt-in RFC §9 requires for `incremental`, and it permits an incremental lease what it permits a `prepare` one. A `control` step that narrows the mode ends the open leases it no longer permits, while one that broadens it leaves each open lease in the mode its receipt announced.
+
+The file is JSON as RFC 8259 defines it. Four traces carry unpaired UTF-16 surrogates as `\uD800`-style escapes, because RFC-012 makes such text invalid: `invalid-open-identifier-surrogate`, `invalid-open-name-surrogate`, `reject-high-surrogate` and `reject-low-surrogate`. RFC 8259 leaves the reading of such escapes to the parser. JavaScript's `JSON.parse` keeps them; some parsers, jq 1.7 among them, refuse the file, and others replace them with U+FFFD, which would make those traces' invalid text read as valid. Read the file with a parser that keeps lone surrogates, or skip those four traces and say so.
+
+Apply each step in order:
+
+1. Apply `control`, if present, as a trusted Host event. It can advance the monotonic test clock, change readiness, grants, the treatment mode or channel registrations, select an ordinary-ingress result, or replace the transport epoch with one the Host hasn't used. A principal change requires a new epoch. The clock moves first: a lease whose deadline the new time reaches expires before the step's other changes.
+2. Run `prepare`, if present, against the named stream's current snapshot. This represents a Host-owned preparation artifact.
+3. Deliver `method` and `params` as a JSON-RPC Request. Compare its result or error with `expect`. The reference runner operates after Request framing and authentication, so it passes parsed params to the model.
+4. Check `expectState`, if present, against the Host's observable state. Nonempty objects select fields recursively; empty objects and arrays compare exactly.
+
+The expected outcomes are checked-in data. The runner does not derive them by invoking the model. Test identifiers explain the intended distinction, and each trace includes a description. Error messages and equivalent UTC timestamp spellings are not new interoperability requirements; external adapters can compare error codes/reasons and timestamp instants.
+
+The model's channel descriptors contain Host-trusted `identity`, registration `generation`, `direction`, permission, and allowed-sender fields. Its canonical deduplication key includes the authenticated Server principal and stable channel identity. Neither identity comes from the producer's asserted envelope. Reconnecting preserves committed message keys while discarding provisional leases.
+
+### Scope of this evidence
+
+The traces cover explicit advertisement, required grants and wildcard depth, lease identity, replacement/duplicate/stale revisions, final and abort replay, cleanup, cadence, Unicode and size bounds, canonical deduplication, and revision-bound preparation. Snapshots show that provisional text stays outside the model's canonical message array and that abort clears it.
+
+The reference model represents final acceptance as one synchronous state transition. It is not a database, network transport, producer queue, authentication adapter, actual Chronicle/context/wake path, or STT integration. Its default clock is controlled rather than wall time. Its finite admission budget, `maxStreams`, counts open streams together with the identifiers of streams that ended in the same epoch, and it retains final request data in memory for exact replay comparison. RFC §10's total-byte and per-principal request budgets are Host and transport policy that these traces don't model. The model also has no ordinary `channels/incoming` path, so it can't show that path and streamed completion sharing one reservation.
+
+Real Host tests must separately establish the transaction/outbox boundary and crash behavior, ordinary incoming racing streamed completion for the same canonical key under one reservation and deduplication boundary, Notification rejection, frame/parser limits, total-byte and per-principal budgets, privacy of process logs and durable storage, consumer opt-in, and actual sender authentication. Producer tests must establish coalescing and completion-only fallback. Portal STT interoperability and those integration checks remain the RFC's acceptance evidence; passing this model does not supply them.

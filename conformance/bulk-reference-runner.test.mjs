@@ -323,10 +323,15 @@ test("a label's own tab or line break is found, and a Host's own layout passes",
     const kept = observation(); kept.before.history += '\n\ttwo' + layout + 'lines\n';
     assert.throws(() => check(named, kept), /a display label's tab or line break in before history/, JSON.stringify(layout));
   }
-  // The label's other unsafe characters are left out of the text around its break.
-  const mixed = { ...c, blocks: [{ ...c.blocks[0], name: 'ab\u202ec\nd\u0007ef' }] };
-  const stripped = observation(); stripped.before.wake += ' abc\ndef';
-  assert.throws(() => check(mixed, stripped), /a display label's tab or line break in before wake/);
+  // The corpus gives a cleanLabel case's break three plain characters on each side,
+  // so its text doesn't depend on what a Host does with the label's other characters.
+  const edited = (id, edit) => { const copy = structuredClone(corpus); edit(copy.cases.find(x => x.id === id)); return copy; };
+  for (const name of ['ab\u202ec\ndef', 'abc\nd\u0007ef', 'a\nbcdef', 'abcdef\n', 'abc\n\ndef']) {
+    assert.throws(() => assertCorpus(edited('18-label-controls', x => { x.blocks[0].name = name; })),
+      /18-label-controls: a label's tab or line break has 3 plain characters on each side/, JSON.stringify(name));
+  }
+  // A case that doesn't check labels may carry any.
+  assertCorpus(edited('17-oversized-name', x => { x.blocks[0].name = 'a\nb'; }));
   // A result laid out over several lines conforms in both label cases.
   for (const id of ['18-label-device', '18-label-controls']) {
     const label = corpusCase(id);

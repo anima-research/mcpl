@@ -134,20 +134,21 @@ const REJECTED_RUN = 16;
 // Control and bidi characters a display label must not carry (row 18). These are
 // characters: an escaped form is plain text. A tab and the line breaks also lay
 // out a Host's own text, so they don't count alone. A label's own one is looked
-// for with the label's text on each side, which a Host's layout doesn't produce.
+// for with the label's characters on each side, which a Host's layout doesn't
+// produce. The corpus gives each such break LABEL_CONTEXT plain characters on
+// each side, so the text is the same whatever a Host does with the label's
+// other characters, and long enough not to occur by chance.
 const UNSAFE_LABEL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 const LABEL_CONTEXT = 3;
+const plainAround = (name, index) => name.length > index + LABEL_CONTEXT && index >= LABEL_CONTEXT
+  && !/[\t\n\r]/.test(name.slice(index - LABEL_CONTEXT, index) + name.slice(index + 1, index + 1 + LABEL_CONTEXT))
+  && !UNSAFE_LABEL.test(name.slice(index - LABEL_CONTEXT, index + 1 + LABEL_CONTEXT));
 export function labelLayoutContexts(blocks) {
   const contexts = [];
   for (const block of blocks) {
     if (typeof block.name !== 'string') continue;
-    // The label as a Host that strips its other unsafe characters shows it.
-    const plain = block.name.replace(new RegExp(UNSAFE_LABEL.source, 'gu'), '');
-    for (const match of plain.matchAll(/[\t\n\r]/g)) {
-      const before = plain.slice(Math.max(0, match.index - LABEL_CONTEXT), match.index);
-      const after = plain.slice(match.index + 1, match.index + 1 + LABEL_CONTEXT);
-      // At either end of the label, a Host's own layout could give the same text.
-      if (before && after) contexts.push(before + match[0] + after);
+    for (const match of block.name.matchAll(/[\t\n\r]/g)) {
+      if (plainAround(block.name, match.index)) contexts.push(block.name.slice(match.index - LABEL_CONTEXT, match.index + 1 + LABEL_CONTEXT));
     }
   }
   return contexts;
@@ -193,7 +194,17 @@ export function assertCorpus(vectors) {
     if (c.operation === 'fetch' && c.expect.ok === true) {
       assert.equal(typeof c.expect.decodedBase64, 'string', c.id + ': a successful fetch declares its decodedBase64');
     }
-    for (const block of expand(c.blocks, 'http://origin.invalid', c.id)) {
+    const blocks = expand(c.blocks, 'http://origin.invalid', c.id);
+    // A label's own tab or line break can be looked for only with plain characters around it.
+    if ([c.expect, c.expect.before, c.expect.after].some(stage => stage?.cleanLabel)) {
+      for (const block of blocks) {
+        if (typeof block.name !== 'string') continue;
+        for (const match of block.name.matchAll(/[\t\n\r]/g)) {
+          assert.ok(plainAround(block.name, match.index), c.id + ': a label\'s tab or line break has ' + LABEL_CONTEXT + ' plain characters on each side');
+        }
+      }
+    }
+    for (const block of blocks) {
       if (typeof block.uri !== 'string') continue;
       // Process-global Host caches key references by URI, so no two cases share one.
       assert.ok(!uris.has(block.uri), c.id + ': URI shared with ' + uris.get(block.uri));

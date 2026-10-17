@@ -125,17 +125,17 @@ export class InputStreamHost {
   // Ready state and the grant, which need nothing from the params (RFC §11).
   admit() {
     if (!this.ready) reject("not_ready");
+    this.checkGrant();
+  }
+
+  // Both required grants, each with the advertisement it rests on (RFC §2.2).
+  checkGrant() {
     const support = advertised(this.advertisement);
     for (const [capability, supported] of [[BASE, support.incoming], [STREAM, support.streaming]]) {
       if (!supported || !granted(this.grants, capability)) {
         throw new Rejection(-32002, "Capability denied", { capability });
       }
     }
-  }
-
-  authority(channelId, senderId) {
-    this.admit();
-    return this.channelFor(channelId, senderId);
   }
 
   channelFor(channelId, senderId) {
@@ -169,14 +169,16 @@ export class InputStreamHost {
       if (stream.status !== "open") continue;
       if (this.now >= stream.expiresAt) this.terminate(stream, "expired");
       else {
+        // Policy that isn't ready rejects calls meanwhile, but it isn't one of RFC
+        // §8's invalidations, so the sweep leaves the ready state out: the lease
+        // stands through a lapse, and its deadline still runs. A revocation ends it
+        // whether or not policy is ready.
         try {
-          const channel = this.authority(stream.open.channelId, stream.open.sender.id);
+          this.checkGrant();
+          const channel = this.channelFor(stream.open.channelId, stream.open.sender.id);
           if (!this.bindingMatches(stream, channel)) this.terminate(stream, "aborted");
         } catch (error) {
           if (!(error instanceof Rejection)) throw error;
-          // Policy that isn't ready rejects calls meanwhile, but it isn't one of
-          // RFC §8's invalidations: the lease stands, and its deadline still runs.
-          if (error.result.error.data?.reason === "not_ready") continue;
           this.terminate(stream, "aborted");
         }
       }

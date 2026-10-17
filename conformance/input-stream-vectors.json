@@ -8113,6 +8113,260 @@
       ]
     },
     {
+      "name": "revocation-during-readiness-lapse-ends-lease",
+      "description": "A grant reduction that lands while policy isn't ready still ends the lease (RFC §8); policy being ready again with both grants restored doesn't revive it.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "transportEpoch": "epoch-1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 1
+            }
+          }
+        },
+        {
+          "control": {
+            "ready": false
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 1,
+                "provisional": "unfinished"
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "control": {
+            "grants": [
+              "channels.incoming"
+            ]
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "terminal"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          },
+          "control": {
+            "ready": true,
+            "grants": [
+              "channels.incoming",
+              "channels.incoming.streaming"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "revocation-with-readiness-lapse-ends-lease",
+      "description": "A grant reduction in the same policy change that makes policy not ready still ends the lease (RFC §8); restoring both doesn't revive it.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "transportEpoch": "epoch-1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "control": {
+            "ready": false,
+            "grants": [
+              "channels.incoming"
+            ]
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "done"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "terminal"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": [],
+            "prepared": {},
+            "usedPreparation": []
+          },
+          "control": {
+            "ready": true,
+            "grants": [
+              "channels.incoming",
+              "channels.incoming.streaming"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "authority-precedes-open-shape",
       "description": "Ready state and the grant are checked before the open's members, so an open with an invalid member reports the lifecycle or authority reason first.",
       "config": {

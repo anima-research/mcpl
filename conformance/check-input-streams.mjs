@@ -163,8 +163,8 @@ for (const trace of vectors.traces) {
         assertions++;
       }
     } catch (error) {
-      error.message = label + ": " + error.message;
-      throw error;
+      // A new error, since a thrown error's printed stack keeps the message it was made with.
+      throw new Error(label + ": " + error.message, { cause: error });
     }
   }
 }

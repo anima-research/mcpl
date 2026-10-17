@@ -87,15 +87,14 @@ export async function createAdapter(root) {
           evicted, unknown: registry.get('ref_unknown_fixture') ?? null,
           evictedError, unknownError: await viaTool({ ref_id: 'ref_unknown_fixture' }) };
       }
-      const before = await render(blocks);
-      // Registering the same testimony returns the record the Host made while
-      // rendering, and binds it to the fixture's server if it has no server yet.
       // The Framework binds a reference to the server that delivered it when a tool
-      // result carries it (autoFetchReferences). Its push lane registers it
-      // unbound, and the fetcher refuses an unbound record. So this binding is the
-      // adapter's, as the tool-result lane would make it, and the fetch rows test
-      // the fetcher.
+      // result carries it, before its stub is built (autoFetchReferences). Its push
+      // lane registers it unbound, and the fetcher refuses an unbound record. So
+      // this adapter binds each reference to the fixture's server first, as the
+      // tool-result lane would: rendering then finds the same record, bound before
+      // and after the operation, and the fetch rows test the fetcher.
       const records = parsed.filter(p => p.kind === 'reference').map(p => refs.referenceRegistry.register(p.testimony, 'fixture'));
+      const before = await render(blocks);
       if (operation === 'render') return { parsed, before, records };
       if (operation !== 'fetch') throw new Error('Unknown operation: ' + operation);
       if (records.length !== 1) throw new Error('Fetch fixture needs one reference');

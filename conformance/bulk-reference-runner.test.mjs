@@ -61,12 +61,25 @@ test('a refused local case names a payload a Host could read whole', () => {
   // Any file: URI is held to it, however it is spelt: here the corpus itself, past the ceiling.
   const literal = edited('11-file-refused', c => { c.blocks[0].uri = new URL('./bulk-reference-vectors.json', import.meta.url).href; });
   assert.throws(() => assertCorpus(literal), /11-file-refused: a local URI must name a payload readable whole/);
-  // The scheme is read as the URL parser reads it: in capitals, after leading space.
-  const capitals = edited('11-data-refused', c => { c.blocks[0].uri = ' DATA:' + c.blocks[0].uri.slice('data:'.length); c.maxBytes = 8; });
-  assert.throws(() => assertCorpus(capitals), /11-data-refused: a local URI must name a payload readable whole/);
-  // A data: payload decodes as fetch() decodes it: percent-escapes bytewise, as plain text or base64.
-  assertCorpus(edited('11-data-refused', c => { c.blocks[0].uri = 'data:audio/wav;case=11-data-refused,RIFF0000WAVEpayload'; }));
-  assertCorpus(edited('11-data-refused', c => { c.blocks[0].uri = 'data:audio/wav;case=11-data-refused,%FF'; c.blocks[0].sizeBytes = 1; }));
+  // The scheme is read as the URL parser reads it, in capitals after leading space:
+  // the payload is measured whole, and a wrong declared size is refused.
+  const respell = (id, uri) => c => { c.blocks[0].uri = uri(expand(c, 'http://origin.invalid').blocks[0].uri); };
+  for (const [id, uri] of [['11-data-refused', u => ' DATA:' + u.slice('data:'.length)], ['11-file-refused', u => ' FILE:' + u.slice('file:'.length)]]) {
+    assertCorpus(edited(id, respell(id, uri)));
+    assert.throws(() => assertCorpus(edited(id, c => { respell(id, uri)(c); c.blocks[0].sizeBytes = 12; })),
+      new RegExp(id + ': a local URI must name a payload readable whole'));
+  }
+  // A data: payload decodes as fetch() decodes it: percent-escapes bytewise, the
+  // fragment dropped, then forgiving-base64 if the type says so.
+  const dataUri = (uri, size = 19) => edited('11-data-refused', c => { c.blocks[0].uri = uri; c.blocks[0].sizeBytes = size; });
+  assertCorpus(dataUri('data:audio/wav;case=11-data-refused,RIFF0000WAVEpayload'));
+  assertCorpus(dataUri('data:audio/wav;case=11-data-refused,%FF', 1));
+  assertCorpus(dataUri('data:audio/wav;case=11-data-refused;base64,UklGRjAwMDBXQVZFcGF5bG9hZA==#ignored'));
+  // A local URI fetch() couldn't read names no payload, so a refused case can't rest
+  // on it. Each declares the size a looser reading would give it.
+  for (const [uri, size] of [['data:audio/wav;case=11-data-refused;base64,AA-_', 3], ['data:audio/wav;case=11-data-refused', 30], ['file://exa mple/x.wav', 19]]) {
+    assert.throws(() => assertCorpus(dataUri(uri, size)), /11-data-refused: a local URI must name a payload readable whole/, uri);
+  }
 });
 test('an observed bounded reference stub passes', () => { check(); });
 for (const lane of ['push', 'wake', 'history']) {
@@ -320,18 +333,32 @@ test("a label's own tab or line break is found, and a Host's own layout passes",
       const out = observation(); out.before.history += '\n' + shown + '\r\n';
       check(named, out);
     }
-    const kept = observation(); kept.before.history += '\n\ttwo' + layout + 'lines\n';
-    assert.throws(() => check(named, kept), /a display label's tab or line break in before history/, JSON.stringify(layout));
+    // The label's break kept, in its own form or another, fails in every lane and in the result.
+    for (const shown of ['two' + layout + 'lines', 'two\r\nlines', 'two\u2028lines']) {
+      for (const lane of ['push', 'wake', 'history']) {
+        const kept = observation(); addVisible(kept.before, lane, '\n\t' + shown + '\n');
+        assert.throws(() => check(named, kept), new RegExp("a display label's tab or line break in before " + lane), JSON.stringify([layout, shown, lane]));
+      }
+      const fetched = { ...named, operation: 'fetch', expect: { ...named.expect, ok: false, requests: 0 } };
+      const result = refused(); result.tool.error = 'refused: ' + shown;
+      assert.throws(() => check(fetched, result), /a display label's tab or line break in the fetch_reference result/, JSON.stringify([layout, shown]));
+    }
   }
-  // The corpus gives a cleanLabel case's break three plain characters on each side,
-  // so its text doesn't depend on what a Host does with the label's other characters.
+  // A case that checks labels gives its label's break three ASCII letters or digits
+  // on each side, so the text looked for doesn't depend on what a Host does with
+  // the label's other characters. Exactly three on each side is enough.
   const edited = (id, edit) => { const copy = structuredClone(corpus); edit(copy.cases.find(x => x.id === id)); return copy; };
-  for (const name of ['ab\u202ec\ndef', 'abc\nd\u0007ef', 'a\nbcdef', 'abcdef\n', 'abc\n\ndef']) {
-    assert.throws(() => assertCorpus(edited('18-label-controls', x => { x.blocks[0].name = name; })),
-      /18-label-controls: a label's tab or line break has 3 plain characters on each side/, JSON.stringify(name));
+  const withName = name => x => { x.blocks[0].name = name; };
+  assertCorpus(edited('18-label-controls', withName('abc\ndef')));
+  for (const name of ['ab\u202ec\ndef', 'abc\nd\u0007ef', 'ab\u00e9\ndef', 'ab\ncdef', 'abc\nde', 'abcdef\n', 'abc\n\ndef', 'abc\u2028de']) {
+    assert.throws(() => assertCorpus(edited('18-label-controls', withName(name))),
+      /18-label-controls: a label's tab or line break has 3 ASCII letters or digits on each side/, JSON.stringify(name));
   }
+  // The rule holds for a case that checks labels at one stage only.
+  assert.throws(() => assertCorpus(edited('17-oversized-name', x => { withName('ab\ncdef')(x); x.expect.before = { cleanLabel: true }; })),
+    /17-oversized-name: a label's tab or line break has 3 ASCII letters or digits on each side/);
   // A case that doesn't check labels may carry any.
-  assertCorpus(edited('17-oversized-name', x => { x.blocks[0].name = 'a\nb'; }));
+  assertCorpus(edited('17-oversized-name', withName('a\nb')));
   // A result laid out over several lines conforms in both label cases.
   for (const id of ['18-label-device', '18-label-controls']) {
     const label = corpusCase(id);

@@ -132,26 +132,32 @@ const EXPECT_KEYS = [...STAGE_KEYS, 'kind', 'missingFields', 'ok', 'requests', '
 // chance, where a number or a shorter string could.
 const REJECTED_RUN = 16;
 // Control and bidi characters a display label must not carry (row 18). These are
-// characters: an escaped form is plain text. A tab and the line breaks also lay
-// out a Host's own text, so they don't count alone. A label's own one is looked
-// for with the label's characters on each side, which a Host's layout doesn't
-// produce. The corpus gives each such break LABEL_CONTEXT plain characters on
-// each side, so the text is the same whatever a Host does with the label's
-// other characters, and long enough not to occur by chance.
+// characters: an escaped form is plain text. The checker can't tell a Host's own
+// such characters from the label's, so in a case that checks labels any of them
+// in a view fails it.
 const UNSAFE_LABEL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+// A tab or line break also lays out a Host's own text, so it doesn't count alone.
+// A label's own one is looked for as the label's three ASCII letters or digits on
+// each side of it, joined by any run of tabs or line breaks, so a Host that keeps
+// the break in another form is found too. A case that checks labels must give
+// each such break those characters: they're the same whatever a Host does with
+// the label's other characters, and a Host's own break is unlikely to fall
+// exactly between them. Breaks at a label's ends can't be told from a Host's.
 const LABEL_CONTEXT = 3;
-const plainAround = (name, index) => name.length > index + LABEL_CONTEXT && index >= LABEL_CONTEXT
-  && !/[\t\n\r]/.test(name.slice(index - LABEL_CONTEXT, index) + name.slice(index + 1, index + 1 + LABEL_CONTEXT))
-  && !UNSAFE_LABEL.test(name.slice(index - LABEL_CONTEXT, index + 1 + LABEL_CONTEXT));
-export function labelLayoutContexts(blocks) {
-  const contexts = [];
+export function labelBreaks(blocks, id) {
+  const patterns = [];
   for (const block of blocks) {
     if (typeof block.name !== 'string') continue;
-    for (const match of block.name.matchAll(/[\t\n\r]/g)) {
-      if (plainAround(block.name, match.index)) contexts.push(block.name.slice(match.index - LABEL_CONTEXT, match.index + 1 + LABEL_CONTEXT));
+    for (const match of block.name.matchAll(/[\t\n\r\u2028\u2029]/g)) {
+      const at = match.index;
+      const before = at >= LABEL_CONTEXT ? block.name.slice(at - LABEL_CONTEXT, at) : '';
+      const after = block.name.slice(at + 1, at + 1 + LABEL_CONTEXT);
+      assert.ok(/^[A-Za-z0-9]{3}$/.test(before) && /^[A-Za-z0-9]{3}$/.test(after),
+        id + ": a label's tab or line break has " + LABEL_CONTEXT + ' ASCII letters or digits on each side');
+      patterns.push(new RegExp(before + '[\\t\\n\\r\\u2028\\u2029]+' + after));
     }
   }
-  return contexts;
+  return patterns;
 }
 
 // The bytes a Host that dereferenced a local URI would read: a file: URI's file,
@@ -163,11 +169,15 @@ function localPayload(uri) {
   if (url.protocol !== 'file:' && url.protocol !== 'data:') return null;
   try {
     if (url.protocol === 'file:') return readFileSync(fileURLToPath(url));
-    // As fetch() decodes it: the percent-escapes bytewise, then base64 if the type says so.
+    // As fetch() decodes it: the percent-escapes bytewise, then, if the type says
+    // so, forgiving-base64, which gives nothing for a body it can't decode.
     const text = url.href.split('#')[0].slice('data:'.length), comma = text.indexOf(',');
     if (comma < 0) return Buffer.alloc(0);
     const bytes = Buffer.from(text.slice(comma + 1).replace(/%([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))), 'latin1');
-    return /;\s*base64\s*$/i.test(text.slice(0, comma)) ? Buffer.from(bytes.toString('latin1'), 'base64') : bytes;
+    if (!/;\s*base64\s*$/i.test(text.slice(0, comma))) return bytes;
+    let base64 = bytes.toString('latin1').replace(/[\t\n\f\r ]/g, '');
+    if (base64.length % 4 === 0) base64 = base64.replace(/={1,2}$/, '');
+    return base64.length % 4 === 1 || /[^A-Za-z0-9+/]/.test(base64) ? Buffer.alloc(0) : Buffer.from(base64, 'base64');
   } catch { return Buffer.alloc(0); }
 }
 
@@ -195,23 +205,17 @@ export function assertCorpus(vectors) {
       assert.equal(typeof c.expect.decodedBase64, 'string', c.id + ': a successful fetch declares its decodedBase64');
     }
     const blocks = expand(c.blocks, 'http://origin.invalid', c.id);
-    // A label's own tab or line break can be looked for only with plain characters around it.
-    if ([c.expect, c.expect.before, c.expect.after].some(stage => stage?.cleanLabel)) {
-      for (const block of blocks) {
-        if (typeof block.name !== 'string') continue;
-        for (const match of block.name.matchAll(/[\t\n\r]/g)) {
-          assert.ok(plainAround(block.name, match.index), c.id + ': a label\'s tab or line break has ' + LABEL_CONTEXT + ' plain characters on each side');
-        }
-      }
-    }
+    // A label's own tab or line break can be looked for only with its context around it.
+    if ([c.expect, c.expect.before, c.expect.after].some(stage => stage?.cleanLabel)) labelBreaks(blocks, c.id);
     for (const block of blocks) {
       if (typeof block.uri !== 'string') continue;
       // Process-global Host caches key references by URI, so no two cases share one.
       assert.ok(!uris.has(block.uri), c.id + ': URI shared with ' + uris.get(block.uri));
       uris.set(block.uri, c.id);
       // A Host that dereferenced a local URI and accepted its payload would read
-      // it whole and succeed, so the case fails such a Host, whatever spells the
-      // URI. Only what reaches the model, storage or the network is observed.
+      // it whole and succeed, so the case fails such a Host, however the corpus
+      // spells the URI. Only what reaches the model, storage or the network is
+      // observed.
       const local = localPayload(block.uri);
       if (local) {
         assert.ok(local.length > 0 && block.sizeBytes === local.length && c.maxBytes >= local.length,
@@ -243,8 +247,8 @@ export function checkObservation(c, out, network, adapter, token) {
     const text = pieces.join('');
     if (visible.cleanLabel) {
       assert.ok(!UNSAFE_LABEL.test(text), 'unsafe display-label characters in ' + where);
-      for (const context of labelLayoutContexts(c.blocks)) {
-        assert.ok(!text.includes(context), "a display label's tab or line break in " + where);
+      for (const pattern of labelBreaks(c.blocks, c.id)) {
+        assert.ok(!pattern.test(text), "a display label's tab or line break in " + where);
       }
     }
     for (const field of visible.missingFields ?? []) {
@@ -429,7 +433,7 @@ export async function main(argv) {
   // only where the path needs no percent-encoding, so its verdict on
   // 11-file-refused depends on where this checkout is.
   const notes = localPayloadURL.includes('%')
-    ? ['11-file-refused: this checkout\'s path needs percent-encoding in a file: URL, so the case also passes a Host that reads the URL\'s path without decoding it']
+    ? ['11-file-refused: this checkout\'s path needs percent-encoding in a file: URL, so the case can also pass a Host that reads the URL\'s path without decoding it, when its refusal doesn\'t name the file']
     : [];
   for (const note of notes) console.log('note: ' + note);
   const report = {

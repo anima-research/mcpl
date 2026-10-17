@@ -509,7 +509,7 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$LOCAL_PAYLOAD?case=$CASE",
+          "uri": "$LOCAL_PAYLOAD",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
           "sizeBytes": 19,

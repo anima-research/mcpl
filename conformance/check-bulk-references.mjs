@@ -9,13 +9,14 @@ import { resolve, dirname } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const corpusPath = resolve(here, 'bulk-reference-vectors.json');
-const localPayloadPath = resolve(here, 'bulk-reference-local-payload.wav');
+const localPayloadPath = resolve(here, 'bulk-reference-11-file-refused.wav');
 const localPayloadURL = pathToFileURL(localPayloadPath).href;
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'));
 const pause = ms => new Promise(done => setTimeout(done, ms));
 
 // $ORIGIN is the case's loopback origin, $CASE its URL-encoded id, and $LOCAL_PAYLOAD
-// the file URL of a small payload beside this corpus, which a refused file: URI names.
+// the file URL of the small payload beside this corpus that the refused file: case
+// names. The payload's name carries that case's id, so its URI needs no query.
 export function expand(value, origin, caseId = value?.id) {
   if (typeof value === 'string') {
     if (value.includes('$CASE')) assert.ok(typeof caseId === 'string' && caseId.length > 0, 'case namespace requires a case id');
@@ -128,7 +129,11 @@ const EXPECT_KEYS = [...STAGE_KEYS, 'kind', 'missingFields', 'ok', 'requests', '
   'savedMime', 'digestVerified', 'storageFromId', 'abortStream', 'unchanged', 'before', 'after'];
 // A run this long of a rejected value doesn't occur in a stub by chance.
 const REJECTED_RUN = 16;
+// Control and bidi characters a display label must not carry (row 18). A tab and
+// the line breaks also lay out a Host's own text, so they count only when the
+// case's label holds one.
 const UNSAFE_LABEL = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+const UNSAFE_BEYOND_LAYOUT = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 
 export function assertCorpus(vectors) {
   assert.equal(vectors.format, 'mcpl-bulk-references-1');
@@ -180,7 +185,10 @@ export function checkObservation(c, out, network, adapter, token) {
   // field rejected as invalid: rejection reaches past testimony.
   const checkLabelsAndFields = (pieces, visible, where) => {
     const text = pieces.join('');
-    if (visible.cleanLabel) assert.ok(!UNSAFE_LABEL.test(text), 'unsafe display-label characters in ' + where);
+    if (visible.cleanLabel) {
+      const layoutInLabel = c.blocks.some(block => typeof block.name === 'string' && /[\t\n\r]/.test(block.name));
+      assert.ok(!(layoutInLabel ? UNSAFE_LABEL : UNSAFE_BEYOND_LAYOUT).test(text), 'unsafe display-label characters in ' + where);
+    }
     for (const field of visible.missingFields ?? []) {
       const value = c.blocks.find(block => block[field] !== undefined)?.[field];
       if (typeof value === 'string' && value.length >= REJECTED_RUN) {
@@ -348,7 +356,7 @@ export async function main(argv) {
   }
   const ajvPackage = await readJson(resolve(dirname(options.ajv), '../package.json'));
   // The suite is identified by its files' hashes, with or without a Git checkout.
-  const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'bulk-reference-local-payload.wav', 'check-bulk-references.mjs'];
+  const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'bulk-reference-11-file-refused.wav', 'check-bulk-references.mjs'];
   const suiteHashes = {};
   for (const file of suiteFiles) suiteHashes[file] = createHash('sha256').update(await readFile(resolve(here, file))).digest('hex');
   suiteHashes['SPEC.md'] = createHash('sha256').update(spec).digest('hex');

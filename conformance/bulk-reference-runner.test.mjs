@@ -221,6 +221,20 @@ test('a rejected field or an unsafe label in the fetch_reference result cannot p
   const structured = fetched(); structured.tool.data = { name: label.blocks[0].name };
   assert.throws(() => check(label, structured, authenticatedRequest), /unsafe display-label characters in the fetch_reference result/);
 });
+test('a tab or line break is unsafe only when the label holds one', () => {
+  const c = { ...vector, expect: { ...vector.expect, cleanLabel: true } };
+  const laidOut = observation(); laidOut.before.history += '\n\t(attachment)\r\n';
+  check(c, laidOut);
+  const named = { ...c, blocks: [{ ...c.blocks[0], name: 'two\nlines' }] };
+  assert.throws(() => check(named, laidOut), /unsafe display-label characters in before history/);
+  // A result laid out over several lines conforms in both label cases.
+  for (const id of ['18-label-device', '18-label-controls']) {
+    const label = corpusCase(id);
+    const pretty = successfulVerifiedReference({ ...label, expect: { ...label.expect, decodedBase64: label.response.bodyBase64 } });
+    pretty.tool.data = JSON.stringify(JSON.parse(pretty.tool.data), null, 2);
+    check(label, pretty, authenticatedRequest);
+  }
+});
 test('the verified-ref corpus permits stub or inline only after the fetch', () => {
   const c = corpusCase('03-verified-ref');
   for (const after of ['[ref_fixture] attachment', c.expect.decodedBase64, Buffer.from(c.expect.decodedBase64, 'base64').toString('utf8')]) {

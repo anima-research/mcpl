@@ -366,7 +366,7 @@ The in-memory Host traces cover the following protocol outcomes. Their canonical
 3. Replacement text removes superseded words. Duplicate and out-of-order updates leave state unchanged. Conflicting same revisions fail.
 4. Completion works without updates, confirms identical current text, or supplies a newer full final. An older or conflicting final fails.
 5. Exact completion replay leaves one canonical message and unchanged canonical state. Changed retries, late updates, and abort-after-complete produce no additional canonical messages.
-6. Abort, expiry, disconnect, epoch change, grant reduction, sender revocation, and channel re-registration clear provisional state without promoting it. A grant reduction, a channel removal or an expiry ends the lease even while policy isn't ready; a readiness lapse alone doesn't. Terminal retries respect authorization and expiry.
+6. Abort, expiry, disconnect, epoch change, grant reduction, sender revocation, and channel re-registration clear provisional state without promoting it. A grant reduction, a channel removal or re-registration, or an expiry ends the lease even while policy isn't ready; a readiness lapse alone doesn't. Terminal retries respect authorization and expiry.
 7. Every envelope binding is checked. Claimed identity does not replace authenticated registration/sender facts.
 8. Cadence, size, the admission budget for streams and retained identifiers, Unicode scalar counting, digest bytes, and terminal bypass of update cadence match the contract. Total-byte and per-principal request budgets are left to real-Host tests.
 9. Provisional updates produce no canonical messages. Preparation reuse requires an exact accepted-final binding; superseding or aborting discards it.

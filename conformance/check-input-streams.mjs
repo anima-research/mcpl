@@ -7,7 +7,7 @@ import { inspect } from "node:util";
 import { InputStreamHost, advertised } from "./input-stream-reference.mjs";
 
 // A failure names what differed, not only where. Unlike JSON, inspect shows
-// undefined, NaN and the whole of a long value, so unequal values print apart.
+// undefined and NaN, so unequal values print apart.
 const shown = value => inspect(value, { depth: null, maxArrayLength: null, maxStringLength: null, breakLength: Infinity });
 function assertEqual(actual, expected, label) {
   assert.deepEqual(actual, expected, label + ": expected " + shown(expected) + ", got " + shown(actual));
@@ -49,7 +49,7 @@ const path = process.argv[2] ?? fileURLToPath(new URL("./input-stream-vectors.js
 const vectors = JSON.parse(await readFile(path, "utf8"));
 let assertions = 0;
 let apiChecks = 0;
-assertKeys(vectors, CORPUS_KEYS, "the corpus");
+assertKeys(vectors, CORPUS_KEYS, "the corpus", ["profile", "defaults", "advertisements", "traces"]);
 assert.equal(vectors.profile, "rfc-009-text-input");
 assertions++;
 assert.ok(Array.isArray(vectors.advertisements) && vectors.advertisements.length > 0, "the corpus has advertisement vectors");
@@ -84,7 +84,7 @@ const invalidSettings = [
   ["transportEpoch", ""], ["serverPrincipal", ""], ["ready", "no"], ["advertisement", []],
   ["grants", "channels.incoming"],
   ["channels", { "voice:lobby": { identity: "channel-lobby", generation: 1, direction: "inbound", permitted: true } }],
-  ["maxChars", 0], ["maxUpdateHz", 0], ["mode", "bogus"], ["finalAccepted", "yes"],
+  ["maxChars", 0], ["maxUpdateHz", 0], ["maxUpdateHz", Infinity], ["mode", "bogus"], ["finalAccepted", "yes"],
   ...["now", "transportEpoch", "serverPrincipal", "ready", "advertisement", "grants", "channels",
     "maxChars", "maxUpdateHz", "maxDurationMs", "maxStreams", "mode", "finalAccepted"].map(key => [key, null]),
 ];
@@ -94,29 +94,51 @@ for (const [key, value] of invalidSettings) {
   apiChecks++;
   assertions++;
 }
-// A setting the model doesn't know is refused rather than ignored.
-assert.throws(() => new InputStreamHost({ maxChar: 100 }),
-  /Invalid fixture configuration: unknown setting maxChar$/, "an unknown setting is refused");
-apiChecks++;
-assertions++;
-// A control step's changes are held to the same rules, and a member a control
-// step can't change is refused rather than ignored.
-for (const key of ["now", "ready", "grants", "channels", "finalAccepted", "serverPrincipal", "transportEpoch", "mode"]) {
-  assert.throws(() => new InputStreamHost().control({ [key]: null }),
-    new RegExp("Invalid fixture control: " + key + "$"), "a control step's null " + key + " is refused");
+// A setting the model doesn't know, or a configuration that isn't an object, is
+// refused rather than ignored.
+for (const [config, reason] of [[{ maxChar: 100 }, "unknown setting maxChar"], [null, "not an object"]]) {
+  assert.throws(() => new InputStreamHost(config),
+    new RegExp("Invalid fixture configuration: " + reason + "$"), "a configuration " + shown(config) + " is refused");
   apiChecks++;
   assertions++;
 }
-for (const [change, reason] of [[{ maxStreams: 1 }, "unknown member maxStreams"], [[], "not an object"]]) {
+// A control step's changes are held to the same rules, and a member a control
+// step can't change is refused rather than ignored.
+const invalidControls = [["now", -1], ["ready", "no"], ["grants", "channels.incoming"],
+  ["channels", { "voice:lobby": { identity: "channel-lobby", generation: 1, direction: "inbound", permitted: true } }],
+  ["finalAccepted", "yes"], ["serverPrincipal", ""], ["transportEpoch", ""], ["mode", "bogus"]];
+for (const [key, value] of [...invalidControls, ...invalidControls.map(([key]) => [key, null])]) {
+  assert.throws(() => new InputStreamHost().control({ [key]: value }),
+    new RegExp("Invalid fixture control: " + key + "$"), "a control step's " + key + " " + shown(value) + " is refused");
+  apiChecks++;
+  assertions++;
+}
+for (const [change, reason] of [[{ maxStreams: 1 }, "maxStreams is set only when the Host is built"],
+  [{ maxStream: 1 }, "unknown member maxStream"], [[], "not an object"]]) {
   assert.throws(() => new InputStreamHost().control(change),
     new RegExp("Invalid fixture control: " + reason + "$"), "a control step " + shown(change) + " is refused");
   apiChecks++;
   assertions++;
 }
+// The clock never moves back, and a reconnect never reuses an epoch the Host has used.
+assert.throws(() => new InputStreamHost().control({ now: 999 }), /Fixture clock must be monotonic$/, "a backward clock is refused");
+apiChecks++;
+assertions++;
+const reconnected = new InputStreamHost();
+reconnected.control({ transportEpoch: "epoch-2" });
+assert.throws(() => reconnected.control({ transportEpoch: "epoch-1" }), /Reconnect needs a fresh epoch$/, "an earlier epoch is refused");
+apiChecks++;
+assertions++;
 const openParams = {
   streamId: "s", channelId: "voice:lobby", messageId: "m", sender: { id: "alice" },
   contentType: "text/plain", startedAt: 900, expiresAt: 5000,
 };
+// A control step reads its own members only, as the constructor reads its configuration.
+const inherited = new InputStreamHost();
+inherited.control(Object.create({ ready: false }));
+assert.equal(inherited.request("open", openParams).result?.accepted, true, "an inherited control member is not applied");
+apiChecks++;
+assertions++;
 const leaseParams = {
   streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",
   channelId: "voice:lobby", senderId: "alice", contentType: "text/plain",
@@ -135,15 +157,28 @@ assert.throws(() => broadened.prepare("s"), /no permitted snapshot/,
   "a lease opened as volatile isn't prepared after the mode broadens");
 assertions++;
 apiChecks++;
-// A refused control step changes nothing: neither the clock nor the lease moves.
+// A refused control step changes nothing, though it carries every member: the
+// clock, the lease and the settings are as they were, as an update, a new lease
+// and a completion after it show.
 const refused = new InputStreamHost();
 refused.request("open", openParams);
-assert.throws(() => refused.control({ now: 6000, serverPrincipal: "server-2" }), /A principal change requires a fresh connection$/);
+const everything = { now: 6000, ready: false, grants: ["channels.incoming"], channels: {}, finalAccepted: false, mode: "final-only", serverPrincipal: "server-2" };
+assert.throws(() => refused.control(everything), /A principal change requires a fresh connection$/);
 assertions++;
-assert.throws(() => refused.control({ mode: "final-only", transportEpoch: "epoch-1" }), /Reconnect needs a fresh epoch$/);
+assert.throws(() => refused.control({ ...everything, transportEpoch: "epoch-1" }), /Reconnect needs a fresh epoch$/);
 assertions++;
 assert.deepEqual(refused.request("update", { ...leaseParams, revision: 1, text: "red" }),
   { result: { accepted: true, status: "updated", revision: 1 } }, "the lease takes an update after the refused steps");
+assertions++;
+assert.deepEqual(refused.request("open", { ...openParams, streamId: "s2", messageId: "m2" }), { result: {
+  accepted: true, streamId: "s2", transportEpoch: "epoch-1", leaseId: "lease-2",
+  expiresAt: 5000, maxUpdateHz: 10, maxChars: 100, mode: "volatile",
+} }, "a lease opened after the refused steps gets the settings as they were");
+assertions++;
+assert.deepEqual(refused.request("complete", { ...leaseParams, revision: 1, text: "red" }), { result: {
+  accepted: true, status: "completed", messageId: "m", revision: 1,
+  contentDigest: "sha256:b1f51a511f1da0cd348b8f8598db32e61cb963e5fc69e2b41485bf99590ed75a",
+} }, "the final is accepted after the refused steps");
 assertions++;
 apiChecks++;
 const shortLease = new InputStreamHost({ maxDurationMs: 1 });
@@ -167,26 +202,35 @@ assert.equal(new InputStreamHost({ maxDurationMs: Number.MAX_SAFE_INTEGER })
   "maximum safe integer duration remains capped by the requested deadline");
 apiChecks++;
 assertions++;
+// The defaults build a Host on their own, so a fault in them is named as theirs.
+within("the corpus's defaults", () => {
+  assert.ok(plainObject(vectors.defaults), "they are an object");
+  new InputStreamHost(vectors.defaults);
+});
 const names = new Set();
-for (const vector of vectors.advertisements) {
-  assertKeys(vector, VECTOR_KEYS, "advertisement vector " + vector.name, VECTOR_KEYS);
+for (const [index, vector] of vectors.advertisements.entries()) {
+  assertKeys(vector, VECTOR_KEYS, "advertisement vector " + (vector?.name ?? index + 1), VECTOR_KEYS);
   assert.ok(!names.has(vector.name), "Duplicate vector name: " + vector.name);
   names.add(vector.name);
   assertEqual(advertised(vector.input), vector.expect, vector.name);
   assertions++;
 }
-for (const trace of vectors.traces) {
-  assertKeys(trace, TRACE_KEYS, "trace " + trace.name);
+for (const [index, trace] of vectors.traces.entries()) {
+  assertKeys(trace, TRACE_KEYS, "trace " + (trace?.name ?? index + 1), ["name", "steps"]);
   assert.ok(!names.has(trace.name), "Duplicate vector name: " + trace.name);
   names.add(trace.name);
   const host = within(trace.name, () => {
     if (Object.hasOwn(trace, "config")) assert.ok(plainObject(trace.config), "its config is an object");
     assert.ok(Array.isArray(trace.steps) && trace.steps.some(step => plainObject(step) && Object.hasOwn(step, "method")),
       "it sends at least one request");
+    const last = trace.steps.at(-1);
+    assert.ok(plainObject(last) && (Object.hasOwn(last, "method") || Object.hasOwn(last, "expectState")),
+      "its last step is checked, by a receipt or an expected state");
     return new InputStreamHost({ ...vectors.defaults, ...trace.config });
   });
   for (const [index, step] of trace.steps.entries()) within(trace.name + " step " + (index + 1), () => {
     assertKeys(step, STEP_KEYS, "the step");
+    assert.ok(Object.keys(step).length > 0, "the step isn't empty");
     if (Object.hasOwn(step, "control")) host.control(step.control);
     if (Object.hasOwn(step, "prepare")) host.prepare(step.prepare);
     if (Object.hasOwn(step, "method")) {

@@ -50,8 +50,8 @@ const channelEntry = value => knownKeys(value, ["identity", "generation", "direc
   && ["inbound", "outbound", "bidirectional"].includes(value.direction)
   && flag(value.permitted) && Array.isArray(value.senders) && value.senders.every(identifier);
 // What each fixture setting must be, when the Host is built and when a control
-// step changes it. A setting given, even as null, is checked, never replaced by
-// its default.
+// step changes one of those in CONTROL. A setting given, even as null, is
+// checked, never replaced by its default.
 const SETTINGS = {
   now: timestamp,
   transportEpoch: identifier,
@@ -92,6 +92,7 @@ export function advertised(mcpl) {
 
 export class InputStreamHost {
   constructor(config = {}) {
+    if (!object(config)) throw Error("Invalid fixture configuration: not an object");
     const unknown = Object.keys(config).find(key => !Object.hasOwn(SETTINGS, key));
     if (unknown !== undefined) throw Error("Invalid fixture configuration: unknown setting " + unknown);
     const setting = (key, fallback) => {
@@ -128,6 +129,8 @@ export class InputStreamHost {
     this.prepared = new Map();
     this.usedPreparation = [];
     this.nextLease = 1;
+    // Every transport epoch this Host has used, so a reconnect can't reuse one (RFC §4.2).
+    this.epochs = new Set([this.epoch]);
   }
 
   // Ready state and the grant, which need nothing from the params (RFC §11).
@@ -196,25 +199,31 @@ export class InputStreamHost {
 
   control(change) {
     if (!object(change)) throw Error("Invalid fixture control: not an object");
+    // Own members only, as the constructor reads its configuration.
+    const has = key => Object.hasOwn(change, key);
     const unknown = Object.keys(change).find(key => !CONTROL.includes(key));
-    if (unknown !== undefined) throw Error("Invalid fixture control: unknown member " + unknown);
+    if (unknown !== undefined) {
+      throw Error("Invalid fixture control: " + (Object.hasOwn(SETTINGS, unknown)
+        ? unknown + " is set only when the Host is built" : "unknown member " + unknown));
+    }
     for (const key of CONTROL) {
-      if (key in change && !SETTINGS[key](change[key])) throw Error("Invalid fixture control: " + key);
+      if (has(key) && !SETTINGS[key](change[key])) throw Error("Invalid fixture control: " + key);
     }
     // Every refusal comes before any change, so a refused step changes nothing.
-    if ("now" in change && change.now < this.now) throw Error("Fixture clock must be monotonic");
-    if ("serverPrincipal" in change && !("transportEpoch" in change)) throw Error("A principal change requires a fresh connection");
-    if ("transportEpoch" in change && change.transportEpoch === this.epoch) throw Error("Reconnect needs a fresh epoch");
-    if ("now" in change) {
+    if (has("now") && change.now < this.now) throw Error("Fixture clock must be monotonic");
+    if (has("serverPrincipal") && !has("transportEpoch")) throw Error("A principal change requires a fresh connection");
+    if (has("transportEpoch") && this.epochs.has(change.transportEpoch)) throw Error("Reconnect needs a fresh epoch");
+    if (has("now")) {
       this.now = change.now;
-      // A lease whose deadline the new time has reached expired before this
-      // step's other changes, so none of them ends it as aborted instead.
+      // A step is one Host event at its new time, so a lease whose deadline that
+      // time has reached had expired (RFC §8) before the step's other changes,
+      // and none of them ends it as aborted instead.
       this.sweep();
     }
-    for (const key of ["ready", "grants", "channels", "finalAccepted", "serverPrincipal", "mode"]) {
-      if (key in change) this[key] = copy(change[key]);
+    for (const key of CONTROL) {
+      if (key !== "now" && key !== "transportEpoch" && has(key)) this[key] = copy(change[key]);
     }
-    if ("mode" in change) {
+    if (has("mode")) {
       // A policy that no longer permits a lease's mode invalidates the lease
       // rather than leaving a wider receipt standing (RFC §9).
       for (const stream of this.streams.values()) {
@@ -223,13 +232,14 @@ export class InputStreamHost {
         }
       }
     }
-    if ("transportEpoch" in change) {
+    if (has("transportEpoch")) {
       for (const stream of this.streams.values()) {
         if (stream.status === "open") this.terminate(stream, "aborted");
       }
       this.streams.clear();
       this.prepared.clear();
       this.epoch = change.transportEpoch;
+      this.epochs.add(this.epoch);
     }
     this.sweep();
   }

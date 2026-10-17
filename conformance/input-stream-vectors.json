@@ -8658,6 +8658,145 @@
       ]
     },
     {
+      "name": "readiness-lapse-channel-replacement-ends-lease",
+      "description": "Registering the channel again, under a new generation, while policy isn't ready still ends the lease (RFC §4.1, §8); a later call finds a binding that no longer matches.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "transportEpoch": "epoch-1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "hello"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 1
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 1,
+                "provisional": "hello"
+              }
+            }
+          }
+        },
+        {
+          "control": {
+            "ready": false
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 1,
+                "provisional": "hello"
+              }
+            }
+          }
+        },
+        {
+          "control": {
+            "channels": {
+              "voice:lobby": {
+                "identity": "channel-lobby",
+                "generation": 2,
+                "direction": "inbound",
+                "permitted": true,
+                "senders": [
+                  "alice"
+                ]
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 1,
+                "provisional": null
+              }
+            }
+          }
+        },
+        {
+          "control": {
+            "ready": true
+          },
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "transportEpoch": "epoch-1",
+            "leaseId": "lease-1",
+            "channelId": "voice:lobby",
+            "senderId": "alice",
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000,
+            "revision": 1,
+            "text": "hello"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "lease_mismatch"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "aborted",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        }
+      ]
+    },
+    {
       "name": "authority-precedes-open-shape",
       "description": "Ready state and the grant are checked before the open's members, so an open with an invalid member reports the lifecycle or authority reason first.",
       "config": {
@@ -8995,7 +9134,7 @@
     },
     {
       "name": "expiry-precedes-mode-narrowing",
-      "description": "A control step that moves the clock past a lease's deadline and narrows the mode ends the lease as expired, not aborted: its deadline passed before the narrower policy took effect (RFC §8, §9).",
+      "description": "A control step is one Host event at its new time. A lease whose deadline that time has passed had expired (RFC §8), so a mode narrowing in the same step finds it expired, not open to abort.",
       "steps": [
         {
           "method": "channels/input/open",

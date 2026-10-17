@@ -1,6 +1,6 @@
 {
-  "profile": "rfc-009-text-input",
-  "description": "Synthetic experimental RFC-009 request traces. The reference host is deterministic: epoch-1, lease-1 onward, clock in Unix ms. Each trace starts fresh. Control and prepare are trusted host-side stimuli, never wire methods. Nonempty expected state objects are partial assertions; empty objects and arrays compare exactly. There is no Portal/STT or production-host validation claim.",
+  "profile": "rfc-012-text-input",
+  "description": "Synthetic experimental RFC-012 request traces. The reference host is deterministic: epoch-1, lease-1 onward, clock in Unix ms. Each trace starts fresh. Control and prepare are trusted host-side stimuli, never wire methods. Nonempty expected state objects are partial assertions; empty objects and arrays compare exactly. There is no Portal/STT or production-host validation claim.",
   "defaults": {
     "now": 1000,
     "transportEpoch": "epoch-1",

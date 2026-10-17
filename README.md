@@ -41,7 +41,7 @@ implementation and a host-treatment implementation.
 
 ### Experimental input streams
 
-[RFC-009: Provisional channel input streams](./RFC-009-input-streams.md) proposes a Host-authorized plain-text trial profile for revisable input, such as speech-to-text hypotheses. Partials stay provisional; one accepted final enters ordinary channel ingestion. It remains separate from the integrated specification and requires Portal STT interoperability evidence before acceptance.
+[RFC-012: Provisional channel input streams](./RFC-012-input-streams.md) proposes a Host-authorized plain-text trial profile for revisable input, such as speech-to-text hypotheses. Partials stay provisional; one accepted final enters ordinary channel ingestion. It remains separate from the integrated specification and requires Portal STT interoperability evidence before acceptance.
 
 ## License
 

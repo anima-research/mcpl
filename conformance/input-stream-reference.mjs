@@ -1,4 +1,4 @@
-// Non-normative, deterministic RFC-009 host-treatment model.
+// Non-normative, deterministic RFC-012 host-treatment model.
 // This is not a transport, authentication system, or durable host implementation.
 import { createHash } from "node:crypto";
 

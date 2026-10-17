@@ -1,4 +1,4 @@
-# MCPL RFC-009: Provisional channel input streams
+# MCPL RFC-012: Provisional channel input streams
 
 **Status:** Experimental draft. This RFC defines a complete plain-text trial profile; it does not amend the integrated SPEC or freeze a generic stream vocabulary. Acceptance requires the Portal STT exercise in RFC §12.
 

@@ -50,7 +50,7 @@ const vectors = JSON.parse(await readFile(path, "utf8"));
 let assertions = 0;
 let apiChecks = 0;
 assertKeys(vectors, CORPUS_KEYS, "the corpus", ["profile", "defaults", "advertisements", "traces"]);
-assert.equal(vectors.profile, "rfc-009-text-input");
+assert.equal(vectors.profile, "rfc-012-text-input");
 assertions++;
 assert.ok(Array.isArray(vectors.advertisements) && vectors.advertisements.length > 0, "the corpus has advertisement vectors");
 assert.ok(Array.isArray(vectors.traces) && vectors.traces.length > 0, "the corpus has traces");

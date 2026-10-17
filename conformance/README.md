@@ -1,6 +1,6 @@
 # MCPL conformance vectors
 
-For the experimental plain-text input-stream profile, see [RFC-009 vectors](#7-experimental-rfc-009-input-stream-vectors). The sections below document the existing RFC-003 digest artifacts.
+For the experimental plain-text input-stream profile, see [RFC-012 vectors](#7-experimental-rfc-012-input-stream-vectors). The sections below document the existing RFC-003 digest artifacts.
 
 The RFC-003 artifacts freeze the interoperability vectors for
 
@@ -408,9 +408,9 @@ reproducing, if vector 0's canonical string drifts from the RFC text, or if any
 `manifest-digest-vectors.json` is the frozen artifact. If the generator and the
 RFC ever disagree, the generator is the bug.
 
-## 7. Experimental RFC-009 input-stream vectors
+## 7. Experimental RFC-012 input-stream vectors
 
-[RFC-009](../RFC-009-input-streams.md) proposes leased, provisional plain-text input followed by one canonical final. These artifacts exercise its experimental contract:
+[RFC-012](../RFC-012-input-streams.md) proposes leased, provisional plain-text input followed by one canonical final. These artifacts exercise its experimental contract:
 
 | File | Role |
 |---|---|
@@ -439,7 +439,7 @@ The file's `defaults` describe the synthetic Host environment. Each trace starts
 
 Three of the settings say whose they are. `advertisement` is the Server's, the object it advertises under `capabilities.experimental.mcpl`; the Host under test implements this profile and advertises it, so admission requires both peers' advertisement, as RFC §2.2 says. `grants` is the effective grant, and a `control` step that changes it is when the change takes effect: for an expansion, once its policy exchange has completed (RFC §2.2); for a reduction, before its policy Request is sent (RFC §8). So an expanded grant applies only from that step, and a reduction ends the streams it no longer authorizes. `mode` is the Host's own treatment policy for new leases (RFC §9). The model has no recipients, so it can't show the per-recipient opt-in RFC §9 requires for `incremental`, and it permits an incremental lease what it permits a `prepare` one. A `control` step that narrows the mode ends the open leases it no longer permits, while one that broadens it leaves each open lease in the mode its receipt announced.
 
-The file is JSON as RFC 8259 defines it. Four traces carry unpaired UTF-16 surrogates as `\uD800`-style escapes, because RFC-009 makes such text invalid: `invalid-open-identifier-surrogate`, `invalid-open-name-surrogate`, `reject-high-surrogate` and `reject-low-surrogate`. RFC 8259 leaves the reading of such escapes to the parser. JavaScript's `JSON.parse` keeps them; some parsers, jq 1.7 among them, refuse the file, and others replace them with U+FFFD, which would make those traces' invalid text read as valid. Read the file with a parser that keeps lone surrogates, or skip those four traces and say so.
+The file is JSON as RFC 8259 defines it. Four traces carry unpaired UTF-16 surrogates as `\uD800`-style escapes, because RFC-012 makes such text invalid: `invalid-open-identifier-surrogate`, `invalid-open-name-surrogate`, `reject-high-surrogate` and `reject-low-surrogate`. RFC 8259 leaves the reading of such escapes to the parser. JavaScript's `JSON.parse` keeps them; some parsers, jq 1.7 among them, refuse the file, and others replace them with U+FFFD, which would make those traces' invalid text read as valid. Read the file with a parser that keeps lone surrogates, or skip those four traces and say so.
 
 Apply each step in order:
 

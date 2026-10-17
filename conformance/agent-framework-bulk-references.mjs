@@ -7,7 +7,8 @@ import { execFileSync } from 'node:child_process';
 export async function createAdapter(root) {
   const revision = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   // Untracked files count: an import can resolve to any file that isn't ignored.
-  const dirty = execFileSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' }).trim();
+  // The flag overrides a configuration that hides them.
+  const dirty = execFileSync('git', ['-C', root, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' }).trim();
   if (dirty) throw new Error('Framework checkout has changes or untracked files; use an isolated clean revision');
   const load = path => import(pathToFileURL(resolve(root, path)).href);
   const refs = await load('src/mcpl/references.ts');
@@ -87,7 +88,13 @@ export async function createAdapter(root) {
           evictedError, unknownError: await viaTool({ ref_id: 'ref_unknown_fixture' }) };
       }
       const before = await render(blocks);
-      // Registering the same testimony returns the record the Host made while rendering.
+      // Registering the same testimony returns the record the Host made while
+      // rendering, and binds it to the fixture's server if it has no server yet.
+      // The Framework binds a reference to the server that delivered it when a tool
+      // result carries it (autoFetchReferences). Its push lane registers it
+      // unbound, and the fetcher refuses an unbound record. So this binding is the
+      // adapter's, as the tool-result lane would make it, and the fetch rows test
+      // the fetcher.
       const records = parsed.filter(p => p.kind === 'reference').map(p => refs.referenceRegistry.register(p.testimony, 'fixture'));
       if (operation === 'render') return { parsed, before, records };
       if (operation !== 'fetch') throw new Error('Unknown operation: ' + operation);

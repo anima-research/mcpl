@@ -131,22 +131,43 @@ const EXPECT_KEYS = [...STAGE_KEYS, 'kind', 'missingFields', 'ok', 'requests', '
 // by its first ones, as RFC-005 says: a run this long doesn't occur in a lane by
 // chance, where a number or a shorter string could.
 const REJECTED_RUN = 16;
-// Control and bidi characters a display label must not carry (row 18). A tab and
-// the line breaks also lay out a Host's own text, so they count only when the
-// case's label holds one.
-const UNSAFE_LABEL = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
-const UNSAFE_BEYOND_LAYOUT = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+// Control and bidi characters a display label must not carry (row 18). These are
+// characters: an escaped form is plain text. A tab and the line breaks also lay
+// out a Host's own text, so they don't count alone. A label's own one is looked
+// for with the label's text on each side, which a Host's layout doesn't produce.
+const UNSAFE_LABEL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+const LABEL_CONTEXT = 3;
+export function labelLayoutContexts(blocks) {
+  const contexts = [];
+  for (const block of blocks) {
+    if (typeof block.name !== 'string') continue;
+    // The label as a Host that strips its other unsafe characters shows it.
+    const plain = block.name.replace(new RegExp(UNSAFE_LABEL.source, 'gu'), '');
+    for (const match of plain.matchAll(/[\t\n\r]/g)) {
+      const before = plain.slice(Math.max(0, match.index - LABEL_CONTEXT), match.index);
+      const after = plain.slice(match.index + 1, match.index + 1 + LABEL_CONTEXT);
+      // At either end of the label, a Host's own layout could give the same text.
+      if (before && after) contexts.push(before + match[0] + after);
+    }
+  }
+  return contexts;
+}
 
 // The bytes a Host that dereferenced a local URI would read: a file: URI's file,
-// or a data: URI's own payload. Null for any other URI.
+// or a data: URI's own payload, with the scheme as the URL parser reads it. Null
+// for any other URI; empty for a local one that can't be read.
 function localPayload(uri) {
-  if (uri.startsWith('file:')) {
-    try { return readFileSync(fileURLToPath(uri)); } catch { return Buffer.alloc(0); }
-  }
-  if (!uri.startsWith('data:')) return null;
-  const comma = uri.indexOf(',');
-  const body = uri.slice(comma + 1);
-  return /;base64$/i.test(uri.slice(0, comma)) ? Buffer.from(body, 'base64') : Buffer.from(decodeURIComponent(body));
+  let url;
+  try { url = new URL(uri); } catch { return /^[\u0000-\u0020]*(file|data):/i.test(uri) ? Buffer.alloc(0) : null; }
+  if (url.protocol !== 'file:' && url.protocol !== 'data:') return null;
+  try {
+    if (url.protocol === 'file:') return readFileSync(fileURLToPath(url));
+    // As fetch() decodes it: the percent-escapes bytewise, then base64 if the type says so.
+    const text = url.href.split('#')[0].slice('data:'.length), comma = text.indexOf(',');
+    if (comma < 0) return Buffer.alloc(0);
+    const bytes = Buffer.from(text.slice(comma + 1).replace(/%([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))), 'latin1');
+    return /;\s*base64\s*$/i.test(text.slice(0, comma)) ? Buffer.from(bytes.toString('latin1'), 'base64') : bytes;
+  } catch { return Buffer.alloc(0); }
 }
 
 export function assertCorpus(vectors) {
@@ -168,7 +189,7 @@ export function assertCorpus(vectors) {
     for (const inline of [c.expect.stubOrInlineBase64, c.expect.before?.stubOrInlineBase64, c.expect.after?.stubOrInlineBase64]) {
       assert.ok(inline === undefined || Buffer.from(inline, 'base64').length > 0, c.id + ': stubOrInlineBase64 must decode to bytes');
     }
-    // A successful fetch's saved bytes are always compared.
+    // A case that expects a successful fetch declares the bytes it must save.
     if (c.operation === 'fetch' && c.expect.ok === true) {
       assert.equal(typeof c.expect.decodedBase64, 'string', c.id + ': a successful fetch declares its decodedBase64');
     }
@@ -177,8 +198,9 @@ export function assertCorpus(vectors) {
       // Process-global Host caches key references by URI, so no two cases share one.
       assert.ok(!uris.has(block.uri), c.id + ': URI shared with ' + uris.get(block.uri));
       uris.set(block.uri, c.id);
-      // A Host that dereferenced a local URI would read its payload whole and
-      // succeed, so the case fails such a Host, whatever spells the URI.
+      // A Host that dereferenced a local URI and accepted its payload would read
+      // it whole and succeed, so the case fails such a Host, whatever spells the
+      // URI. Only what reaches the model, storage or the network is observed.
       const local = localPayload(block.uri);
       if (local) {
         assert.ok(local.length > 0 && block.sizeBytes === local.length && c.maxBytes >= local.length,
@@ -209,8 +231,10 @@ export function checkObservation(c, out, network, adapter, token) {
   const checkLabelsAndFields = (pieces, visible, where) => {
     const text = pieces.join('');
     if (visible.cleanLabel) {
-      const layoutInLabel = c.blocks.some(block => typeof block.name === 'string' && /[\t\n\r]/.test(block.name));
-      assert.ok(!(layoutInLabel ? UNSAFE_LABEL : UNSAFE_BEYOND_LAYOUT).test(text), 'unsafe display-label characters in ' + where);
+      assert.ok(!UNSAFE_LABEL.test(text), 'unsafe display-label characters in ' + where);
+      for (const context of labelLayoutContexts(c.blocks)) {
+        assert.ok(!text.includes(context), "a display label's tab or line break in " + where);
+      }
     }
     for (const field of visible.missingFields ?? []) {
       for (const block of c.blocks) {
@@ -240,7 +264,7 @@ export function checkObservation(c, out, network, adapter, token) {
     }
     assert.notEqual(out.fresh.refId, out.firstId, 'evicted id must not be reused');
     assert.equal(new Set(out.ids).size, out.ids.length, 'each new record must have a distinct id');
-    assert.equal(out.fresh.testimony.uri, c.blocks[0].uri, 'the fresh record keeps its testimony');
+    assert.equal(out.fresh.testimony.uri, c.blocks[0].uri, 'the fresh record is for the same URI');
     return;
   }
   assert.ok(out.before && typeof out.before.history === 'string' && typeof out.before.wake === 'string' && Array.isArray(out.before.push), 'adapter must observe both model-facing conversion paths');
@@ -332,7 +356,7 @@ export function checkObservation(c, out, network, adapter, token) {
     assert.equal(out.outcome.bytes, bytes.length, 'outcome bytes match the saved bytes');
     assert.equal(record.verifiedBytes, bytes.length, 'record verifiedBytes match the saved bytes');
     assert.equal(record.fetchedPath, out.outcome.path, 'record fetchedPath is the outcome path');
-    if (e.decodedBase64) assert.equal(saved.base64, e.decodedBase64, 'saved bytes must be decoded identity octets');
+    if (e.decodedBase64 !== undefined) assert.equal(saved.base64, e.decodedBase64, 'saved bytes must be decoded identity octets');
     if (e.savedMime) {
       assert.equal(record.verifiedMimeType, e.savedMime, 'record stores the observed MIME type');
       assert.equal(out.outcome.mimeType, e.savedMime, 'outcome MIME type');
@@ -390,8 +414,15 @@ export async function main(argv) {
   for (const file of suiteFiles) suiteHashes[file] = createHash('sha256').update(await readFile(resolve(here, file))).digest('hex');
   suiteHashes['SPEC.md'] = createHash('sha256').update(spec).digest('hex');
   suiteHashes['adapter'] = createHash('sha256').update(await readFile(adapterPath)).digest('hex');
+  // A Host that reads a file: URI's path without decoding it finds the payload
+  // only where the path needs no percent-encoding, so its verdict on
+  // 11-file-refused depends on where this checkout is.
+  const notes = localPayloadURL.includes('%')
+    ? ['11-file-refused: this checkout\'s path needs percent-encoding in a file: URL, so the case also passes a Host that reads the URL\'s path without decoding it']
+    : [];
+  for (const note of notes) console.log('note: ' + note);
   const report = {
-    suiteHashes,
+    suiteHashes, notes,
     runtime: process.version, bun: process.versions.bun ?? null,
     validator: { name: 'Ajv', version: ajvPackage.version, strict: true, strictRequired: false, schema: 'SPEC.md Appendix B.1' },
     legacySchemaRevision: legacy.sourceRevision, host: adapter.identity, displayProfile: adapter.displayProfile,

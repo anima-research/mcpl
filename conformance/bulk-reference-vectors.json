@@ -525,6 +525,7 @@
           "$ORIGIN",
           "fixture-secret",
           "$LOCAL_PAYLOAD",
+          "bulk-reference-11-file-refused.wav",
           "RIFF0000WAVEpayload",
           "UklGRjAwMDBXQVZFcGF5bG9hZA=="
         ],
@@ -845,7 +846,7 @@
         {
           "type": "resource",
           "uri": "$ORIGIN/case/$CASE/payload",
-          "name": "bad\u0000\u0007\u0085\u202e\u061cname",
+          "name": "bad\u0000\u0007\u0085\u202e\u061cname\nline",
           "mimeType": "audio/wav",
           "sizeBytes": 19,
           "disposition": "never"

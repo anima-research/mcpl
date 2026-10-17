@@ -61,6 +61,12 @@ test('a refused local case names a payload a Host could read whole', () => {
   // Any file: URI is held to it, however it is spelt: here the corpus itself, past the ceiling.
   const literal = edited('11-file-refused', c => { c.blocks[0].uri = new URL('./bulk-reference-vectors.json', import.meta.url).href; });
   assert.throws(() => assertCorpus(literal), /11-file-refused: a local URI must name a payload readable whole/);
+  // The scheme is read as the URL parser reads it: in capitals, after leading space.
+  const capitals = edited('11-data-refused', c => { c.blocks[0].uri = ' DATA:' + c.blocks[0].uri.slice('data:'.length); c.maxBytes = 8; });
+  assert.throws(() => assertCorpus(capitals), /11-data-refused: a local URI must name a payload readable whole/);
+  // A data: payload decodes as fetch() decodes it: percent-escapes bytewise, as plain text or base64.
+  assertCorpus(edited('11-data-refused', c => { c.blocks[0].uri = 'data:audio/wav;case=11-data-refused,RIFF0000WAVEpayload'; }));
+  assertCorpus(edited('11-data-refused', c => { c.blocks[0].uri = 'data:audio/wav;case=11-data-refused,%FF'; c.blocks[0].sizeBytes = 1; }));
 });
 test('an observed bounded reference stub passes', () => { check(); });
 for (const lane of ['push', 'wake', 'history']) {
@@ -175,7 +181,7 @@ test('an evicted-id alias, a missing live id or an undefined tool error cannot p
     [{ evicted: { refId: 'old' } }, /evicted reference must be a defined miss/],
     [{ unknown: { refId: 'ref_unknown_fixture' } }, /unknown reference must be a defined miss/],
     [{ ids: ['old', 'new', 'new'] }, /distinct id/],
-    [{ fresh: { ...out.fresh, testimony: { uri: 'https://example.invalid/b' } } }, /fresh record keeps its testimony/],
+    [{ fresh: { ...out.fresh, testimony: { uri: 'https://example.invalid/b' } } }, /fresh record is for the same URI/],
   ];
   for (const [fault, pattern] of faults) assert.throws(() => check(c, { ...out, ...fault }), pattern);
   // A lookup error is model-visible: no unsafe label character, no rejected value.
@@ -194,7 +200,7 @@ test('an evicted-id alias, a missing live id or an undefined tool error cannot p
 for (const lane of ['push', 'wake', 'history']) {
   test('raw control and bidi characters are checked in ' + lane + ' values', () => {
     const c = { ...vector, expect: { ...vector.expect, cleanLabel: true } };
-    for (const value of ['\u0000', '\u0007', '\u0008', '\u000b', '\u001f', '\u007f', '\u0085', '\u009f', '\u061c',
+    for (const value of ['\u0000', '\u0007', '\u0008', '\u000b', '\u000c', '\u000e', '\u001f', '\u007f', '\u0085', '\u009f', '\u061c',
       '\u200e', '\u200f', '\u202a', '\u202d', '\u202e', '\u2066', '\u2069']) {
       const out = observation();
       if (lane === 'push') out.before.push[0].text += value;
@@ -218,7 +224,8 @@ for (const lane of ['push', 'wake', 'history']) {
   });
 }
 test('truncation markers and thresholds come from the declared display profile', () => {
-  const label = 'a'.repeat(255);
+  // A letter in neither the stub's text nor any marker, so no label character occurs by chance.
+  const label = 'z'.repeat(255);
   const c = { ...vector, blocks: [{ ...vector.blocks[0], name: label }], expect: { ...vector.expect, displayField: 'name' } };
   const render = text => {
     const out = observation();
@@ -227,18 +234,18 @@ test('truncation markers and thresholds come from the declared display profile',
   };
   for (const marker of ['…', '[truncated]']) {
     const profile = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 120 }, truncationMarkers: [marker] } };
-    check(c, render('[ref_fixture] ' + 'a'.repeat(119) + marker), network, profile);
-    check(c, render('[ref_fixture] ' + 'a'.repeat(120) + marker), network, profile);
-    assert.throws(() => check(c, render('[ref_fixture] ' + 'a'.repeat(120)), network, profile), /must be marked/);
+    check(c, render('[ref_fixture] ' + 'z'.repeat(119) + marker), network, profile);
+    check(c, render('[ref_fixture] ' + 'z'.repeat(120) + marker), network, profile);
+    assert.throws(() => check(c, render('[ref_fixture] ' + 'z'.repeat(120)), network, profile), /must be marked/);
     // The mark belongs at the end of the label as shown, not elsewhere.
-    assert.throws(() => check(c, render('[ref_fixture] ' + 'a'.repeat(100) + ' x' + marker), network, profile), /must be marked/);
+    assert.throws(() => check(c, render('[ref_fixture] ' + 'z'.repeat(100) + ' x' + marker), network, profile), /must be marked/);
     assert.throws(() => check(c, render('[ref_fixture] ' + label + marker), network, profile), /past the declared display limit/);
-    // A mark alone doesn't show the field, whether or not a label character occurs in the lane by chance.
-    assert.throws(() => check(c, render('[ref_fixture] ' + marker), network, profile), /over the display limit must still be shown|must be marked/);
+    // A mark alone doesn't show the field.
+    assert.throws(() => check(c, render('[ref_fixture] ' + marker), network, profile), /over the display limit must still be shown/);
   }
   const wider = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 255 }, truncationMarkers: ['[truncated]'] } };
   check(c, render('[ref_fixture] ' + label), network, wider);
-  assert.throws(() => check(c, render('[ref_fixture] ' + 'a'.repeat(200) + '[truncated]'), network, wider), /shown whole/);
+  assert.throws(() => check(c, render('[ref_fixture] ' + 'z'.repeat(200) + '[truncated]'), network, wider), /shown whole/);
 });
 const corpusCase = id => expand(corpus.cases.find(c => c.id === id), 'http://fixture.invalid');
 const viewOf = text => ({ push: [{ type: 'text', text }], wake: text, history: text });
@@ -270,10 +277,19 @@ test('the refused local cases hide their payload and leave the stub unchanged', 
   for (const id of ['11-file-refused', '11-data-refused']) {
     const c = corpusCase(id);
     check(c, refused());
-    const echoed = refused(); echoed.tool.error = 'refused: RIFF0000WAVEpayload';
-    assert.throws(() => check(c, echoed), /forbidden value #\d+ in the fetch_reference result/, id);
+    for (const echo of ['RIFF0000WAVEpayload', 'UklGRjAwMDBXQVZFcGF5bG9hZA==']) {
+      const echoed = refused(); echoed.tool.error = 'refused: ' + echo;
+      assert.throws(() => check(c, echoed), /forbidden value #\d+ in the fetch_reference result/, id + ' ' + echo);
+    }
     const restubbed = refused(); restubbed.after.wake += ' (refused)';
     assert.throws(() => check(c, restubbed), /leave stub unchanged/, id);
+  }
+  // A Host's read error names the file's path, which holds the file's name, as
+  // every spelling of its URI does.
+  const file = corpusCase('11-file-refused');
+  for (const path of [fileURLToPath(file.blocks[0].uri), new URL(file.blocks[0].uri).pathname]) {
+    const named = refused(); named.tool.error = "ENOENT: no such file or directory, open '" + path + "'";
+    assert.throws(() => check(file, named), /forbidden value #\d+ in the fetch_reference result/, path);
   }
 });
 test('a rejected field or an unsafe label in the fetch_reference result cannot pass', () => {
@@ -292,12 +308,25 @@ test('a rejected field or an unsafe label in the fetch_reference result cannot p
   const structured = fetched(); structured.tool.data = { name: label.blocks[0].name };
   assert.throws(() => check(label, structured, authenticatedRequest), /unsafe display-label characters in the fetch_reference result/);
 });
-test('a tab or line break is unsafe only when the label holds one', () => {
+test("a label's own tab or line break is found, and a Host's own layout passes", () => {
   const c = { ...vector, expect: { ...vector.expect, cleanLabel: true } };
   const laidOut = observation(); laidOut.before.history += '\n\t(attachment)\r\n';
   check(c, laidOut);
-  const named = { ...c, blocks: [{ ...c.blocks[0], name: 'two\nlines' }] };
-  assert.throws(() => check(named, laidOut), /unsafe display-label characters in before history/);
+  for (const layout of ['\t', '\n', '\r']) {
+    const named = { ...c, blocks: [{ ...c.blocks[0], name: 'two' + layout + 'lines' }] };
+    // The Host's own layout passes, and so does the label stripped or with a space for the break.
+    check(named, laidOut);
+    for (const shown of ['twolines', 'two lines']) {
+      const out = observation(); out.before.history += '\n' + shown + '\r\n';
+      check(named, out);
+    }
+    const kept = observation(); kept.before.history += '\n\ttwo' + layout + 'lines\n';
+    assert.throws(() => check(named, kept), /a display label's tab or line break in before history/, JSON.stringify(layout));
+  }
+  // The label's other unsafe characters are left out of the text around its break.
+  const mixed = { ...c, blocks: [{ ...c.blocks[0], name: 'ab\u202ec\nd\u0007ef' }] };
+  const stripped = observation(); stripped.before.wake += ' abc\ndef';
+  assert.throws(() => check(mixed, stripped), /a display label's tab or line break in before wake/);
   // A result laid out over several lines conforms in both label cases.
   for (const id of ['18-label-device', '18-label-controls']) {
     const label = corpusCase(id);
@@ -331,6 +360,9 @@ test('each successful-fetch rule fails on its own fault', () => {
     const out = successfulVerifiedReference(c); fault(out);
     assert.throws(() => check(c, out, authenticatedRequest), pattern);
   }
+  // A declared empty body is compared too: the saved bytes must be empty.
+  const empty = { ...c, expect: { ...c.expect, decodedBase64: '' } };
+  assert.throws(() => check(empty, successfulVerifiedReference(c), authenticatedRequest), /saved bytes must be decoded identity octets/);
   const PAYLOAD = 'UklGRjAwMDBXQVZFcGF5bG9hZA==';
   const stored = (id, name) => {
     const named = corpusCase(id);

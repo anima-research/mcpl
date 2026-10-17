@@ -1,0 +1,18 @@
+{
+  "rfc": "RFC-009",
+  "revision": 1,
+  "note": "Frozen expectations for RFC-009 §10. 'service' vectors run against a service implementation; 'host' vectors against a dialler. Checked against Anima Docs (service) at RFC revision 1.",
+  "vectors": [
+    { "id": 1, "kind": "service", "request": { "method": "HEAD", "path": "/d/<any>" }, "expect": { "header": "Link", "rel": "mcpl", "count": 1, "targetScheme": ["mcpl", "wss"], "neverScheme": ["ws"] } },
+    { "id": 2, "kind": "service", "request": { "method": "GET", "path": "/.well-known/mcpl" }, "expect": { "status": 200, "contentType": "application/json", "required": ["mcpl"], "mcplCanonical": true, "wssEqualsResolution": true } },
+    { "id": 3, "kind": "service", "compare": ["Link rel=mcpl", "html link rel=mcpl", "well-known mcpl"], "expect": { "sameEndpointAfterCanonicalization": true, "onDisagreementPrefer": "well-known" } },
+    { "id": 4, "kind": "service", "request": { "method": "GET", "path": "/d/<any>", "headers": { "Accept": "text/markdown" } }, "expect": { "status": 200, "contentType": "text/markdown", "bodyStartsWithPointer": true, "pointerNames": ["endpoint", "guide"] } },
+    { "id": 5, "kind": "service", "request": { "method": "GET", "path": "/d/<private>", "headers": { "Accept": "text/markdown" } }, "expect": { "bodyContainsResourceContent": false, "bodySaysNotReadable": true } },
+    { "id": 6, "kind": "service", "request": { "method": "GET", "path": "/l/<anyone-link>", "headers": { "Accept": "text/plain" } }, "expect": { "bodyContainsResourceContent": true } },
+    { "id": 7, "kind": "service", "request": { "method": "GET", "path": "/d/<any>", "headers": { "Accept": "text/html,*/*" } }, "expect": { "isApplication": true } },
+    { "id": 8, "kind": "host", "input": { "record": { "mcpl": "mcpl://docs.example.org/mcpl", "unknownField": 1 } }, "expect": { "parsed": true, "endpoint": "mcpl://docs.example.org/mcpl" } },
+    { "id": 9, "kind": "host", "input": { "address": "https://docs.example.org/d/x", "record": { "mcpl": "mcpl://elsewhere.example.net/mcpl" } }, "expect": { "dialedSilently": false, "surfacedAsReferral": true } },
+    { "id": 10, "kind": "host", "input": { "record": { "mcpl": "ws://docs.example.org/mcpl" } }, "expect": { "rejected": true } },
+    { "id": 11, "kind": "host", "input": { "address": "https://plain.example.org/", "linkHeader": null, "record": null, "htmlTags": null }, "expect": { "result": "no advertised endpoint", "guessedPath": false } }
+  ]
+}

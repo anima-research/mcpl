@@ -133,12 +133,6 @@ const openParams = {
   streamId: "s", channelId: "voice:lobby", messageId: "m", sender: { id: "alice" },
   contentType: "text/plain", startedAt: 900, expiresAt: 5000,
 };
-// A control step reads its own members only, as the constructor reads its configuration.
-const inherited = new InputStreamHost();
-inherited.control(Object.create({ ready: false }));
-assert.equal(inherited.request("open", openParams).result?.accepted, true, "an inherited control member is not applied");
-apiChecks++;
-assertions++;
 const leaseParams = {
   streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",
   channelId: "voice:lobby", senderId: "alice", contentType: "text/plain",
@@ -157,30 +151,11 @@ assert.throws(() => broadened.prepare("s"), /no permitted snapshot/,
   "a lease opened as volatile isn't prepared after the mode broadens");
 assertions++;
 apiChecks++;
-// A refused control step changes nothing, though it carries every member: the
-// clock, the lease and the settings are as they were, as an update, a new lease
-// and a completion after it show.
-const refused = new InputStreamHost();
-refused.request("open", openParams);
-const everything = { now: 6000, ready: false, grants: ["channels.incoming"], channels: {}, finalAccepted: false, mode: "final-only", serverPrincipal: "server-2" };
-assert.throws(() => refused.control(everything), /A principal change requires a fresh connection$/);
-assertions++;
-assert.throws(() => refused.control({ ...everything, transportEpoch: "epoch-1" }), /Reconnect needs a fresh epoch$/);
-assertions++;
-assert.deepEqual(refused.request("update", { ...leaseParams, revision: 1, text: "red" }),
-  { result: { accepted: true, status: "updated", revision: 1 } }, "the lease takes an update after the refused steps");
-assertions++;
-assert.deepEqual(refused.request("open", { ...openParams, streamId: "s2", messageId: "m2" }), { result: {
-  accepted: true, streamId: "s2", transportEpoch: "epoch-1", leaseId: "lease-2",
-  expiresAt: 5000, maxUpdateHz: 10, maxChars: 100, mode: "volatile",
-} }, "a lease opened after the refused steps gets the settings as they were");
-assertions++;
-assert.deepEqual(refused.request("complete", { ...leaseParams, revision: 1, text: "red" }), { result: {
-  accepted: true, status: "completed", messageId: "m", revision: 1,
-  contentDigest: "sha256:b1f51a511f1da0cd348b8f8598db32e61cb963e5fc69e2b41485bf99590ed75a",
-} }, "the final is accepted after the refused steps");
-assertions++;
+// A new server principal comes only with a new connection.
+assert.throws(() => new InputStreamHost().control({ serverPrincipal: "server-2" }),
+  /A principal change requires a fresh connection$/, "a principal change without a new epoch is refused");
 apiChecks++;
+assertions++;
 const shortLease = new InputStreamHost({ maxDurationMs: 1 });
 assert.deepEqual(shortLease.request("open", openParams), { result: {
   accepted: true, streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",

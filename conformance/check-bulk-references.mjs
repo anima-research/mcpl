@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -9,18 +9,19 @@ import { resolve, dirname } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const corpusPath = resolve(here, 'bulk-reference-vectors.json');
-const corpusURL = pathToFileURL(corpusPath).href;
+const localPayloadPath = resolve(here, 'bulk-reference-local-payload.wav');
+const localPayloadURL = pathToFileURL(localPayloadPath).href;
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'));
 const pause = ms => new Promise(done => setTimeout(done, ms));
 
-// $ORIGIN is the case's loopback origin, $CASE its URL-encoded id, and $CORPUS the
-// file URL of this corpus, an existing file that a refused file: URI names.
+// $ORIGIN is the case's loopback origin, $CASE its URL-encoded id, and $LOCAL_PAYLOAD
+// the file URL of a small payload beside this corpus, which a refused file: URI names.
 export function expand(value, origin, caseId = value?.id) {
   if (typeof value === 'string') {
     if (value.includes('$CASE')) assert.ok(typeof caseId === 'string' && caseId.length > 0, 'case namespace requires a case id');
     return value.replaceAll('$ORIGIN', () => origin)
       .replaceAll('$CASE', () => encodeURIComponent(caseId ?? ''))
-      .replaceAll('$CORPUS', () => corpusURL);
+      .replaceAll('$LOCAL_PAYLOAD', () => localPayloadURL);
   }
   if (Array.isArray(value)) return value.map(x => expand(x, origin, caseId));
   if (value && typeof value === 'object') {
@@ -127,6 +128,7 @@ const EXPECT_KEYS = [...STAGE_KEYS, 'kind', 'missingFields', 'ok', 'requests', '
   'savedMime', 'digestVerified', 'storageFromId', 'abortStream', 'unchanged', 'before', 'after'];
 // A run this long of a rejected value doesn't occur in a stub by chance.
 const REJECTED_RUN = 16;
+const UNSAFE_LABEL = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 
 export function assertCorpus(vectors) {
   assert.equal(vectors.format, 'mcpl-bulk-references-1');
@@ -149,6 +151,12 @@ export function assertCorpus(vectors) {
       assert.ok(!uris.has(block.uri), c.id + ': URI shared with ' + uris.get(block.uri));
       uris.set(block.uri, c.id);
     }
+    // A Host that reads local files could read this payload whole, so only refusing
+    // the scheme passes a case that names it.
+    if (c.blocks.some(block => typeof block.uri === 'string' && block.uri.startsWith('$LOCAL_PAYLOAD'))) {
+      const size = statSync(localPayloadPath).size;
+      assert.ok(c.blocks.every(block => block.sizeBytes === size) && c.maxBytes >= size, c.id + ': the local payload must be readable whole within the case');
+    }
   }
 }
 
@@ -168,6 +176,20 @@ export function checkObservation(c, out, network, adapter, token) {
       }
     });
   };
+  // Nothing the model reads holds an unsafe label character, or the value of a
+  // field rejected as invalid: rejection reaches past testimony.
+  const checkLabelsAndFields = (pieces, visible, where) => {
+    const text = pieces.join('');
+    if (visible.cleanLabel) assert.ok(!UNSAFE_LABEL.test(text), 'unsafe display-label characters in ' + where);
+    for (const field of visible.missingFields ?? []) {
+      const value = c.blocks.find(block => block[field] !== undefined)?.[field];
+      if (typeof value === 'string' && value.length >= REJECTED_RUN) {
+        assert.ok(!text.includes(value.slice(0, REJECTED_RUN)), 'rejected ' + field + ' shown in ' + where);
+      }
+    }
+  };
+  // A stage's visibility fields override the shared ones, and its hidden values add to theirs.
+  const visibleAt = stage => ({ ...e, ...e[stage], hidden: [...(e.hidden ?? []), ...(e[stage]?.hidden ?? [])] });
   if (c.operation === 'registry') {
     assert.equal(out.stableId, out.firstId, 'registration keeps a live reference stable');
     assert.equal(out.live, out.fresh.refId, 'a live id resolves to its own record');
@@ -189,7 +211,7 @@ export function checkObservation(c, out, network, adapter, token) {
   if (c.operation === 'fetch') assert.ok(out.after && typeof out.after.history === 'string' && typeof out.after.wake === 'string' && Array.isArray(out.after.push), 'fetch must observe post-fetch model views');
   const views = [['before', out.before], ...(out.after ? [['after', out.after]] : [])];
   for (const [stage, view] of views) {
-    const visible = { ...e, ...e[stage], hidden: [...(e.hidden ?? []), ...(e[stage]?.hidden ?? [])] };
+    const visible = visibleAt(stage);
     const lanes = [['push', semanticStrings(view.push)], ['wake', [view.wake]], ['history', [view.history]]];
     for (const [lane, pieces] of lanes) {
       const text = pieces.join('');
@@ -225,14 +247,7 @@ export function checkObservation(c, out, network, adapter, token) {
           assert.ok(text.includes(label), visible.displayField + ' within the display limit must be shown whole in ' + where);
         }
       }
-      if (visible.cleanLabel) assert.ok(!/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(text), 'unsafe display-label characters');
-      // A field rejected as invalid is absent everywhere, not only from testimony.
-      for (const field of visible.missingFields ?? []) {
-        const value = c.blocks.find(block => block[field] !== undefined)?.[field];
-        if (typeof value === 'string' && value.length >= REJECTED_RUN) {
-          assert.ok(!text.includes(value.slice(0, REJECTED_RUN)), 'rejected ' + field + ' shown in ' + where);
-        }
-      }
+      checkLabelsAndFields(pieces, visible, where);
     }
   }
   if (e.kind) assert.equal(out.parsed[0].kind, e.kind);
@@ -248,10 +263,12 @@ export function checkObservation(c, out, network, adapter, token) {
   }
   assert.equal(c.operation, 'fetch');
   assert.ok(out.outcome && Array.isArray(out.saves), 'fetch observation missing');
-  // The fetch_reference result is model-visible too.
+  // The fetch_reference result is model-visible too, as the views after the fetch are.
   assert.ok(out.tool && typeof out.tool.success === 'boolean', 'fetch must observe the fetch_reference result');
   assert.equal(out.tool.success, out.outcome.ok, 'fetch_reference reports the fetch outcome');
-  checkHidden([out.tool.success ? out.tool.data : out.tool.error], [...(e.hidden ?? []), ...(e.after?.hidden ?? [])], 'the fetch_reference result');
+  const result = semanticStrings(out.tool.success ? out.tool.data : out.tool.error), after = visibleAt('after');
+  checkHidden(result, after.hidden, 'the fetch_reference result');
+  checkLabelsAndFields(result, after, 'the fetch_reference result');
   if ('ok' in e) assert.equal(out.outcome.ok, e.ok, 'fetch outcome ' + (out.outcome.ok ? 'succeeded' : 'failed: ' + out.outcome.error));
   if ('requests' in e) assert.equal(network.requests.length, e.requests, 'request count');
   // §19.6.1 permits applying the connection credential; a Host may omit it.
@@ -331,7 +348,7 @@ export async function main(argv) {
   }
   const ajvPackage = await readJson(resolve(dirname(options.ajv), '../package.json'));
   // The suite is identified by its files' hashes, with or without a Git checkout.
-  const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'check-bulk-references.mjs'];
+  const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'bulk-reference-local-payload.wav', 'check-bulk-references.mjs'];
   const suiteHashes = {};
   for (const file of suiteFiles) suiteHashes[file] = createHash('sha256').update(await readFile(resolve(here, file))).digest('hex');
   suiteHashes['SPEC.md'] = createHash('sha256').update(spec).digest('hex');

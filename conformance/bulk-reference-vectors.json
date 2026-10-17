@@ -509,10 +509,10 @@
       "blocks": [
         {
           "type": "resource",
-          "uri": "$CORPUS?case=$CASE",
+          "uri": "$LOCAL_PAYLOAD?case=$CASE",
           "name": "attachment.wav",
           "mimeType": "audio/wav",
-          "sizeBytes": 12,
+          "sizeBytes": 19,
           "disposition": "never"
         }
       ],

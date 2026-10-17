@@ -46,6 +46,12 @@ test('the frozen corpus has its documented shape', () => {
   const shared = structuredClone(corpus); shared.cases[1].blocks[0].uri = '$ORIGIN/case/01-never/payload';
   assert.throws(() => assertCorpus(shared), /URI shared with 01-never/);
 });
+test('the refused file: case names a payload a Host could read whole', () => {
+  const ceiling = structuredClone(corpus); ceiling.cases.find(c => c.id === '11-file-refused').maxBytes = 8;
+  assert.throws(() => assertCorpus(ceiling), /11-file-refused: the local payload must be readable whole/);
+  const declared = structuredClone(corpus); declared.cases.find(c => c.id === '11-file-refused').blocks[0].sizeBytes = 12;
+  assert.throws(() => assertCorpus(declared), /11-file-refused: the local payload must be readable whole/);
+});
 test('an observed bounded reference stub passes', () => { check(); });
 for (const lane of ['push', 'wake', 'history']) {
   test('URI and payload leak is detected on ' + lane, () => {
@@ -199,6 +205,22 @@ function successfulVerifiedReference(c) {
   return out;
 }
 const authenticatedRequest = { requests: [{ authorization: 'Bearer ' + token }], redirected: [] };
+test('a rejected field or an unsafe label in the fetch_reference result cannot pass', () => {
+  // The refused fetch's error must not echo the rejected value.
+  const field = corpusCase('field-rule-expiresAt');
+  check(field, refused());
+  const echoed = refused(); echoed.tool.error = 'refused: expiresAt ' + field.blocks[0].expiresAt;
+  assert.throws(() => check(field, echoed), /rejected expiresAt shown in the fetch_reference result/);
+  // The successful fetch's data must not carry the unsafe label.
+  const label = corpusCase('18-label-controls');
+  const fetched = () => successfulVerifiedReference({ ...label, expect: { ...label.expect, decodedBase64: label.response.bodyBase64 } });
+  check(label, fetched(), authenticatedRequest);
+  const unsafe = fetched(); unsafe.tool.data = JSON.stringify({ ...JSON.parse(unsafe.tool.data), name: label.blocks[0].name });
+  assert.throws(() => check(label, unsafe, authenticatedRequest), /unsafe display-label characters in the fetch_reference result/);
+  // Structured data is read as the model reads it, not as one opaque value.
+  const structured = fetched(); structured.tool.data = { name: label.blocks[0].name };
+  assert.throws(() => check(label, structured, authenticatedRequest), /unsafe display-label characters in the fetch_reference result/);
+});
 test('the verified-ref corpus permits stub or inline only after the fetch', () => {
   const c = corpusCase('03-verified-ref');
   for (const after of ['[ref_fixture] attachment', c.expect.decodedBase64, Buffer.from(c.expect.decodedBase64, 'base64').toString('utf8')]) {

@@ -21,6 +21,14 @@ see each other's work, converge on one digest rather than two.
 Twenty manifest vectors (fifteen positive, five negative) and four comparator
 vectors.
 
+The `bulk-reference-*` files and `check-bulk-references.mjs` are RFC-005's
+executable vectors, a separate suite with its own guide:
+[RFC-005, "Running and consuming the executable vectors"](../RFC-005-bulk-content-references.md#running-and-consuming-the-executable-vectors).
+Run them with Bun. The checker and `bulk-reference-isolation.test.mjs` load
+Agent Framework's TypeScript source through the supplied adapter, which Node's
+type stripping refuses, and the isolation test needs `MCPL_FRAMEWORK` set to
+the Framework checkout.
+
 ---
 
 ## 1. The RFC's own vector reproduces

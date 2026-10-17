@@ -67,6 +67,8 @@ const SETTINGS = {
   mode: value => MODES.has(value),
   finalAccepted: flag,
 };
+// The settings a control step can change.
+const CONTROL = ["now", "ready", "grants", "channels", "finalAccepted", "serverPrincipal", "transportEpoch", "mode"];
 
 class Rejection extends Error {
   constructor(code, message, data) {
@@ -90,6 +92,8 @@ export function advertised(mcpl) {
 
 export class InputStreamHost {
   constructor(config = {}) {
+    const unknown = Object.keys(config).find(key => !Object.hasOwn(SETTINGS, key));
+    if (unknown !== undefined) throw Error("Invalid fixture configuration: unknown setting " + unknown);
     const setting = (key, fallback) => {
       const value = Object.hasOwn(config, key) ? config[key] : fallback;
       if (!SETTINGS[key](value)) throw Error("Invalid fixture configuration: " + key);
@@ -102,7 +106,9 @@ export class InputStreamHost {
     // The Server's advertisement. The Host under test implements this profile and
     // advertises it, so admission requires the Server's as well (RFC §2.2).
     this.advertisement = setting("advertisement", { channels: { incoming: true, inputStreaming: true } });
-    // The effective grant: a change applies once its policy exchange completes.
+    // The effective grant. A control step that changes it is when the change takes
+    // effect: an expansion once its policy exchange completes, a reduction before
+    // its policy Request is sent (RFC §8).
     this.grants = setting("grants", [BASE, STREAM]);
     this.channels = copy(setting("channels", {
       "voice:lobby": { identity: "channel-lobby", generation: 1, direction: "inbound", permitted: true, senders: ["alice"] },
@@ -111,7 +117,9 @@ export class InputStreamHost {
     this.maxUpdateHz = setting("maxUpdateHz", 10);
     this.maxDurationMs = setting("maxDurationMs", 10000);
     this.maxStreams = setting("maxStreams", 16);
-    // The Host's own treatment policy; choosing incremental is its explicit opt-in (RFC §9).
+    // The Host's own treatment policy for new leases (RFC §9). The model has no
+    // recipients, so it can't show the per-recipient opt-in incremental needs, and
+    // permits an incremental lease what it permits a prepare one.
     this.mode = setting("mode", "volatile");
     this.finalAccepted = setting("finalAccepted", true);
     this.streams = new Map();
@@ -171,8 +179,9 @@ export class InputStreamHost {
       else {
         // Policy that isn't ready rejects calls meanwhile, but it isn't one of RFC
         // §8's invalidations, so the sweep leaves the ready state out: the lease
-        // stands through a lapse, and its deadline still runs. A revocation ends it
-        // whether or not policy is ready.
+        // stands through a lapse, with what its receipt permits, and its deadline
+        // still runs. Each of §8's invalidations ends it whether or not policy is
+        // ready.
         try {
           this.checkGrant();
           const channel = this.channelFor(stream.open.channelId, stream.open.sender.id);
@@ -186,14 +195,22 @@ export class InputStreamHost {
   }
 
   control(change) {
-    for (const key of ["now", "ready", "grants", "channels", "finalAccepted", "serverPrincipal", "transportEpoch", "mode"]) {
+    if (!object(change)) throw Error("Invalid fixture control: not an object");
+    const unknown = Object.keys(change).find(key => !CONTROL.includes(key));
+    if (unknown !== undefined) throw Error("Invalid fixture control: unknown member " + unknown);
+    for (const key of CONTROL) {
       if (key in change && !SETTINGS[key](change[key])) throw Error("Invalid fixture control: " + key);
     }
-    if ("now" in change) {
-      if (change.now < this.now) throw Error("Fixture clock must be monotonic");
-      this.now = change.now;
-    }
+    // Every refusal comes before any change, so a refused step changes nothing.
+    if ("now" in change && change.now < this.now) throw Error("Fixture clock must be monotonic");
     if ("serverPrincipal" in change && !("transportEpoch" in change)) throw Error("A principal change requires a fresh connection");
+    if ("transportEpoch" in change && change.transportEpoch === this.epoch) throw Error("Reconnect needs a fresh epoch");
+    if ("now" in change) {
+      this.now = change.now;
+      // A lease whose deadline the new time has reached expired before this
+      // step's other changes, so none of them ends it as aborted instead.
+      this.sweep();
+    }
     for (const key of ["ready", "grants", "channels", "finalAccepted", "serverPrincipal", "mode"]) {
       if (key in change) this[key] = copy(change[key]);
     }
@@ -207,7 +224,6 @@ export class InputStreamHost {
       }
     }
     if ("transportEpoch" in change) {
-      if (change.transportEpoch === this.epoch) throw Error("Reconnect needs a fresh epoch");
       for (const stream of this.streams.values()) {
         if (stream.status === "open") this.terminate(stream, "aborted");
       }

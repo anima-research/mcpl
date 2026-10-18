@@ -153,7 +153,7 @@ Open's response establishes the lease, and the Host binds open to the receiving 
 
 The Host reserves `streamId` within the connection epoch and the canonical key `(authenticated Server principal, registered channel identity, messageId)` when it accepts open. Another stream cannot reserve the same canonical key concurrently. Ordinary `channels/incoming` and streamed completion MUST use the same canonical reservation and deduplication namespace. An open reservation prevents ordinary incoming from independently committing that key; a committed key prevents a second commit through either path. The registered channel identity is the Host's stable identity for the underlying channel, distinct from the registration generation. Reconnecting or re-registering the same underlying channel does not create a new canonical deduplication namespace. Textually identical channel IDs on unrelated connections do not by themselves establish the same registered channel identity.
 
-While the stream is still open, retrying open with identical parsed params and JSON object member order ignored returns the original result. The request ID may differ. It does not allocate another lease, extend expiry, or reset limits. An identical open retry after a terminal transition returns `terminal`; it does not reopen the stream. Reusing that `streamId` with different params returns `conflict`. Authorization and expiry checks precede replay or terminal handling. An open retry's params are validated as any open's are, before its stream's expiry is checked: RFC §11's order for an existing stream begins with the lease envelope, which only the later methods carry.
+While the stream is still open, retrying open with identical parsed params and JSON object member order ignored returns the original result. The request ID may differ. It does not allocate another lease, extend expiry, or reset limits. An identical open retry after a terminal transition returns `terminal`; it does not reopen the stream. Reusing that `streamId` with different params returns `conflict`. Authorization and expiry checks precede replay or terminal handling. An open retry's params are validated as any open's are, before its stream's expiry is checked: RFC §11's order for an existing stream needs the call's lease ID, which only the later methods carry.
 
 A Host MUST bound both concurrent leases and retained epoch identifiers. When admitting another stream would exceed those budgets, it rejects open with `resource_limit`. It MUST NOT evict an identifier and then treat its replay as a new stream. Both the stream identifier and its canonical-key reservation remain reserved through the epoch after abort or expiry. Terminal identifiers likewise remain reserved until the epoch ends; transcript bodies need not remain (RFC §10).
 
@@ -202,7 +202,7 @@ The producer coalesces replacement hypotheses before transmission. It SHOULD kee
 
 `rate_limited` rejects the attempted advance without changing the current revision, text, or last acceptance time. A producer sends the newest complete snapshot at its next permitted slot. It does not replay every intermediate vendor result.
 
-Complete and abort bypass this update cadence. An utterance ending immediately after an update must be able to terminate immediately. Those methods still enforce authorization, envelope, size where applicable, and expiry.
+Complete and abort bypass this update cadence. An utterance ending immediately after an update must be able to terminate immediately. Those methods still enforce authorization, the lease, size where applicable, and expiry.
 
 ## 6. Completion and canonical ingestion
 
@@ -298,7 +298,7 @@ Default treatment is `volatile` where useful, otherwise `final-only`. The produc
 
 By default, provisional text enters neither Chronicle nor another durable conversation log, autobiographical compression, ordinary model context, or ordinary wake rules. Incremental mode requires a separate explicit Host policy opt-in for the recipient. Its results remain provisional and must not authorize ordinary speech or external action. The protocol grant alone does not supply that opt-in.
 
-A Host MUST reuse what it prepared from a provisional snapshot only for an accepted final of the same lease, at that snapshot's revision with that text, under current policy. A final with a newer revision invalidates older preparation even when its text happens to match. Otherwise the Host discards or recomputes it. Abort, expiry, and invalidation always discard it.
+A Host MAY reuse a preparation made from a provisional snapshot for an accepted final of the same lease, at that snapshot's revision with that text, under current policy. For any other final it MUST NOT reuse the preparation, and discards or recomputes it. A final with a newer revision invalidates older preparation even when its text happens to match. Abort, expiry, and invalidation always discard it.
 
 Floor and addressing evidence may change provisionally. An ordinary speech grant waits for an accepted final utterance or authenticated utterance-end/VAD-end evidence under Host policy, unless the room contract explicitly permits interruption. Provisional text, guessed mentions, or producer tags cannot mint that authority. A Host must distinguish preparation from publishing a response.
 
@@ -327,7 +327,7 @@ This RFC proposes `-32025` for the experimental lifecycle; it is not added to SP
 | `data.reason` | Meaning |
 |---|---|
 | `not_ready` | Required policy negotiation is incomplete. |
-| `unknown_stream` | No such stream is known in this epoch. |
+| `unknown_stream` | No stream with this ID was opened on the receiving connection. |
 | `lease_mismatch` | The lease ID isn't the stream's. |
 | `expired` | The effective deadline has passed or was reached. |
 | `terminal` | The stream ended and this is not its exact terminal retry. |

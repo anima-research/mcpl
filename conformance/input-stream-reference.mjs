@@ -122,7 +122,8 @@ export class InputStreamHost {
     this.maxStreams = setting("maxStreams", 16);
     // The Host's own treatment policy for new leases (RFC §9). The model has no
     // recipients, so it can't show the per-recipient opt-in incremental needs, and
-    // permits an incremental lease what it permits a prepare one.
+    // nothing here prepares or infers, so a prepare or incremental lease differs
+    // from a volatile one only in which narrowings end it.
     this.mode = setting("mode", "volatile");
     this.finalAccepted = setting("finalAccepted", true);
     this.streams = new Map();

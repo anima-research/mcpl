@@ -29,7 +29,7 @@ export function assertSubset(actual, expected, path = "state") {
 const CORPUS_KEYS = ["profile", "description", "defaults", "advertisements", "traces"];
 const VECTOR_KEYS = ["name", "input", "expect"];
 const TRACE_KEYS = ["name", "description", "config", "steps"];
-const STEP_KEYS = ["control", "prepare", "method", "params", "expect", "expectState"];
+const STEP_KEYS = ["control", "method", "params", "expect", "expectState"];
 function assertKeys(value, keys, what, required = []) {
   assert.ok(plainObject(value), what + " is an object");
   for (const key of Object.keys(value)) assert.ok(keys.includes(key), what + " has unknown member " + key);
@@ -133,24 +133,6 @@ const openParams = {
   streamId: "s", channelId: "voice:lobby", messageId: "m", sender: { id: "alice" },
   contentType: "text/plain", startedAt: 900, expiresAt: 5000,
 };
-const leaseParams = {
-  streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",
-  channelId: "voice:lobby", senderId: "alice", contentType: "text/plain",
-  startedAt: 900, expiresAt: 5000,
-};
-// A lease keeps the mode its receipt announced, so broadening the Host's mode
-// afterwards doesn't make a volatile lease's snapshot one it may prepare.
-const broadened = new InputStreamHost();
-assert.equal(broadened.request("open", openParams).result.mode, "volatile");
-assertions++;
-assert.deepEqual(broadened.request("update", { ...leaseParams, revision: 1, text: "red" }),
-  { result: { accepted: true, status: "updated", revision: 1 } });
-assertions++;
-broadened.control({ mode: "prepare" });
-assert.throws(() => broadened.prepare("s"), /no permitted snapshot/,
-  "a lease opened as volatile isn't prepared after the mode broadens");
-assertions++;
-apiChecks++;
 // A new server principal comes only with a new connection.
 assert.throws(() => new InputStreamHost().control({ serverPrincipal: "server-2" }),
   /A principal change requires a fresh connection$/, "a principal change without a new epoch is refused");
@@ -158,17 +140,14 @@ apiChecks++;
 assertions++;
 const shortLease = new InputStreamHost({ maxDurationMs: 1 });
 assert.deepEqual(shortLease.request("open", openParams), { result: {
-  accepted: true, streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",
+  accepted: true, streamId: "s", leaseId: "lease-1",
   expiresAt: 1001, maxUpdateHz: 10, maxChars: 100, mode: "volatile",
 } }, "minimum integer duration opens a future lease");
 assertions++;
 assert.deepEqual(shortLease.request("complete", {
-  streamId: "s", transportEpoch: "epoch-1", leaseId: "lease-1",
-  channelId: "voice:lobby", senderId: "alice", contentType: "text/plain",
-  startedAt: 900, expiresAt: 1001, revision: 1, text: "",
+  streamId: "s", leaseId: "lease-1", revision: 1, text: "",
 }), { result: {
   accepted: true, status: "completed", messageId: "m", revision: 1,
-  contentDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 } }, "minimum integer duration permits completion before expiry");
 assertions++;
 apiChecks++;
@@ -207,7 +186,6 @@ for (const [index, trace] of vectors.traces.entries()) {
     assertKeys(step, STEP_KEYS, "the step");
     assert.ok(Object.keys(step).length > 0, "the step isn't empty");
     if (Object.hasOwn(step, "control")) host.control(step.control);
-    if (Object.hasOwn(step, "prepare")) host.prepare(step.prepare);
     if (Object.hasOwn(step, "method")) {
       assert.ok(typeof step.method === "string" && step.method.startsWith("channels/input/"), "the step names an input method");
       assert.ok(Object.hasOwn(step, "params"), "the step has params");

@@ -1,6 +1,6 @@
 {
   "profile": "rfc-012-text-input",
-  "description": "Synthetic experimental RFC-012 request traces. The reference host is deterministic: epoch-1, lease-1 onward, clock in Unix ms. Each trace starts fresh. Control and prepare are trusted host-side stimuli, never wire methods. Nonempty expected state objects are partial assertions; empty objects and arrays compare exactly. There is no Portal/STT or production-host validation claim.",
+  "description": "Synthetic experimental RFC-012 request traces. The reference host is deterministic: epoch-1, lease-1 onward, clock in Unix ms. Each trace starts fresh. Control steps are trusted host-side stimuli, never wire methods. Nonempty expected state objects are partial assertions; empty objects and arrays compare exactly. There is no Portal/STT or production-host validation claim.",
   "defaults": {
     "now": 1000,
     "transportEpoch": "epoch-1",
@@ -142,7 +142,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -158,22 +157,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "I want red"
           },
@@ -192,9 +183,7 @@
                 "provisional": "I want red"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -206,13 +195,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "I want blue"
           },
@@ -231,22 +214,14 @@
                 "provisional": "I want blue"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "I want blue"
           },
@@ -255,8 +230,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:5d599f44e2706a6f5c2ec9d63706fe1cd5179df63f1e2b2325ebf63cf37b1a7e"
+              "revision": 2
             }
           },
           "expectState": {
@@ -290,13 +264,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "I want blue"
           },
@@ -305,8 +273,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:5d599f44e2706a6f5c2ec9d63706fe1cd5179df63f1e2b2325ebf63cf37b1a7e"
+              "revision": 2
             }
           },
           "expectState": {
@@ -354,7 +321,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -370,22 +336,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "Hello"
           },
@@ -394,8 +352,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+              "revision": 1
             }
           },
           "expectState": {
@@ -446,7 +403,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -462,22 +418,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "Hello"
           },
@@ -496,22 +444,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "Hello"
           },
@@ -520,8 +460,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+              "revision": 1
             }
           },
           "expectState": {
@@ -568,7 +507,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -584,22 +522,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "new"
           },
@@ -615,13 +545,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "new"
           },
@@ -640,22 +564,14 @@
                 "provisional": "new"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "old"
           },
@@ -674,22 +590,14 @@
                 "provisional": "new"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "different"
           },
@@ -710,9 +618,7 @@
                 "provisional": "new"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -739,7 +645,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -755,22 +660,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "draft"
           },
@@ -786,13 +683,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "final"
           },
@@ -813,22 +704,14 @@
                 "provisional": "draft"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "final"
           },
@@ -837,8 +720,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:2443630b4620165c8b173e7265e17526fe2787ae594364dd6d839ad58f2fc007"
+              "revision": 2
             }
           },
           "expectState": {
@@ -885,7 +767,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -901,22 +782,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 3,
             "text": "latest"
           },
@@ -932,13 +805,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "old"
           },
@@ -959,22 +826,14 @@
                 "provisional": "latest"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "cancelled"
           },
@@ -995,22 +854,14 @@
                 "provisional": "latest"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 3,
             "reason": "cancelled"
           },
@@ -1045,7 +896,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -1061,22 +911,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "never finished"
           },
@@ -1092,13 +934,7 @@
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "cancelled"
           },
@@ -1116,22 +952,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "cancelled"
           },
@@ -1149,22 +977,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "never finished"
           },
@@ -1185,22 +1005,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "late"
           },
@@ -1221,22 +1033,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "source_error"
           },
@@ -1257,9 +1061,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -1286,7 +1088,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -1302,22 +1103,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "one"
           },
@@ -1333,13 +1126,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "two"
           },
@@ -1360,22 +1147,14 @@
                 "provisional": "one"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "two"
           },
@@ -1384,8 +1163,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:3fc4ccfe745870e2c0d99f71f30ff0656c8dedd41cc1d7d3d376b0dbe685e2f3"
+              "revision": 2
             }
           },
           "expectState": {
@@ -1432,7 +1210,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -1448,22 +1225,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "one"
           },
@@ -1484,13 +1253,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "two"
           },
@@ -1513,13 +1276,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "two"
           },
@@ -1538,9 +1295,7 @@
                 "provisional": "two"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -1567,7 +1322,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -1583,22 +1337,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -1622,22 +1368,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -1658,9 +1396,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -1694,16 +1430,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
     },
     {
       "name": "host-shortens-expiry",
-      "description": "Every later packet must echo the effective expiry, not the requested one.",
+      "description": "The host's shortened deadline, not the requested one, ends the lease.",
       "config": {
         "maxDurationMs": 1000
       },
@@ -1726,7 +1460,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 2000,
               "maxUpdateHz": 10,
@@ -1742,58 +1475,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "wrong expiry"
-          },
-          "expect": {
-            "error": {
-              "code": -32025,
-              "message": "Input stream rejected",
-              "data": {
-                "reason": "lease_mismatch"
-              }
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 2000,
             "revision": 1,
             "text": "right expiry"
           },
@@ -1812,16 +1501,57 @@
                 "provisional": "right expiry"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
+          }
+        },
+        {
+          "control": {
+            "now": 2000
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 2,
+            "text": "too late"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "expired"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
           }
         }
       ]
     },
     {
       "name": "reconnect-invalidates-lease",
-      "description": "An epoch change aborts provisional state and old packets do not acquire the new connection.",
+      "description": "An epoch change aborts provisional state, and the new epoch doesn't know the old stream.",
       "steps": [
         {
           "method": "channels/input/open",
@@ -1841,7 +1571,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -1857,22 +1586,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -1890,22 +1611,14 @@
           },
           "expectState": {
             "streams": {},
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -1914,7 +1627,7 @@
               "code": -32025,
               "message": "Input stream rejected",
               "data": {
-                "reason": "lease_mismatch"
+                "reason": "unknown_stream"
               }
             }
           },
@@ -1932,13 +1645,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unadmitted"
           },
@@ -1980,7 +1687,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -1996,22 +1702,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2037,22 +1735,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2073,9 +1763,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -2090,13 +1778,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2117,9 +1799,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -2146,7 +1826,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -2162,22 +1841,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2211,22 +1882,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2235,7 +1898,7 @@
               "code": -32025,
               "message": "Input stream rejected",
               "data": {
-                "reason": "lease_mismatch"
+                "reason": "terminal"
               }
             }
           },
@@ -2247,9 +1910,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -2276,7 +1937,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -2292,22 +1952,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2339,22 +1991,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2372,9 +2016,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -2401,7 +2043,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -2417,22 +2058,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2456,22 +2089,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -2489,16 +2114,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
     },
     {
       "name": "mismatched-leaseId",
-      "description": "A lifecycle packet must match every echoed lease fact.",
+      "description": "A lifecycle packet must carry its stream's lease.",
       "steps": [
         {
           "method": "channels/input/open",
@@ -2518,7 +2141,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -2534,22 +2156,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-other",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "forged"
           },
@@ -2570,450 +2184,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "mismatched-transportEpoch",
-      "description": "A lifecycle packet must match every echoed lease fact.",
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "volatile"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-other",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "forged"
-          },
-          "expect": {
-            "error": {
-              "code": -32025,
-              "message": "Input stream rejected",
-              "data": {
-                "reason": "lease_mismatch"
-              }
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "mismatched-startedAt",
-      "description": "A lifecycle packet must match every echoed lease fact.",
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "volatile"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 901,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "forged"
-          },
-          "expect": {
-            "error": {
-              "code": -32025,
-              "message": "Input stream rejected",
-              "data": {
-                "reason": "lease_mismatch"
-              }
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "mismatched-expiresAt",
-      "description": "A lifecycle packet must match every echoed lease fact.",
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "volatile"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5001,
-            "revision": 1,
-            "text": "forged"
-          },
-          "expect": {
-            "error": {
-              "code": -32025,
-              "message": "Input stream rejected",
-              "data": {
-                "reason": "lease_mismatch"
-              }
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "sender-substitution",
-      "description": "Even another permitted sender cannot complete somebody else's lease.",
-      "config": {
-        "channels": {
-          "voice:lobby": {
-            "generation": 1,
-            "permitted": true,
-            "senders": [
-              "alice",
-              "bob"
-            ],
-            "identity": "channel-lobby",
-            "direction": "inbound"
-          }
-        }
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "volatile"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "bob",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "forged"
-          },
-          "expect": {
-            "error": {
-              "code": -32025,
-              "message": "Input stream rejected",
-              "data": {
-                "reason": "lease_mismatch"
-              }
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "channel-substitution",
-      "description": "Even another permitted channel cannot receive a final through this lease.",
-      "config": {
-        "channels": {
-          "voice:lobby": {
-            "generation": 1,
-            "permitted": true,
-            "senders": [
-              "alice"
-            ],
-            "identity": "channel-lobby",
-            "direction": "inbound"
-          },
-          "voice:other": {
-            "generation": 1,
-            "permitted": true,
-            "senders": [
-              "alice"
-            ],
-            "identity": "channel:voice:other",
-            "direction": "inbound"
-          }
-        }
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "volatile"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:other",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "forged"
-          },
-          "expect": {
-            "error": {
-              "code": -32025,
-              "message": "Input stream rejected",
-              "data": {
-                "reason": "lease_mismatch"
-              }
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -3040,7 +2211,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -3056,9 +2226,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -3084,7 +2252,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -3100,9 +2267,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -3136,9 +2301,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -3165,7 +2328,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -3181,9 +2343,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -3217,9 +2377,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -3246,7 +2404,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -3262,22 +2419,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "done"
           },
@@ -3286,8 +2435,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:a4c3ed04a95a3da14a9d235c83d868bed7c0f45cf7f3faa751ee8f50598d2211"
+              "revision": 1
             }
           }
         },
@@ -3363,7 +2511,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -3379,22 +2526,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "done"
           },
@@ -3403,8 +2542,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:a4c3ed04a95a3da14a9d235c83d868bed7c0f45cf7f3faa751ee8f50598d2211"
+              "revision": 1
             }
           }
         },
@@ -3417,13 +2555,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "done"
           },
@@ -3483,7 +2615,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -3499,22 +2630,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "cancelled"
           },
@@ -3556,9 +2679,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -3588,7 +2709,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -3604,22 +2724,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "draft"
           },
@@ -3635,13 +2747,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "draft"
           },
@@ -3662,9 +2768,7 @@
                 "provisional": "draft"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -3676,13 +2780,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "accepted"
           },
@@ -3691,8 +2789,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:070c160a6299c5438070b1aa737b14fc2992ed49579c14264884886a5876f971"
+              "revision": 2
             }
           },
           "expectState": {
@@ -3713,476 +2810,6 @@
                 ]
               }
             ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "prepare-reused-only-for-exact-final",
-      "description": "Matching stream, revision, digest, and bound subject permit prepared work to be reused.",
-      "config": {
-        "mode": "prepare"
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "prepare"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "updated",
-              "revision": 1
-            }
-          }
-        },
-        {
-          "prepare": "s1",
-          "expectState": {
-            "prepared": {
-              "s1": {
-                "revision": 1,
-                "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
-              }
-            }
-          }
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "completed",
-              "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
-            }
-          },
-          "expectState": {
-            "messages": [
-              {
-                "channelId": "voice:lobby",
-                "messageId": "m1",
-                "author": {
-                  "id": "alice",
-                  "name": "Alice"
-                },
-                "timestamp": "1970-01-01T00:00:00.900Z",
-                "content": [
-                  {
-                    "type": "text",
-                    "text": "Hello"
-                  }
-                ]
-              }
-            ],
-            "prepared": {},
-            "usedPreparation": [
-              "s1"
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "prepare-discarded-for-new-revision",
-      "description": "Identical text at a different revision does not license a stale prepared artifact.",
-      "config": {
-        "mode": "prepare"
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "prepare"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "updated",
-              "revision": 1
-            }
-          }
-        },
-        {
-          "prepare": "s1"
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 2,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "completed",
-              "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
-            }
-          },
-          "expectState": {
-            "messages": [
-              {
-                "channelId": "voice:lobby",
-                "messageId": "m1",
-                "author": {
-                  "id": "alice",
-                  "name": "Alice"
-                },
-                "timestamp": "1970-01-01T00:00:00.900Z",
-                "content": [
-                  {
-                    "type": "text",
-                    "text": "Hello"
-                  }
-                ]
-              }
-            ],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "prepare-discarded-for-different-content",
-      "description": "Revised final words invalidate a provisional response.",
-      "config": {
-        "mode": "prepare"
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "prepare"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "updated",
-              "revision": 1
-            }
-          }
-        },
-        {
-          "prepare": "s1"
-        },
-        {
-          "method": "channels/input/complete",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 2,
-            "text": "Goodbye"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "completed",
-              "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:c015ad6ddaf8bb50689d2d7cbf1539dff6dd84473582a08ed1d15d841f4254f4"
-            }
-          },
-          "expectState": {
-            "messages": [
-              {
-                "channelId": "voice:lobby",
-                "messageId": "m1",
-                "author": {
-                  "id": "alice",
-                  "name": "Alice"
-                },
-                "timestamp": "1970-01-01T00:00:00.900Z",
-                "content": [
-                  {
-                    "type": "text",
-                    "text": "Goodbye"
-                  }
-                ]
-              }
-            ],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "abort-clears-preparation",
-      "description": "An aborted hypothesis leaves no usable artifact or authored message.",
-      "config": {
-        "mode": "prepare"
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "prepare"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "updated",
-              "revision": 1
-            }
-          }
-        },
-        {
-          "prepare": "s1"
-        },
-        {
-          "method": "channels/input/abort",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "reason": "cancelled"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "aborted"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "aborted",
-                "revision": 1,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
           }
         }
       ]
@@ -4212,7 +2839,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4228,22 +2854,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "🙂a"
           },
@@ -4262,22 +2880,14 @@
                 "provisional": "🙂a"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "éx"
           },
@@ -4298,22 +2908,14 @@
                 "provisional": "🙂a"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "é"
           },
@@ -4322,8 +2924,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:bf12767b0f2a56b2190075bae8169f656e3ce8d6357d4aff184bc6c7ea48f9f6"
+              "revision": 2
             }
           },
           "expectState": {
@@ -4350,7 +2951,7 @@
     },
     {
       "name": "unicode-is-not-normalized",
-      "description": "The final digest preserves precomposed versus decomposed UTF-8 content exactly.",
+      "description": "The host compares and stores precomposed and decomposed text exactly as sent.",
       "steps": [
         {
           "method": "channels/input/open",
@@ -4370,7 +2971,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4386,22 +2986,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "é"
           },
@@ -4417,13 +3009,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "é"
           },
@@ -4444,22 +3030,14 @@
                 "provisional": "é"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "é"
           },
@@ -4468,8 +3046,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 2,
-              "contentDigest": "sha256:bf12767b0f2a56b2190075bae8169f656e3ce8d6357d4aff184bc6c7ea48f9f6"
+              "revision": 2
             }
           },
           "expectState": {
@@ -4516,7 +3093,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4532,22 +3108,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "\ud800"
           },
@@ -4565,22 +3133,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "\ud800"
           },
@@ -4598,9 +3158,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -4627,7 +3185,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4643,22 +3200,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "\udfff"
           },
@@ -4676,22 +3225,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "\udfff"
           },
@@ -4709,9 +3250,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -4738,7 +3277,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4754,22 +3292,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": ""
           },
@@ -4778,8 +3308,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              "revision": 1
             }
           },
           "expectState": {
@@ -4826,7 +3355,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4842,22 +3370,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 0,
             "text": "bad"
           },
@@ -4875,9 +3395,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -4904,7 +3422,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4920,22 +3437,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1.5,
             "text": "bad"
           },
@@ -4953,9 +3462,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -4982,7 +3489,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -4998,22 +3504,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 9007199254740992,
             "text": "bad"
           },
@@ -5031,9 +3529,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -5060,7 +3556,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -5076,22 +3571,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1
           },
           "expect": {
@@ -5108,9 +3595,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -5137,7 +3622,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -5153,22 +3637,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": []
           },
@@ -5186,9 +3662,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -5215,7 +3689,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -5231,22 +3704,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "bad",
             "tags": [
@@ -5267,87 +3732,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "invalid-wrong-content-type",
-      "description": "Malformed lifecycle fields cannot change admitted state.",
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "volatile"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "application/json",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "bad"
-          },
-          "expect": {
-            "error": {
-              "code": -32602,
-              "message": "Invalid params"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -5374,7 +3759,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -5390,22 +3774,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "take-this-as-final"
           },
@@ -5423,9 +3799,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -5857,7 +4231,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -5873,22 +4246,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "Hello"
           },
@@ -5897,8 +4262,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+              "revision": 1
             }
           },
           "expectState": {
@@ -5945,7 +4309,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -5961,9 +4324,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -5977,13 +4338,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
@@ -6004,9 +4359,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -6033,7 +4386,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -6049,22 +4401,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "cancelled"
           },
@@ -6106,9 +4450,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -6142,9 +4484,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -6171,7 +4511,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -6187,22 +4526,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "first"
           },
@@ -6211,8 +4542,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e"
+              "revision": 1
             }
           }
         },
@@ -6220,13 +4550,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "second"
           },
@@ -6263,13 +4587,7 @@
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "cancelled"
           },
@@ -6326,7 +4644,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -6342,22 +4659,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "first"
           },
@@ -6366,8 +4675,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e"
+              "revision": 1
             }
           }
         },
@@ -6454,7 +4762,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -6470,22 +4777,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "first"
           },
@@ -6494,8 +4793,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e"
+              "revision": 1
             }
           }
         },
@@ -6533,7 +4831,6 @@
             "result": {
               "accepted": true,
               "streamId": "s2",
-              "transportEpoch": "epoch-2",
               "leaseId": "lease-2",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -6546,13 +4843,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s2",
-            "transportEpoch": "epoch-2",
             "leaseId": "lease-2",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "second"
           },
@@ -6561,8 +4852,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4"
+              "revision": 1
             }
           },
           "expectState": {
@@ -6624,7 +4914,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -6640,22 +4929,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "first"
           },
@@ -6664,8 +4945,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e"
+              "revision": 1
             }
           }
         },
@@ -6693,7 +4973,6 @@
             "result": {
               "accepted": true,
               "streamId": "s2",
-              "transportEpoch": "epoch-2",
               "leaseId": "lease-2",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -6706,13 +4985,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s2",
-            "transportEpoch": "epoch-2",
             "leaseId": "lease-2",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "second"
           },
@@ -6721,8 +4994,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4"
+              "revision": 1
             }
           },
           "expectState": {
@@ -7138,7 +5410,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -7154,22 +5425,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -7185,13 +5448,7 @@
           "method": "channels/input/abort",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "reason": "cancelled"
           },
@@ -7209,9 +5466,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -7238,7 +5493,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -7254,22 +5508,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "small"
           },
@@ -7285,13 +5531,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
@@ -7312,9 +5552,7 @@
                 "provisional": "small"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -7341,7 +5579,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -7357,22 +5594,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "done"
           },
@@ -7381,8 +5610,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:a4c3ed04a95a3da14a9d235c83d868bed7c0f45cf7f3faa751ee8f50598d2211"
+              "revision": 1
             }
           }
         },
@@ -7397,13 +5625,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "done"
           },
@@ -7439,283 +5661,6 @@
       ]
     },
     {
-      "name": "accepted-update-discards-preparation-immediately",
-      "description": "Superseding a hypothesis clears its artifact before any final arrives.",
-      "config": {
-        "mode": "prepare"
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "prepare"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "updated",
-              "revision": 1
-            }
-          }
-        },
-        {
-          "prepare": "s1"
-        },
-        {
-          "control": {
-            "now": 1100
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 2,
-            "text": "Hello again"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "updated",
-              "revision": 2
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 2,
-                "provisional": "Hello again"
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "ignored-or-rejected-update-preserves-preparation",
-      "description": "Duplicate, stale, and rate-rejected updates do not supersede an accepted artifact.",
-      "config": {
-        "mode": "prepare"
-      },
-      "steps": [
-        {
-          "method": "channels/input/open",
-          "params": {
-            "streamId": "s1",
-            "channelId": "voice:lobby",
-            "messageId": "m1",
-            "sender": {
-              "id": "alice",
-              "name": "Alice"
-            },
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "streamId": "s1",
-              "transportEpoch": "epoch-1",
-              "leaseId": "lease-1",
-              "expiresAt": 5000,
-              "maxUpdateHz": 10,
-              "maxChars": 100,
-              "mode": "prepare"
-            }
-          },
-          "expectState": {
-            "streams": {
-              "s1": {
-                "status": "open",
-                "revision": 0,
-                "provisional": null
-              }
-            },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 2,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "updated",
-              "revision": 2
-            }
-          }
-        },
-        {
-          "prepare": "s1"
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 2,
-            "text": "Hello"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "duplicate",
-              "revision": 2
-            }
-          },
-          "expectState": {
-            "prepared": {
-              "s1": {
-                "revision": 2,
-                "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
-              }
-            }
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "old"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "stale",
-              "revision": 2
-            }
-          },
-          "expectState": {
-            "prepared": {
-              "s1": {
-                "revision": 2,
-                "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
-              }
-            }
-          }
-        },
-        {
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 3,
-            "text": "Too soon"
-          },
-          "expect": {
-            "error": {
-              "code": -32025,
-              "message": "Input stream rejected",
-              "data": {
-                "reason": "rate_limited"
-              }
-            }
-          },
-          "expectState": {
-            "prepared": {
-              "s1": {
-                "revision": 2,
-                "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
-              }
-            }
-          }
-        }
-      ]
-    },
-    {
       "name": "stable-binding-change-invalidates-lease",
       "description": "Changing the trusted underlying channel invalidates a lease even if generation was not incremented.",
       "steps": [
@@ -7737,7 +5682,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -7753,22 +5697,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -7802,22 +5738,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -7826,7 +5754,7 @@
               "code": -32025,
               "message": "Input stream rejected",
               "data": {
-                "reason": "lease_mismatch"
+                "reason": "terminal"
               }
             }
           },
@@ -7838,9 +5766,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         }
       ]
@@ -7942,7 +5868,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -7958,22 +5883,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "__proto__",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "Hello"
           },
@@ -7982,8 +5899,7 @@
               "accepted": true,
               "status": "completed",
               "messageId": "m1",
-              "revision": 1,
-              "contentDigest": "sha256:185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+              "revision": 1
             }
           },
           "expectState": {
@@ -8030,7 +5946,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -8046,13 +5961,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8083,13 +5992,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8134,7 +6037,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -8150,22 +6052,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -8189,9 +6083,7 @@
                 "provisional": "unfinished"
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -8208,22 +6100,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "unfinished"
           },
@@ -8244,9 +6128,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           },
           "control": {
             "ready": true,
@@ -8280,7 +6162,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -8296,9 +6177,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
@@ -8316,22 +6195,14 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           }
         },
         {
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "done"
           },
@@ -8352,9 +6223,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {},
-            "usedPreparation": []
+            "messages": []
           },
           "control": {
             "ready": true,
@@ -8388,7 +6257,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -8401,13 +6269,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8449,13 +6311,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "hello there"
           },
@@ -8485,13 +6341,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8539,7 +6389,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -8552,13 +6401,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8625,13 +6468,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8679,7 +6516,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -8692,13 +6528,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8764,13 +6594,7 @@
           "method": "channels/input/complete",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "hello"
           },
@@ -8779,7 +6603,7 @@
               "code": -32025,
               "message": "Input stream rejected",
               "data": {
-                "reason": "lease_mismatch"
+                "reason": "terminal"
               }
             }
           },
@@ -8920,7 +6744,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -8938,13 +6761,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 0,
             "text": "hello"
           },
@@ -8994,7 +6811,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -9007,13 +6823,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "red"
           },
@@ -9026,50 +6836,13 @@
           }
         },
         {
-          "prepare": "s1",
-          "method": "channels/input/update",
-          "params": {
-            "streamId": "s1",
-            "transportEpoch": "epoch-1",
-            "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
-            "revision": 1,
-            "text": "red"
-          },
-          "expect": {
-            "result": {
-              "accepted": true,
-              "status": "duplicate",
-              "revision": 1
-            }
-          },
-          "expectState": {
-            "prepared": {
-              "s1": {
-                "revision": 1,
-                "contentDigest": "sha256:b1f51a511f1da0cd348b8f8598db32e61cb963e5fc69e2b41485bf99590ed75a"
-              }
-            }
-          }
-        },
-        {
           "control": {
             "mode": "volatile"
           },
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 2,
             "text": "red car"
           },
@@ -9090,8 +6863,7 @@
                 "provisional": null
               }
             },
-            "messages": [],
-            "prepared": {}
+            "messages": []
           }
         },
         {
@@ -9112,7 +6884,6 @@
             "result": {
               "accepted": true,
               "streamId": "s2",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-2",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -9154,7 +6925,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -9202,7 +6972,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 2000,
               "maxUpdateHz": 10,
@@ -9296,7 +7065,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -9332,7 +7100,6 @@
             "result": {
               "accepted": true,
               "streamId": "s1",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-1",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -9345,13 +7112,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s1",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-1",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "red"
           },
@@ -9404,7 +7165,6 @@
             "result": {
               "accepted": true,
               "streamId": "s2",
-              "transportEpoch": "epoch-1",
               "leaseId": "lease-2",
               "expiresAt": 5000,
               "maxUpdateHz": 10,
@@ -9417,13 +7177,7 @@
           "method": "channels/input/update",
           "params": {
             "streamId": "s2",
-            "transportEpoch": "epoch-1",
             "leaseId": "lease-2",
-            "channelId": "voice:lobby",
-            "senderId": "alice",
-            "contentType": "text/plain",
-            "startedAt": 900,
-            "expiresAt": 5000,
             "revision": 1,
             "text": "car"
           },
@@ -9445,6 +7199,363 @@
                 "status": "open",
                 "revision": 1,
                 "provisional": "car"
+              }
+            },
+            "messages": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "reused-stream-id-after-reconnect",
+      "description": "A stream id reused in a new epoch is a new stream: the old flow's calls, carrying the old lease, change nothing.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 1
+            }
+          }
+        },
+        {
+          "control": {
+            "transportEpoch": "epoch-2"
+          },
+          "expectState": {
+            "streams": {},
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "leaseId": "lease-2",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 2,
+            "text": "old flow"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "lease_mismatch"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 2,
+            "text": "old flow"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "lease_mismatch"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "dropped-echo-field-is-invalid",
+      "description": "A post-open call carries its stream id, lease id and revision only; a lease fact beside them is an unknown member.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "hi",
+            "channelId": "voice:lobby"
+          },
+          "expect": {
+            "error": {
+              "code": -32602,
+              "message": "Invalid params"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "hi",
+            "senderId": "alice"
+          },
+          "expect": {
+            "error": {
+              "code": -32602,
+              "message": "Invalid params"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "hi",
+            "contentType": "text/plain"
+          },
+          "expect": {
+            "error": {
+              "code": -32602,
+              "message": "Invalid params"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "hi",
+            "transportEpoch": "epoch-1"
+          },
+          "expect": {
+            "error": {
+              "code": -32602,
+              "message": "Invalid params"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "hi",
+            "startedAt": 900
+          },
+          "expect": {
+            "error": {
+              "code": -32602,
+              "message": "Invalid params"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/abort",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "reason": "cancelled",
+            "expiresAt": 5000
+          },
+          "expect": {
+            "error": {
+              "code": -32602,
+              "message": "Invalid params"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
               }
             },
             "messages": []

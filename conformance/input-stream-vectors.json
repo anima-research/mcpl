@@ -7562,6 +7562,248 @@
           }
         }
       ]
+    },
+    {
+      "name": "lease-checked-before-expiry",
+      "description": "A call whose lease isn't its stream's gets lease_mismatch even once the stream has expired, since RFC §11 checks the lease before expiry: a stale flow learns that its lease is gone.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 1
+            }
+          }
+        },
+        {
+          "control": {
+            "now": 5000
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-other",
+            "revision": 2,
+            "text": "late"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "lease_mismatch"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 2,
+            "text": "late"
+          },
+          "expect": {
+            "error": {
+              "code": -32025,
+              "message": "Input stream rejected",
+              "data": {
+                "reason": "expired"
+              }
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "channel-checked-before-expiry",
+      "description": "A late call on an expired stream whose channel has since been removed gets the channel's refusal, since RFC §11 checks the lease's own channel and sender before expiry.",
+      "steps": [
+        {
+          "method": "channels/input/open",
+          "params": {
+            "streamId": "s1",
+            "channelId": "voice:lobby",
+            "messageId": "m1",
+            "sender": {
+              "id": "alice",
+              "name": "Alice"
+            },
+            "contentType": "text/plain",
+            "startedAt": 900,
+            "expiresAt": 5000
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "streamId": "s1",
+              "leaseId": "lease-1",
+              "expiresAt": 5000,
+              "maxUpdateHz": 10,
+              "maxChars": 100,
+              "mode": "volatile"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "open",
+                "revision": 0,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/update",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "result": {
+              "accepted": true,
+              "status": "updated",
+              "revision": 1
+            }
+          }
+        },
+        {
+          "control": {
+            "now": 5000
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "control": {
+            "channels": {}
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        },
+        {
+          "method": "channels/input/complete",
+          "params": {
+            "streamId": "s1",
+            "leaseId": "lease-1",
+            "revision": 1,
+            "text": "unfinished"
+          },
+          "expect": {
+            "error": {
+              "code": -32023,
+              "message": "Unknown channel"
+            }
+          },
+          "expectState": {
+            "streams": {
+              "s1": {
+                "status": "expired",
+                "revision": 1,
+                "provisional": null
+              }
+            },
+            "messages": []
+          }
+        }
+      ]
     }
   ]
 }

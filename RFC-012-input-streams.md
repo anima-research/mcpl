@@ -93,7 +93,6 @@ The following types apply throughout this profile:
 - `revision` is a positive safe integer, at most 9007199254740991. An accepted open starts with Host revision 0 and no text. Revisions may skip numbers.
 - `contentType` is exactly `text/plain`.
 - `text` is a string of Unicode scalar values, possibly empty. Unpaired UTF-16 surrogates are invalid. `maxChars` counts Unicode scalar values, not UTF-16 code units, UTF-8 bytes, or grapheme clusters. Thus `🙂` counts as one and `e` followed by U+0301 counts as two.
-- `contentDigest` is `sha256:` followed by the 64 lowercase hexadecimal digits of SHA-256 over the exact UTF-8 encoding of `text`. No normalization, trimming, or line-ending conversion occurs.
 
 Objects defined in this RFC reject unknown members with `-32602`. JSON-RPC envelope members remain governed by MCP. Transport implementations MUST enforce a bounded frame size and parse budget before application-level content handling. The scalar-value limit alone is not a frame-size limit.
 
@@ -135,7 +134,6 @@ The Host binds the lease to that connection, the current registration generation
 	"result": {
 		"accepted": true,
 		"streamId": "utterance-17",
-		"transportEpoch": "host-connection-8",
 		"leaseId": "host-lease-31",
 		"expiresAt": 1790917230000,
 		"maxUpdateHz": 10,
@@ -145,9 +143,9 @@ The Host binds the lease to that connection, the current registration generation
 }
 ```
 
-Every result field shown is required. `maxChars` is a positive safe integer. `maxUpdateHz` is a finite positive number. The Host issues a fresh opaque `leaseId` and an opaque `transportEpoch` identifying the actual connection lifetime. IDs must not collide within the Host's relevant state. Neither ID is a bearer credential: possessing it does not replace the authenticated connection or current grant.
+Every result field shown is required. `maxChars` is a positive safe integer. `maxUpdateHz` is a finite positive number. The Host issues a fresh opaque `leaseId`, which never collides with another lease the Host has issued, on this connection or an earlier one. It isn't a bearer credential: possessing it does not replace the authenticated connection or current grant.
 
-Open is the one method that does not echo the Host epoch or lease: its response establishes them. The Host binds open to the receiving connection before returning them. Every later method echoes them and uses the effective `expiresAt`, not the requested deadline if the Host shortened it.
+Open's response establishes the lease, and the Host binds open to the receiving connection before returning it. Every later method names the stream and its lease (RFC §5.1). The lease ends at the effective `expiresAt`, not the requested deadline if the Host shortened it.
 
 `mode` states the Host's selected treatment for this lease (RFC §9). A successful open is authorization to submit within these limits, not a promise to display partials or wake the model. A refusal is a JSON-RPC error, not `{accepted:false}`, consistently with SPEC §6.6.
 
@@ -161,35 +159,27 @@ A Host MUST bound both concurrent leases and retained epoch identifiers. When ad
 
 A previously committed canonical message key remains a duplicate even across transport epochs. The Host's durable message identity and deduplication record enforce that boundary. A fresh open for an already committed key returns `conflict`, rather than creating another message. This does not require old provisional state to survive a reconnect.
 
-## 5. Shared lease envelope and replacement updates
+## 5. Naming the lease, and replacement updates
 
-### 5.1 Envelope
+### 5.1 The stream and its lease
 
-Each post-open method carries every field in this envelope:
+Each post-open method carries these fields, and `update` and `complete` add exactly one more, `text`, and `abort` exactly one, `reason`:
 
 ```json
 {
 	"streamId": "utterance-17",
-	"transportEpoch": "host-connection-8",
 	"leaseId": "host-lease-31",
-	"channelId": "portal:room-4",
-	"senderId": "speaker-7",
-	"contentType": "text/plain",
-	"startedAt": 1790917200000,
-	"expiresAt": 1790917230000,
 	"revision": 1
 }
 ```
 
-Except for `revision`, each value MUST equal the accepted lease value. This redundancy makes mismatched subject or stale transport state legible. The Host also revalidates the receiving connection, actual registration generation, authenticated sender binding, current grant, scope, and expiry on every call, including retries. Equality of the Server-supplied fields alone does not authorize a call.
-
-`messageId`, optional `threadId`, and display name come from the Host-bound lease; a later payload cannot replace them. `update` and `complete` add exactly one field, `text`. `abort` adds exactly one field, `reason`.
+The Host looks the stream up among those opened on the receiving connection, and refuses a `leaseId` that isn't that stream's with `lease_mismatch`. A producer may reuse a stream ID on a later connection, so the lease ID is what tells a late call from an earlier connection's flow apart from the new stream's. Everything else about the stream comes from its Host-bound lease: its channel, sender, final `messageId`, optional `threadId`, display name, content type, start and deadline. A later call cannot replace them. On every call, retries included, the Host revalidates the receiving connection, the actual registration generation, the authenticated sender binding, the current grant and scope, and expiry. The IDs name a lease; they don't authorize a call.
 
 ### 5.2 Update semantics
 
 `channels/input/update` carries the complete current hypothesis, not an append operation. Replacing `"turn left"` with `"turn right"` leaves only `"turn right"` as the current snapshot. A Host MUST NOT join the revisions into one utterance or interpret them as committed edits.
 
-After authorization and envelope validation, the Host applies these rules:
+After authorization and lease validation, the Host applies these rules:
 
 1. Validate text scalar values and `maxChars`, including for a stale or duplicate call.
 2. If the revision is lower than the current revision, ignore the text and return `stale`.
@@ -218,7 +208,7 @@ Complete and abort bypass this update cadence. An utterance ending immediately a
 
 ### 6.1 A full final snapshot
 
-`channels/input/complete` carries the shared envelope and the full final `text`. It may be the first text-bearing call, using any valid positive revision. An empty final string is valid, subject to the ordinary incoming-message policy.
+`channels/input/complete` carries the stream, its lease, a revision and the full final `text`. It may be the first text-bearing call, using any valid positive revision. An empty final string is valid, subject to the ordinary incoming-message policy.
 
 A final revision below the current revision returns `stale_revision`. A final revision equal to the current revision is allowed only if the text is identical. A higher final revision replaces the last provisional hypothesis. The Host does not require a matching update first and does not apply the update cadence to complete.
 
@@ -255,20 +245,19 @@ The result is:
 	"accepted": true,
 	"status": "completed",
 	"messageId": "utterance-17-final",
-	"revision": 2,
-	"contentDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	"revision": 2
 }
 ```
 
-This digest example is for an empty final string. `conversationId` is optional and, when present, comes from ordinary ingestion. Every other field shown is required.
+`conversationId` is optional and, when present, comes from ordinary ingestion. Every other field shown is required.
 
-While the lease remains valid and authorized, an exact retry of complete returns the original result unchanged. Equality is over the parsed envelope, revision, and exact text; the JSON-RPC request ID may differ. It causes neither another row nor another wake. A changed final on a completed stream returns `conflict`. Update or abort after completion returns `terminal`.
+While the lease remains valid and authorized, an exact retry of complete returns the original result unchanged. Equality is over the stream, lease, revision and exact text; the JSON-RPC request ID may differ. It causes neither another row nor another wake. A changed final on a completed stream returns `conflict`. Update or abort after completion returns `terminal`.
 
-Hosts may retain the final request identity as a digest rather than a second copy of text, using the exact digest encoding in RFC §3. The canonical final is already subject to ordinary message retention. Duplicate detection MUST use the stable canonical key as well as content identity; equal text on two different utterances is not a duplicate.
+Hosts may retain the final request's identity as a digest of its text rather than a second copy of it. The canonical final is already subject to ordinary message retention. Duplicate detection MUST use the stable canonical key as well as content identity; equal text on two different utterances is not a duplicate.
 
 ## 7. Abort and terminal ordering
 
-`channels/input/abort` carries the shared envelope and `reason`, one of `cancelled`, `no_speech`, `source_error`, or `superseded`. A free-text reason is outside this profile. Its revision MUST be at least the current revision and positive; abort before any update may use revision 1. A lower revision returns `stale_revision`.
+`channels/input/abort` carries the stream, its lease, a revision and `reason`, one of `cancelled`, `no_speech`, `source_error`, or `superseded`. A free-text reason is outside this profile. Its revision MUST be at least the current revision and positive; abort before any update may use revision 1. A lower revision returns `stale_revision`.
 
 On acceptance, the Host clears the provisional snapshot and revision-bound preparation, ends any volatile presentation, marks the stream aborted, and returns:
 
@@ -288,7 +277,7 @@ Open streams abort on disconnect, transport-epoch change, lost sender authority,
 
 A stream expires when Host time reaches its effective deadline. Equality with the deadline is expired. The Host MUST arrange deadline cleanup even if the producer sends no further calls. Cleanup is not deferred until a late update happens to arrive. Clock movement must not lengthen the accepted duration.
 
-A late call on an expired lease returns `expired` once it passes the checks RFC §11 orders before expiry. A call claiming a different epoch, lease ID, or bound envelope returns `lease_mismatch`; an identifier unknown in the current epoch returns `unknown_stream`. A mismatched packet does not itself revoke a legitimate live lease. Independently detected policy or transport invalidation does.
+A late call on an expired lease returns `expired` once it passes the checks RFC §11 orders before expiry. A call whose lease ID isn't its stream's returns `lease_mismatch`; a stream ID unknown on the receiving connection returns `unknown_stream`. A mismatched packet does not itself revoke a legitimate live lease. Independently detected policy or transport invalidation does.
 
 Expiry also ends the replay-receipt window, including for completed streams. Retained minimal epoch identifiers prevent a late open from recreating the stream. Epoch closure may release those provisional tombstones, but not the canonical message's deduplication identity.
 
@@ -305,17 +294,17 @@ The Host chooses one of these `mode` values at open. Each states a permitted upp
 | `prepare` | The `volatile` treatments plus local preparation or prefetch. |
 | `incremental` | The `prepare` treatments plus explicitly opted-in incremental inference on a separate provisional path. |
 
-Default treatment is `volatile` where useful, otherwise `final-only`. The producer cannot request a more permissive mode through payload content. The mode is fixed for the lease. A Host may consume less than it permits; a policy change requiring stricter permission invalidates the lease instead of silently leaving a wider receipt standing.
+Default treatment is `volatile` where useful, otherwise `final-only`. The producer cannot request a more permissive mode through payload content. The mode is fixed for the lease. Under `final-only` nothing reads a lease's updates, so a producer SHOULD send only `complete` or `abort` on it. A Host may consume less than it permits; a policy change requiring stricter permission invalidates the lease instead of silently leaving a wider receipt standing.
 
 By default, provisional text enters neither Chronicle nor another durable conversation log, autobiographical compression, ordinary model context, or ordinary wake rules. Incremental mode requires a separate explicit Host policy opt-in for the recipient. Its results remain provisional and must not authorize ordinary speech or external action. The protocol grant alone does not supply that opt-in.
 
-Preparation artifacts MUST be bound to `streamId + revision + contentDigest` and to the lease's authenticated subject: epoch, channel identity, sender, final message ID, and optional thread. At complete, an artifact may be reused only if all bindings still match the accepted final and current policy. A final with a newer revision invalidates older preparation even when its text happens to match. Otherwise the Host discards or recomputes the artifact. Abort, expiry, and invalidation always discard it.
+A Host MUST reuse what it prepared from a provisional snapshot only for an accepted final of the same lease, at that snapshot's revision with that text, under current policy. A final with a newer revision invalidates older preparation even when its text happens to match. Otherwise the Host discards or recomputes it. Abort, expiry, and invalidation always discard it.
 
 Floor and addressing evidence may change provisionally. An ordinary speech grant waits for an accepted final utterance or authenticated utterance-end/VAD-end evidence under Host policy, unless the room contract explicitly permits interruption. Provisional text, guessed mentions, or producer tags cannot mint that authority. A Host must distinguish preparation from publishing a response.
 
 ## 10. Privacy and resource bounds
 
-Partial transcripts may contain words a speaker did not intend to say. Process logs retain metadata only by default: stream identifier, revision or update count, duration, character/byte counts, and complete/abort disposition. They exclude text, display names, and content digests by default. Digests of short speech can disclose text through guessing.
+Partial transcripts may contain words a speaker did not intend to say. A producer that shows the speaker what it captures SHOULD show the lease's `mode` as well: under `prepare` the speaker's unfinished words may drive the Host's preparation, and under `incremental` a model may perceive them. Process logs retain metadata only by default: stream identifier, revision or update count, duration, character/byte counts, and complete/abort disposition. They exclude text, display names, and content digests by default. Digests of short speech can disclose text through guessing.
 
 The Host clears superseded bodies, volatile UI state, and preparation when they cease to be useful. Terminal and expiry cleanup retain only what replay protection needs, plus the ordinary canonical final when one exists. No provisional body becomes a durable transcript merely to diagnose or replay the protocol.
 
@@ -339,7 +328,7 @@ This RFC proposes `-32025` for the experimental lifecycle; it is not added to SP
 |---|---|
 | `not_ready` | Required policy negotiation is incomplete. |
 | `unknown_stream` | No such stream is known in this epoch. |
-| `lease_mismatch` | Epoch, lease, or bound envelope differs from the receiving connection's lease. |
+| `lease_mismatch` | The lease ID isn't the stream's. |
 | `expired` | The effective deadline has passed or was reached. |
 | `terminal` | The stream ended and this is not its exact terminal retry. |
 | `conflict` | Stream/message identity is reused, or a same-revision or terminal retry changes content or parameters. |
@@ -349,7 +338,7 @@ This RFC proposes `-32025` for the experimental lifecycle; it is not added to SP
 | `resource_limit` | A Host admission or retained-state budget is exhausted. |
 | `final_rejected` | Ordinary incoming-message policy refused the final. |
 
-Implementations first apply bounded parsing, ready-state and current authority checks, and actual channel/sender validation. For an existing stream they then validate the lease envelope and expiry, payload shape and size, terminal/revision semantics, and advancing-update cadence. A final commit rechecks the current authorization atomically with ingestion. Authorization precedes any transcript consumer or preparation. Replays do not bypass authorization.
+Implementations first apply bounded parsing and ready-state and current authority checks. For open they then validate the actual channel and sender, then the rest of open's params. For an existing stream they then validate the call's stream ID, lease ID and revision, look up the stream (`unknown_stream`) and its lease (`lease_mismatch`), and then validate the lease's own channel and sender, expiry, payload shape and size, terminal/revision semantics, and advancing-update cadence. A final commit rechecks the current authorization atomically with ingestion. Authorization precedes any transcript consumer or preparation. Replays do not bypass authorization.
 
 A malformed Request receives an error. A forbidden Notification cannot receive a JSON-RPC response; the Host ignores it, emits a metadata-only diagnostic, and changes no stream state. Notifications are not a supported alternate form of these methods.
 
@@ -359,7 +348,7 @@ An error changes no admitted state, except independently required expiry or auth
 
 The executable artifacts for this RFC belong under `conformance/`. They exercise the wire contract and a non-normative reference Host treatment model. The model is not the Agent Framework Host, a database transaction implementation, or Portal STT evidence.
 
-The in-memory Host traces cover the following protocol outcomes. Their canonical-message and preparation assertions are observations of the reference model, not evidence about a deployed Host's storage, logs, scheduler, or transport:
+The in-memory Host traces cover the following protocol outcomes. Their canonical-message assertions are observations of the reference model, not evidence about a deployed Host's storage, logs, scheduler, or transport:
 
 1. Legacy `incoming:true`, outgoing `streaming:true`, and ancestor booleans do not opt into input streaming. New advertisement without both grants cannot open a stream.
 2. Open returns explicit limits and Host-bound identity. Pre-open updates fail. Identical open retries reuse the lease; changed or competing identities conflict.
@@ -367,9 +356,9 @@ The in-memory Host traces cover the following protocol outcomes. Their canonical
 4. Completion works without updates, confirms identical current text, or supplies a newer full final. An older or conflicting final fails.
 5. Exact completion replay leaves one canonical message and unchanged canonical state. Changed retries, late updates, and abort-after-complete produce no additional canonical messages.
 6. Abort, expiry, disconnect, epoch change, grant reduction, sender revocation, and channel re-registration clear provisional state without promoting it. A grant reduction, a channel removal or re-registration, or an expiry ends the lease even while policy isn't ready; a readiness lapse alone doesn't. Terminal retries respect authorization and expiry.
-7. Every envelope binding is checked. Claimed identity does not replace authenticated registration/sender facts.
-8. Cadence, size, the admission budget for streams and retained identifiers, Unicode scalar counting, digest bytes, and terminal bypass of update cadence match the contract. Total-byte and per-principal request budgets are left to real-Host tests.
-9. Provisional updates produce no canonical messages. Preparation reuse requires an exact accepted-final binding; superseding or aborting discards it.
+7. A call's lease ID must be its stream's, so a late call from an earlier connection's flow, under a reused stream ID, is refused. The channel and sender come from the lease's authenticated registration and sender facts, never from the call.
+8. Cadence, size, the admission budget for streams and retained identifiers, Unicode scalar counting, and terminal bypass of update cadence match the contract. Total-byte and per-principal request budgets are left to real-Host tests.
+9. Provisional updates produce no canonical messages.
 10. Downstream final rejection leaves no successful receipt or canonical message. Completion retries preserve the same one-final state.
 
 Acceptance additionally requires an experimental Portal STT producer and a real Host implementation to run the profile together. The exercise must include revised words, completion, cancel, timeout, reconnect, grant reduction, and a Host with no provisional consumer. It must show producer-side latest-state coalescing, completion-only delivery to an older Host, one canonical final and one ordinary ingestion path, and the absence of partials from durable authored history, process logs, ordinary context, and wakes. Real-Host tests must also race ordinary incoming against streamed completion for the same canonical key and establish that both paths share one reservation and deduplication boundary. Host transaction/fault-injection tests must establish the logical commit boundary; an in-memory conformance model alone cannot establish crash recovery.

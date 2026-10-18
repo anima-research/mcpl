@@ -444,17 +444,16 @@ The file is JSON as RFC 8259 defines it. Four traces carry unpaired UTF-16 surro
 Apply each step in order:
 
 1. Apply `control`, if present, as a trusted Host event. It can advance the monotonic test clock, change readiness, grants, the treatment mode or channel registrations, select an ordinary-ingress result, or replace the transport epoch with one the Host hasn't used. A principal change requires a new epoch. The clock moves first: a lease whose deadline the new time reaches expires before the step's other changes.
-2. Run `prepare`, if present, against the named stream's current snapshot. This represents a Host-owned preparation artifact.
-3. Deliver `method` and `params` as a JSON-RPC Request. Compare its result or error with `expect`. The reference runner operates after Request framing and authentication, so it passes parsed params to the model.
-4. Check `expectState`, if present, against the Host's observable state. Nonempty objects select fields recursively; empty objects and arrays compare exactly.
+2. Deliver `method` and `params` as a JSON-RPC Request. Compare its result or error with `expect`. The reference runner operates after Request framing and authentication, so it passes parsed params to the model.
+3. Check `expectState`, if present, against the Host's observable state. Nonempty objects select fields recursively; empty objects and arrays compare exactly.
 
 The expected outcomes are checked-in data. The runner does not derive them by invoking the model. Test identifiers explain the intended distinction, and each trace includes a description. Error messages and equivalent UTC timestamp spellings are not new interoperability requirements; external adapters can compare error codes/reasons and timestamp instants.
 
-The model's channel descriptors contain Host-trusted `identity`, registration `generation`, `direction`, permission, and allowed-sender fields. Its canonical deduplication key includes the authenticated Server principal and stable channel identity. Neither identity comes from the producer's asserted envelope. Reconnecting preserves committed message keys while discarding provisional leases.
+The model's channel descriptors contain Host-trusted `identity`, registration `generation`, `direction`, permission, and allowed-sender fields. Its canonical deduplication key includes the authenticated Server principal and stable channel identity. Neither identity comes from the producer's call: a post-open call names only its stream, lease and revision (RFC §5.1). Reconnecting preserves committed message keys while discarding provisional leases.
 
 ### Scope of this evidence
 
-The traces cover explicit advertisement, required grants and wildcard depth, lease identity, replacement/duplicate/stale revisions, final and abort replay, cleanup, cadence, Unicode and size bounds, canonical deduplication, and revision-bound preparation. Snapshots show that provisional text stays outside the model's canonical message array and that abort clears it.
+The traces cover explicit advertisement, required grants and wildcard depth, lease identity, replacement/duplicate/stale revisions, final and abort replay, cleanup, cadence, Unicode and size bounds, and canonical deduplication. Preparation is a Host-internal artifact that nothing on the wire carries, so the traces don't model it, and RFC §9 states its rule for real Hosts. Snapshots show that provisional text stays outside the model's canonical message array and that abort clears it.
 
 The reference model represents final acceptance as one synchronous state transition. It is not a database, network transport, producer queue, authentication adapter, actual Chronicle/context/wake path, or STT integration. Its default clock is controlled rather than wall time. Its finite admission budget, `maxStreams`, counts open streams together with the identifiers of streams that ended in the same epoch, and it retains final request data in memory for exact replay comparison. RFC §10's total-byte and per-principal request budgets are Host and transport policy that these traces don't model. The model also has no ordinary `channels/incoming` path, so it can't show that path and streamed completion sharing one reservation.
 

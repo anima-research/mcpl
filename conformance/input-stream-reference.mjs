@@ -1,6 +1,5 @@
 // Non-normative, deterministic RFC-012 host-treatment model.
 // This is not a transport, authentication system, or durable host implementation.
-import { createHash } from "node:crypto";
 
 const BASE = "channels.incoming";
 const STREAM = "channels.incoming.streaming";
@@ -9,8 +8,9 @@ const METHODS = new Set(["open", "update", "complete", "abort"]);
 const MODE_ORDER = ["final-only", "volatile", "prepare", "incremental"];
 const MODES = new Set(MODE_ORDER);
 const REASONS = new Set(["cancelled", "no_speech", "superseded", "source_error"]);
-const ENVELOPE = ["streamId", "transportEpoch", "leaseId", "channelId", "senderId",
-  "contentType", "startedAt", "expiresAt", "revision"];
+// What every post-open call names (RFC §5.1). Everything else about the stream
+// comes from its Host-bound lease.
+const LEASE = ["streamId", "leaseId", "revision"];
 const copy = value => structuredClone(value);
 const same = (a, b) => {
   if (a === b) return true;
@@ -37,7 +37,6 @@ const identifier = value => {
 const timestamp = value => Number.isSafeInteger(value) && value >= 0 && value <= 253402300799999;
 const revision = value => Number.isSafeInteger(value) && value >= 1;
 const knownKeys = (value, keys) => object(value) && Object.keys(value).every(key => keys.includes(key));
-const digest = text => "sha256:" + createHash("sha256").update(text, "utf8").digest("hex");
 const granted = (patterns, capability) => patterns.some(pattern => {
   const want = capability.split(".");
   const got = pattern.split(".");
@@ -101,7 +100,10 @@ export class InputStreamHost {
       return value;
     };
     this.now = setting("now", 1000);
-    this.epoch = setting("transportEpoch", "epoch-1");
+    // Every transport epoch this Host has used, so a control step's reconnect is
+    // always a new connection. An epoch is a connection's lifetime, and nothing on
+    // the wire names it.
+    this.epochs = new Set([setting("transportEpoch", "epoch-1")]);
     this.serverPrincipal = setting("serverPrincipal", "server-1");
     this.ready = setting("ready", true);
     // The Server's advertisement. The Host under test implements this profile and
@@ -126,11 +128,7 @@ export class InputStreamHost {
     this.streams = new Map();
     this.messages = [];
     this.committedKeys = new Set();
-    this.prepared = new Map();
-    this.usedPreparation = [];
     this.nextLease = 1;
-    // Every transport epoch this Host has used, so a reconnect can't reuse one (RFC §4.2).
-    this.epochs = new Set([this.epoch]);
   }
 
   // Ready state and the grant, which need nothing from the params (RFC §11).
@@ -171,7 +169,6 @@ export class InputStreamHost {
   terminate(stream, status) {
     stream.status = status;
     stream.text = null;
-    this.prepared.delete(stream.open.streamId);
   }
 
   // Clock/authority events are driven by the embedding host, not by the producer.
@@ -237,9 +234,7 @@ export class InputStreamHost {
         if (stream.status === "open") this.terminate(stream, "aborted");
       }
       this.streams.clear();
-      this.prepared.clear();
-      this.epoch = change.transportEpoch;
-      this.epochs.add(this.epoch);
+      this.epochs.add(change.transportEpoch);
     }
     this.sweep();
   }
@@ -289,8 +284,7 @@ export class InputStreamHost {
     if (this.streams.size >= this.maxStreams) reject("resource_limit");
     const expiresAt = Math.min(params.expiresAt, this.now + this.maxDurationMs);
     const receipt = {
-      accepted: true, streamId: params.streamId, transportEpoch: this.epoch,
-      leaseId: "lease-" + this.nextLease++, expiresAt,
+      accepted: true, streamId: params.streamId, leaseId: "lease-" + this.nextLease++, expiresAt,
       maxUpdateHz: this.maxUpdateHz, maxChars: this.maxChars, mode: this.mode,
     };
     this.streams.set(params.streamId, {
@@ -301,27 +295,18 @@ export class InputStreamHost {
   }
 
   lease(params, method) {
-    // Ready state and grant, the channel and sender, then the envelope (RFC §11).
+    // Ready state and grant, the params, then the stream and its lease, the
+    // stream's own channel and sender, and expiry (RFC §11). A changed
+    // registration or identity has already ended the lease (sweep).
     this.admit();
-    if (!identifier(params.channelId) || !identifier(params.senderId)) invalid();
-    this.channelFor(params.channelId, params.senderId);
-    const keys = [...ENVELOPE, method === "abort" ? "reason" : "text"];
-    if (!knownKeys(params, keys)
-      || !["streamId", "transportEpoch", "leaseId"].every(key => identifier(params[key]))
-      || params.contentType !== "text/plain" || !timestamp(params.startedAt)
-      || !timestamp(params.expiresAt) || !revision(params.revision)) invalid();
-    if (params.transportEpoch !== this.epoch) reject("lease_mismatch");
+    const keys = [...LEASE, method === "abort" ? "reason" : "text"];
+    if (!knownKeys(params, keys) || !["streamId", "leaseId"].every(key => identifier(params[key]))
+      || !revision(params.revision)) invalid();
     const stream = this.streams.get(params.streamId);
     if (!stream) reject("unknown_stream");
-    const expected = {
-      streamId: stream.open.streamId, transportEpoch: this.epoch,
-      leaseId: stream.receipt.leaseId, channelId: stream.open.channelId,
-      senderId: stream.open.sender.id, contentType: stream.open.contentType,
-      startedAt: stream.open.startedAt, expiresAt: stream.expiresAt,
-    };
-    if (!Object.entries(expected).every(([key, value]) => params[key] === value)) reject("lease_mismatch");
+    if (params.leaseId !== stream.receipt.leaseId) reject("lease_mismatch");
+    this.channelFor(stream.open.channelId, stream.open.sender.id);
     if (this.now >= stream.expiresAt) reject("expired");
-    if (!this.bindingMatches(stream, this.channels[params.channelId])) reject("lease_mismatch");
     return stream;
   }
 
@@ -352,7 +337,6 @@ export class InputStreamHost {
     if (method === "update") {
       if (params.revision === stream.revision) return { accepted: true, status: "duplicate", revision: stream.revision };
       if (stream.lastUpdateAt !== null && this.now - stream.lastUpdateAt < 1000 / this.maxUpdateHz) reject("rate_limited");
-      this.prepared.delete(params.streamId);
       stream.revision = params.revision;
       stream.text = params.text;
       stream.lastUpdateAt = this.now;
@@ -362,11 +346,6 @@ export class InputStreamHost {
     let result;
     if (method === "complete") {
       if (!this.finalAccepted) reject("final_rejected");
-      const contentDigest = digest(params.text);
-      const preparation = this.prepared.get(params.streamId);
-      if (preparation?.revision === params.revision && preparation.contentDigest === contentDigest) {
-        this.usedPreparation.push(params.streamId);
-      }
       // One synchronous transition models atomic final-ingress acceptance and receipt
       // recording. The host's storage/outbox transaction must implement that boundary.
       this.committedKeys.add(stream.canonicalKey);
@@ -376,8 +355,7 @@ export class InputStreamHost {
         author: copy(stream.open.sender), timestamp: new Date(stream.open.startedAt).toISOString(),
         content: [{ type: "text", text: params.text }],
       });
-      result = { accepted: true, status: "completed", messageId: stream.open.messageId,
-        revision: params.revision, contentDigest };
+      result = { accepted: true, status: "completed", messageId: stream.open.messageId, revision: params.revision };
     } else result = { accepted: true, status: "aborted" };
     // A final is accepted at its revision; an abort accepts no snapshot, so the
     // accepted revision stays where the last update left it.
@@ -385,15 +363,6 @@ export class InputStreamHost {
     this.terminate(stream, method === "complete" ? "completed" : "aborted");
     stream.terminal = { method, params: copy(params), result: copy(result) };
     return result;
-  }
-
-  prepare(streamId) {
-    const stream = this.streams.get(streamId);
-    if (!stream || stream.status !== "open" || stream.text === null
-      || !["prepare", "incremental"].includes(stream.receipt.mode)) throw Error("Preparation stimulus has no permitted snapshot");
-    this.prepared.set(streamId, {
-      revision: stream.revision, contentDigest: digest(stream.text),
-    });
   }
 
   snapshot() {
@@ -405,8 +374,6 @@ export class InputStreamHost {
         provisional: stream.status === "open" && stream.receipt.mode !== "final-only" ? stream.text : null,
       }])),
       messages: copy(this.messages),
-      prepared: Object.fromEntries(this.prepared),
-      usedPreparation: copy(this.usedPreparation),
     };
   }
 }

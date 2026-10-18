@@ -87,12 +87,15 @@ export async function createAdapter(root) {
           evicted, unknown: registry.get('ref_unknown_fixture') ?? null,
           evictedError, unknownError: await viaTool({ ref_id: 'ref_unknown_fixture' }) };
       }
-      // The Framework binds a reference to the server that delivered it when a tool
-      // result carries it, before its stub is built (autoFetchReferences). Its push
-      // lane registers it unbound, and the fetcher refuses an unbound record. So
-      // this adapter binds each reference to the fixture's server first, as the
-      // tool-result lane would: rendering then finds the same record, bound before
-      // and after the operation, and the fetch rows test the fetcher.
+      // The Framework binds a reference to the server that delivered it at receipt,
+      // before its stub is built, as autoFetchReferences does for a tool result's.
+      // Since 7b21471 the push lane does too: PushHandler passes the event's server
+      // through convertBlock to buildReferenceStub, which registers the reference
+      // with it. From 02adf27, RFC-005's measured baseline, until 7b21471, the push
+      // lane registered it unbound, and the fetcher refuses an unbound record. So
+      // this adapter binds each reference to the fixture's server first, whether or
+      // not the revision's push lane would: rendering then finds the same record,
+      // bound before and after the operation, and the fetch rows test the fetcher.
       const records = parsed.filter(p => p.kind === 'reference').map(p => refs.referenceRegistry.register(p.testimony, 'fixture'));
       const before = await render(blocks);
       if (operation === 'render') return { parsed, before, records };

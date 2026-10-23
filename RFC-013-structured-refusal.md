@@ -1,31 +1,35 @@
 # MCPL RFC-013: Structured Refusal for Forwarded Events
 
-**Status:** Draft (revision 2)
+**Status:** Draft (revision 3)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra
-**Date:** 2026-10-22 (revisions 1, 2)
+**Date:** 2026-10-22 (revisions 1, 2); 2026-10-23 (revision 3)
 **Depends on:** nothing for authority. This RFC adds no `uses` path and changes no grant;
 RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do. It gives a
 host's refusal a machine-readable meaning. Amends SPEC §9.3 (`push/event` result), §9.4
-(idempotency, by cross-reference), §14.3 (`channels/incoming` per-message result), §14.6
-and Appendix A (two error codes), Appendix B (schema), and §5.2's host advertisement (one
-new member). Interacts with §5.3 (initial policy), §6.6 (rejection), RFC-006 §3.1 (identity
+(idempotency, by cross-reference), §14.3 (`channels/incoming` per-message result),
+Appendix A (two error codes), Appendix B (schema), and §5.2's host advertisement (one new
+member). Interacts with §5.3 (initial policy), §6.6 (rejection), RFC-006 §3.1 (identity
 and retry window) and §13 (`coalesce_invalid`), and §19 (bulk content references).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
 
-> **Revision 2 note.** After review. `-32003` (an undeclared feature set) maps to `invalid`,
-> not `not_permitted`. The `unknown_channel` resend is an explicit exception to the
-> retryable rules. An error answering a whole `channels/incoming` request applies to each
-> of its messages. "Same occurrence" is RFC-006 §3.1's identity (`eventId`, else
-> `messageId`), and a refusal that invites a resend leaves no identity behind to collide
-> with. `duplicate` is for uncoalesced events only. Retries are bounded in every case, with
-> a floor when `retryAfterMs` is 0, and `retryAfterMs` covers any further send of the event.
-> A refusal answered before the initial policy exchange completed (§5.3) is not a verdict
-> on authority. Authority denials on `push/event` stay §6.6 error objects. Host rule 2 binds
-> only hosts that advertise `eventAdmission`. B.5 is JSON Schema with `refusal` an open
-> string. Citations corrected (§5.2, §5.3); vectors 13–20 added, vector 10 tests the
-> boundary.
+> **Revision 3 note.** After a second review. Host rules 3 and 4 are one rule (host rule 3):
+> a host that admitted nothing keeps none of the identity the refused occurrence itself
+> introduced, while a `messageId` known from an admitted occurrence stays, so a resent edit
+> is still an edit; a host that applied the occurrence's effects promises a deduplicated
+> resend. The before-policy resend (producer rule 6) is recovery for a send §5.3 forbids,
+> and covers only `not_permitted`; a §5.3 rejection records no identity (host rule 4), so
+> its resend cannot meet a `duplicate`. One definition of a **classified** refusal (RFC §4)
+> serves the advertisement, host rule 2 and producer rule 8, and includes RFC-006's
+> `coalesce_invalid` reason and JSON-RPC's `-32600`/`-32700`. B.6 accepts
+> `eventAdmission: false`. Vector 10 separates the MUST from the SHOULD; vectors 21–23
+> added. §14.6 is no longer listed as amended.
+>
+> **Revision 2 note.** After review: `-32003` maps to `invalid`; the `unknown_channel`
+> resend is an explicit exception; whole-batch errors; occurrence identity per RFC-006
+> §3.1; `duplicate` for uncoalesced events only; retries always bounded; authority denials
+> stay §6.6 errors; host rule 2 binds advertisers only; JSON Schema with an open `refusal`.
 
 ---
 
@@ -139,7 +143,7 @@ the code:
 
 | Code | `refusal` |
 |---|---|
-| `-32602` Invalid params, `-32003` Unknown feature set | `invalid` |
+| `-32602` Invalid params, `-32600` Invalid Request, `-32700` Parse error, `-32003` Unknown feature set | `invalid` |
 | `-32001` Feature set not enabled, `-32002` Capability denied, `-32017` Channel not permitted | `not_permitted` |
 | `-32023` Unknown channel | `unknown_channel` |
 | `-32030` Temporarily unavailable (new, RFC §7) | `unavailable` |
@@ -147,6 +151,13 @@ the code:
 
 Likewise RFC-006's per-message `reason: "coalesce_invalid"` reads as `refusal: "invalid"`
 when `refusal` is absent.
+
+**Classified refusal.** A refusal is **classified** when it carries `refusal`, or is an error
+with a code in the table above, or is a per-message result with `reason:
+"coalesce_invalid"`. Every other refusal is unclassified: a `-32000` or `-32603` error, an
+error with another code, or a result with only `accepted: false` and perhaps free-text
+`reason`. The advertisement (RFC §6), host rule 2 and producer rule 8 use this one
+definition.
 
 **`retryable` overrides the default.** The registry says what kind of refusal it is;
 `retryable` says whether the same occurrence can still get in unchanged. They differ when a
@@ -160,9 +171,9 @@ outside this registry except under a later revision of it.
 
 ## 5. Producer rules
 
-These rules apply when a refusal carries `refusal` or `retryable` (or a code mapped in
-RFC §4). A refusal with neither leaves the producer to its own judgement, as today, except
-under rule 8.
+These rules apply to a classified refusal (RFC §4), and to any refusal that carries
+`retryable`. An unclassified refusal leaves the producer to its own judgement, as today,
+except under rule 8.
 
 1. **Same occurrence only when retryable.** A producer MAY send the same occurrence
    (RFC §3) again only when `retryable` is `true` (explicitly or by default), or as rules 5
@@ -190,38 +201,52 @@ under rule 8.
    MAY register the channel (§14.3) and, once the registration is accepted, send the same
    occurrence once more (after any `retryAfterMs`). The occurrence was not admitted, so
    reusing its identity cannot duplicate it. A second `unknown_channel` for it ends it.
-6. **Before the initial policy.** Until the initial policy exchange completes, a host MUST
-   reject privileged methods (§5.3), so a refusal the producer receives before it has
-   received the host's initial `featureSets/update` is not a verdict on authority. An
-   exception to rules 1 and 4: the producer MAY send the same occurrence once more after
-   that exchange completes, whatever the refusal's kind, `invalid` excepted.
+6. **Before the initial policy (recovery).** Until the initial policy exchange completes,
+   a server MUST treat capability-dependent behaviour as unavailable and a host MUST reject
+   privileged methods (§5.3), so a conforming producer sends no `push/event` or
+   `channels/incoming` before then. This rule is recovery for one that did, for example a
+   producer of an earlier revision that treated pushes as available before the exchange.
+   A `not_permitted` refusal (including `-32001`, `-32002` and `-32017`) that the producer
+   receives before it has received the host's initial `featureSets/update` is §5.3's
+   rejection, not a verdict on authority. As an exception to rules 1 and 4, the producer
+   MAY send the same occurrence once more after the exchange completes. Other kinds follow
+   their own rules: `unavailable` and `unknown_channel` already allow a resend, and an
+   unchanged resend cannot help `invalid`, `too_large` or `duplicate`.
 7. **No answer is not a refusal.** A request with no response (timeout, closed transport)
    has an unknown outcome. It stays governed by RFC-006 §3.1 for coalesced occurrences and
    by §9.4 otherwise; this RFC changes nothing there.
 8. **A declaring host's silence.** When the host advertises `eventAdmission` with
-   `structuredRefusals` (RFC §6), a refusal without `refusal` and without a mapped code is
-   non-conforming; the producer treats it as `retryable: false` and SHOULD log it.
+   `structuredRefusals` (RFC §6), an unclassified refusal (RFC §4) is non-conforming; the
+   producer treats it as `retryable: false` and SHOULD log it. A `-32000` or `-32603`
+   error from such a host is the exception: it reads as no answer (rule 7), since a client
+   library may raise it on its own.
 
 ## 6. Host rules and advertisement
 
 1. **Classify.** A host refusing a forwarded event SHOULD include `refusal`, and SHOULD
    include `retryable` whenever it differs from the registry default.
-2. **No meaning in prose alone.** A host that advertises `eventAdmission` with
-   `structuredRefusals` MUST NOT signal a registry condition only through `reason` text or
-   only through a `-32000`/`-32603` error: transient unavailability is
-   `refusal: "unavailable"` (as a result, in `data`, or as `-32030`), and a size refusal is
-   `too_large` (or `-32031`), never `invalid` / `-32602` / `coalesce_invalid`. Other hosts
-   SHOULD do the same.
-3. **`retryable: true` is a promise about effects.** A host MUST NOT answer
-   `retryable: true` for an occurrence whose effects took place unless it will recognize the
-   resend under RFC-006 §3.1 (or §9.4 for an uncoalesced event) and not repeat them. A host
-   that applied an occurrence but failed to record it either answers as accepted or makes
-   the resend safe; it does not leave the producer to duplicate the event.
-4. **A refusal that invites a resend leaves no identity behind.** A host that answers
-   `retryable: true`, `unknown_channel` or `too_large` MUST NOT have kept the refused
-   occurrence's `eventId` or `messageId` for deduplication or edit detection, so that the
-   resend, or the new occurrence, is read as the event's first arrival and not as a
-   duplicate or an edit.
+2. **No meaning in prose alone.** Every refusal from a host that advertises
+   `eventAdmission` with `structuredRefusals` MUST be classified (RFC §4): transient
+   unavailability is `refusal: "unavailable"` (as a result, in `data`, or as `-32030`), and
+   a size refusal is `too_large` (or `-32031`), never `invalid` / `-32602` /
+   `coalesce_invalid`. Other hosts SHOULD do the same.
+3. **What a resend meets.** A host that answers `retryable: true`, `unknown_channel` or
+   `too_large` MUST make the resend (or, after `too_large`, the new occurrence) meet what it
+   would have met had the refused occurrence never arrived:
+   - **Nothing admitted.** When the host applied none of the occurrence's effects, it MUST
+     NOT keep any identity the refused occurrence itself introduced: its `eventId`, or a
+     `messageId` first seen in it. Identity the host holds from occurrences it did admit
+     stays: a refused edit of an admitted message is resent as an edit, and is read as
+     one.
+   - **Effects applied.** When the host applied the occurrence's effects but failed to
+     record that it did, it answers `retryable: true` only if it will recognize the resend
+     under RFC-006 §3.1 (or §9.4 for an uncoalesced event) and return the original result
+     without repeating them. Otherwise it answers as accepted; it never leaves the
+     producer to duplicate the event.
+4. **A §5.3 rejection records nothing.** A privileged method rejected because the initial
+   policy exchange has not completed admitted nothing. A host SHOULD NOT keep any identity
+   such an occurrence introduced, as in rule 3, so a resend after the exchange (producer
+   rule 6) is not answered `duplicate`. A host that advertises `eventAdmission` MUST NOT.
 5. **`duplicate` is for uncoalesced events.** A coalesced occurrence retried within its
    window gets RFC-006 §3.1's original result, never `duplicate`.
 6. **Authority denials keep their codes.** On `push/event`, a denial by the grant (feature
@@ -240,10 +265,9 @@ under rule 8.
 "eventAdmission": { "structuredRefusals": true, "maxContentBytes": 4194304 }
 ```
 
-- `structuredRefusals: true` (and the boolean shorthand) states that every refusal of a
-  forwarded event on either lane carries `refusal`, or is one of the codes mapped in
-  RFC §4. It lets a producer drop its heuristics for this host, and binds the host to host
-  rule 2.
+- `structuredRefusals: true` (and the boolean shorthand `true`) states that every refusal
+  of a forwarded event on either lane is classified (RFC §4). It lets a producer drop its
+  heuristics for this host, and binds the host to host rules 2 and 4.
 - `maxContentBytes` (integer ≥ 1) is the largest content the host admits for one
   occurrence: the UTF-8 byte length of the JCS serialization (RFC 8785, as in §17.2) of
   `payload.content` on `push/event`, or of one message's `content` on
@@ -251,8 +275,8 @@ under rule 8.
   `maxContentBytes` included, for its size, and SHOULD answer content over it with
   `too_large` and `limitBytes`. A producer SHOULD fit content under it before sending (§19
   references for bulk payloads).
-- Omitted, the host makes neither statement. A host without a declared limit that refuses
-  for size still SHOULD answer `too_large` (rule 2).
+- Omitted, or `false`, the host makes neither statement. A host without a declared limit
+  that refuses for size still SHOULD answer `too_large` (rule 2).
 
 Like RFC-006's `eventCoalescing`, this is a top-level member and not a leaf under
 `pushEvents` or `channels`: §5.1's boolean shorthand would otherwise make every existing
@@ -261,7 +285,7 @@ capability: there is no `uses` path and nothing for RFC-002 to gate. `maxContent
 bound on one occurrence's content, not coalescing capacity, which RFC-006 still never lets
 a host refuse on.
 
-## 7. Schema and errors (amends §5.2, §9.3, §14.3, §14.6, Appendix A, Appendix B)
+## 7. Schema and errors (amends §5.2, §9.3, §9.4, §14.3, Appendix A, Appendix B)
 
 **§9.3 `push/event` result**, add:
 
@@ -307,10 +331,10 @@ large" (RFC-006 §13). A host MAY instead answer either condition as a result wi
 ```
 
 ```jsonc
-// B.6 capabilities.experimental.mcpl.eventAdmission
+// B.6 capabilities.experimental.mcpl.eventAdmission (false: no statement, as omitted)
 {
   "oneOf": [
-    { "const": true },
+    { "type": "boolean" },
     {
       "type": "object",
       "properties": {
@@ -333,8 +357,9 @@ validator MUST NOT reject a value it doesn't list): `"invalid" | "not_permitted"
 - Every field is optional and every new member is ignorable: an older producer reads
   `accepted` and `reason` as before, and an older host sends neither.
 - A host that does not advertise `eventAdmission` takes on no MUST from this RFC except
-  where it chooses to give the fields: host rules 3 and 4 bind what a `retryable: true`,
-  `unknown_channel` or `too_large` it gives promises. Everything else is a SHOULD.
+  where it chooses to give the fields: host rule 3 binds what a `retryable: true`,
+  `unknown_channel` or `too_large` it gives promises. Everything else, host rule 4
+  included, is a SHOULD for it.
 - A producer facing a host without `eventAdmission` keeps whatever it does today, and
   SHOULD still act on the fields when a refusal happens to carry them.
 - Hosts that answer today with `-32602`, `-32001`, `-32002`, `-32003`, `-32017` or
@@ -353,9 +378,11 @@ validator MUST NOT reject a value it doesn't list): `"invalid" | "not_permitted"
    resend (the wait ends after the window).
 3. **Not permitted.** `push/event` answered `-32001` after the initial policy exchange.
    Producer does not resend E1.
-4. **Before the initial policy.** `push/event` E1 answered `-32002` before the producer has
-   received the host's initial `featureSets/update`. Once it has, the producer resends E1
-   once; host admits it. A second refusal ends it.
+4. **Before the initial policy (recovery).** A producer sends `push/event` E1 before it has
+   received the host's initial `featureSets/update` (a send §5.3 forbids). The host answers
+   `-32002` and keeps nothing of E1 (host rule 4). Once the exchange completes, the
+   producer resends E1 once; host admits it, not as a `duplicate`. A second refusal ends
+   it. Had the pre-policy refusal been `too_large`, there is no such resend (rule 6).
 5. **Unknown channel.** `channels/incoming` message M1 (`eventId` E1) answered `{ accepted:
    false, refusal: "unknown_channel" }`. Producer registers the channel, then resends M1
    with E1 once; host admits it. A second `unknown_channel` ends it.
@@ -371,9 +398,11 @@ validator MUST NOT reject a value it doesn't list): `"invalid" | "not_permitted"
    producer resends the same occurrence.
 9. **Duplicate.** Uncoalesced E1 refused `{ accepted: false, refusal: "duplicate" }`:
    producer records E1 as delivered and sends nothing.
-10. **Advertised limit honoured.** Host advertises `eventAdmission: { maxContentBytes:
-    2000000 }`. Content of 1,999,999 and of exactly 2,000,000 JCS bytes is not refused for
-    size; 2,000,001 bytes is refused `too_large` with `limitBytes: 2000000`.
+10. **Advertised limit.** Host advertises `eventAdmission: { structuredRefusals: true,
+    maxContentBytes: 2000000 }`. Required: content of 1,999,999 and of exactly 2,000,000
+    JCS bytes is not refused for size; if content of 2,000,001 bytes is refused for size,
+    the refusal is `too_large` (host rule 2). Advisory: that refusal carries
+    `limitBytes: 2000000`.
 11. **Silence from a declaring host.** Host advertises `eventAdmission: true` and answers
     `{ accepted: false }` with no `refusal`. Non-conforming; producer treats it as not
     retryable.
@@ -398,6 +427,14 @@ validator MUST NOT reject a value it doesn't list): `"invalid" | "not_permitted"
 20. **Coalesced retry after admission.** Coalesced E1 admitted; the response is lost; the
     producer resends E1 within the window. Host returns E1's original result (RFC-006
     §3.1), never `duplicate`.
+21. **A refused edit stays an edit.** `channels/incoming` M1 (E1) admitted. An edit of M1
+    (`messageId` M1, `eventId` E2) is refused `unavailable`. Producer resends it (M1, E2);
+    host reads it as an edit of M1, not as a new message and not as a duplicate.
+22. **Explicit false.** Host advertises `"eventAdmission": false`. Valid; the same as
+    omitting it.
+23. **Legacy reason from a declaring host.** Host advertises `eventAdmission: true` and
+    answers a `channels/incoming` message `{ accepted: false, reason: "coalesce_invalid" }`.
+    Classified (RFC §4), so conforming; producer reads `invalid` and does not resend.
 
 **Acceptance criterion:** before Draft→Accepted, these vectors freeze as executable vectors
 under `conformance/` (the RFC-003 §3.1 precedent) and run against at least one host and one
@@ -424,15 +461,18 @@ producer implementation.
 
 ## 11. Decisions and open questions
 
-Decided (revision 2):
+Decided:
 
 1. **`duplicate` and RFC-006.** A coalesced retry keeps RFC-006 §3.1's original result;
    `duplicate` is only for uncoalesced events (RFC §4, host rule 5).
 2. **Retries are always bounded.** A producer bounds attempts whatever `retryAfterMs` says,
    with its own floor when it is 0 (rule 2).
-3. **Before the initial policy.** A refusal answered before §5.3's exchange completes is
-   resent once after it, whatever its kind but `invalid` (rule 6). Hosts need not mark such
-   refusals retryable.
+3. **Before the initial policy** (revision 3). A `not_permitted` refusal received before
+   §5.3's exchange completes is resent once after it (rule 6), as recovery for a send §5.3
+   forbids; other kinds follow their own rules. The host keeps nothing of such an
+   occurrence (host rule 4), so the resend cannot meet a `duplicate`.
+4. **One identity rule** (revision 3). A refused occurrence leaves behind none of the
+   identity it introduced, and identity from admitted occurrences stays (host rule 3).
 
 Open:
 

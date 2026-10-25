@@ -532,18 +532,15 @@ interface ToolsetDecl {
 
 ## 15. Implementation status
 
-- **Server SDK and go-mcpl** (surfaces-mcpl, `src/sdk`, `src/servers/go`): revision 2's server
-  side, with tests for vectors 1–9 that apply to a server.
-- **Host** (mcpl-cc-bridge, branch `tool-hints`): in progress.
-- **games-mcpl** (branch `tool-hints`): native; one toolset `game`, static catalogue and
-  results; conformance tests against the real engine.
+- **Host:** mcpl-cc-bridge (Claude Code's MCPL bridge) — static tools listed as before, dynamic
+  tools through `open`/`act`/`look`/`close`, announcements in results and events, reminders
+  after context compaction, reconciliation through `toolsets/list`.
+- **Server:** games-mcpl — one non-instance toolset (`game`), static catalogue and results
+  tools, visibility following the game (playing, dead, level complete); unchanged for hosts
+  without `toolHints`.
+- **SDK:** a TypeScript server SDK (hints, toolsets with instances, rev ordering, attribution of
+  events to calls) and a Go server built on it exist and are proposed for mcpl-core-ts and
+  games-mcpl respectively.
 
-Earlier:
-
-`surfaces-mcpl` implements revision 1 (server-side four tools, Go, a generic mount, and
-per-service adapters later found unnecessary). The plan for revision 2:
-
-- a host-side presentation layer (meta-tools, announcements, reminders, projection), usable
-  in-process by a host or as a surface host (RFC §8.6);
-- an SDK for servers declaring toolsets and hints;
-- games-mcpl as the first server to adopt the hints natively.
+Revision 1 was implemented as a standalone server with per-service adapters; revision 2
+replaces it.

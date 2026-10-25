@@ -591,9 +591,9 @@ interface ToolsetDecl {
 - **Server:** games-mcpl — one non-instance toolset (`game`), static catalogue and results
   tools, visibility following the game (playing, dead, level complete); unchanged for hosts
   without `toolHints`.
-- **SDK:** a TypeScript server SDK (hints, toolsets with instances, rev ordering, attribution of
-  events to calls) and a Go server built on it exist and are proposed for mcpl-core-ts and
-  games-mcpl respectively.
+- **SDK:** `ToolsetServer` in mcpl-core-ts — the server side of this RFC (and RFC-015's
+  `access/token`), with tests for the vectors that apply to a server.
+- **Go** as a second toolset of games-mcpl, with named instances and games between agents.
 
 Revision 1 was implemented as a standalone server with per-service adapters; revision 2
 replaces it.

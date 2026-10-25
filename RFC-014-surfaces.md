@@ -30,7 +30,8 @@ Section references (§) are to the SPEC; references to this document are written
 > always carries its hints, empty or not, so an empty statement clears stale state (RFC §5.3).
 > "Principal" takes RFC-015 §4.4's definition (RFC §5.6); a server that does not keep toolsets
 > across connections ends them (RFC §5.3). Toolset names have a grammar (RFC §5.1). `act` and
-> `look` can name the server (RFC §8.2). The amendment list names §9.4 and §17.3.
+> `look` can name the server (RFC §8.2). The amendment list names §9.4 and §17.3. Recovery reads
+> `tools/list` first.
 
 > **Revision 5 note.** From review of revision 4. Every message that carries hint changes takes
 > the next `rev` — the `toolsets/*` results included (RFC §6.1). A call that will get no result
@@ -427,8 +428,8 @@ applies right after that `rev`; a `toolsets/list` result's hints are a statement
 `rev`, applied in order like any other.
 
 **Recovering.** A host missing a `rev` it can no longer expect — it dropped a message unread, its
-bounded wait passed, or a bug — re-reads `toolsets/list` and `tools/list` and goes on applying in
-`rev` order from there. Each result states the server's state at the `rev` it names, so the two
+bounded wait passed, or a bug — re-reads `tools/list`, then `toolsets/list` (so every tool the
+statement names is already known), and goes on applying in `rev` order from there. Each result states the server's state at the `rev` it names, so the two
 reads need no common baseline. A new connection starts from `toolsets/list` (RFC §5.3).
 
 **Definitions.** `definition` lets a dynamic tool's options change without a `tools/list` round

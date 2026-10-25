@@ -1,16 +1,27 @@
 # MCPL RFC-015: Delegated Access
 
-**Status:** Draft (revision 2)
+**Status:** Draft (revision 3)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra
-**Date:** 2026-10-25
+**Date:** 2026-10-25 (revisions 1–3)
 **Depends on:** RFC-002 / SPEC §5.4 for authority. Adds one capability path (`access.token`),
 one method (`access/token`, Server → Host, Request), one advertisement member on each side
 (`access`), and one error code (`-32040`). Amends SPEC §4 (message flow), §5.1–§5.2
-(advertisement), §6.2 (`uses` vocabulary), §13.1 (trust model), §18.3 (credentials), §19.6.1
-(its closing paragraph), Appendix A, Appendix B, Changelog. Used by RFC-014 (Surfaces).
+(advertisement), §5.4 (one path no wildcard grants), §6.2 (`uses` vocabulary), §6.5 (a
+server-initiated request without `featureSet`), §13.1 (trust model), §18.3 (credentials),
+§19.6.1 (its closing paragraph), Appendix A, Appendix B, Changelog. Used by the draft RFC-014
+(tool presence, toolsets and surfaces; proposed alongside this one).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+> **Revision 3 note.** From review. Chaining works: a hop holding the grant advertises `access`
+> as a forwarder (RFC §4.2), and answers `-32040` when it cannot mint (RFC §7). Refusals carry a
+> `kind` from a small vocabulary. `expiresAt` is RFC 3339 in UTC. A server **MUST** discard
+> credentials when it loses the grant. Endpoints are audited without userinfo, query or
+> fragment, and must not carry credentials. "The connection's principal" is defined without
+> adopting an identity model. The schema carries `_meta` and the bounds; the amendment list
+> names §5.4, §6.5 and Appendix B; new vectors for the wildcard, the order of checks, `_meta`,
+> and a host without an identity.
 
 > **Revision 2 note.** From the first host implementation (an mcpl-cc-bridge branch). No
 > change to the method or its shape: wildcards never grant `access.token` (RFC §4.1 said both
@@ -110,7 +121,7 @@ Any other member **MUST** be rejected with `-32602 Invalid params`.
 |---|---|---|---|
 | `scheme` | `string` | Yes | `"bearer"` in this revision |
 | `credential` | `string` | Yes | The credential, opaque to MCPL |
-| `expiresAt` | `string` (ISO 8601) | Yes | When it stops being valid. A host that cannot state this MUST NOT answer |
+| `expiresAt` | `string` (RFC 3339, UTC, `Z` suffix) | Yes | When it stops being valid. A host that cannot state this MUST NOT answer |
 | `principal` | `string` | No | Whom it identifies (e.g. `agent:example@animalabs.ai`) |
 
 ### 3.3 Errors
@@ -118,8 +129,12 @@ Any other member **MUST** be rejected with `-32602 Invalid params`.
 | Code | When | `data` |
 |---|---|---|
 | `-32002` Capability denied | `access.token` is not in the effective grant | `{ capability: "access.token" }` |
-| `-32040` Access refused | The host has no identity to mint from, or the identity provider refused | `{ audience, reason }` |
+| `-32040` Access refused | The host has no identity to mint from, its policy refuses, the identity provider refused, or (RFC §7) a hop cannot obtain one from its own host | `{ audience, kind, reason }` |
 | `-32602` Invalid params | Malformed request, unknown member | `{ field, reason }` |
+
+`kind` is one of `no_identity`, `host_policy`, `provider_refused`, `rate_limited`,
+`upstream_refused` (a chain hop's own host refused, RFC §7) or `unavailable` (no answer in
+time); `reason` is free text for people. Servers branch on `kind`, never on `reason`.
 
 **Order of checks.** The grant first (`-32002`), then the parameters (`-32602`), then minting
 (`-32040`): a server without the grant learns nothing about what a well-formed request would
@@ -168,7 +183,11 @@ the grant alone (but see the note on `uses` in RFC §4.1).
 
 A host that has no identity to mint from **MUST NOT** advertise `access`. If it nonetheless
 includes `access.token` in a grant (an operator's configuration, kept across an identity
-being removed), it answers requests with `-32040`, reason "no identity".
+being removed), it answers requests with `-32040`, `kind: "no_identity"`.
+
+**A hop in a chain** (RFC §7) holds no identity of its own but may obtain credentials from its
+host. Such a hop **MAY** advertise `access` to the servers it dials, as a forwarder, if and only
+if its own effective grant includes `access.token`; it stops advertising when it loses the grant.
 
 ### 4.3 What the grant means
 
@@ -186,6 +205,13 @@ lives, by the identity provider.
 
 ### 4.4 One principal per connection
 
+**The connection's principal** is the identity the host acts as on that connection — the
+identity whose credentials it would mint. How a host chooses it (an agent's enrolled key, an
+operator's account, a per-session identity) is the host's policy; SPEC §18.8 keeps identity
+models out of scope, and this RFC adopts none. It requires only that a host act as **exactly
+one** principal on a connection for the connection's lifetime, so that every credential
+delegated on it identifies the same party.
+
 The host mints only for the principal of the connection the request arrived on. A server
 serving several principals over several connections receives each principal's credential
 over that principal's connection and **MUST NOT** use a credential obtained on one
@@ -194,9 +220,11 @@ connection on behalf of another principal.
 ### 4.5 Revocation
 
 Revoking `access.token` (a grant reduction, §6.7) takes effect at once for new requests.
-Credentials already issued remain valid until `expiresAt` — they are bearer credentials,
-which is why lifetimes are short (RFC §5). A server that loses the grant **SHOULD** discard
-cached credentials.
+Credentials already issued remain valid at their services until `expiresAt` — they are bearer
+credentials, which is why lifetimes are short (RFC §5). The server learns of the reduction
+from the `featureSets/update` Request §6.7 requires, and **MUST** then discard every credential
+it obtained through this method on that connection and stop using it, as §6.7 requires
+reductions to be respected at once.
 
 ---
 
@@ -236,7 +264,10 @@ A server holding a credential obtained through this method:
 A server that is itself the host of an upstream server (it dialed it) may receive
 `access/token` from that upstream. It **MAY** satisfy the request by making its own
 `access/token` request to its host, **only if** its own effective grant includes
-`access.token` **and** it granted `access.token` to the upstream. The principal does not
+`access.token` **and** it granted `access.token` to the upstream (and advertised `access` to it,
+RFC §4.2). If its own host refuses, or it no longer holds the grant, it answers the upstream
+with `-32040` and `kind: "upstream_refused"` — never `-32002`, which would tell the upstream it
+lacks a grant that it holds. The principal does not
 change along the chain; each hop applies its own grant; the credential returns down the same
 path. A hop **MUST NOT** answer from a credential it obtained for a different request's
 audience.
@@ -257,7 +288,9 @@ How it does so is the provider's protocol (for archipelago-home: a signed key-pr
 ### 8.2 Audit
 
 The host **SHOULD** record each request: server, audience, endpoint, purpose, outcome,
-`expiresAt`. It **MUST NOT** record the credential.
+`expiresAt`. It **MUST NOT** record the credential, and records `endpoint` only as scheme,
+host and path — without userinfo, query or fragment, where some deployments carry tokens
+(§4.2.6). A server **MUST NOT** put a credential in `endpoint`.
 
 ### 8.3 Agent-facing surface
 
@@ -286,7 +319,7 @@ reason the path is denied by default and granted only explicitly.
 **Bearer exposure.** Bounded by audience binding (verifiers check `aud`) and lifetime.
 Sender-constrained credentials (proof-of-possession) and delegated credentials that name the
 intermediary as an actor would bound it further; both need identity-provider support and are
-left to a later revision (RFC §12). The `scheme` field leaves room for them.
+left to a later revision (RFC §13). The `scheme` field leaves room for them.
 
 **Not passthrough.** The credential is minted for the downstream audience by the party
 entitled to mint it, never the credential that opened the connection. The confused-deputy
@@ -311,7 +344,13 @@ caching (RFC §5) makes normal operation cheap.
 - **§19.6.1**, closing paragraph: replace "There is no host→server credential 'inversion' …"
   with a reference to this RFC, and keep the rule that a connection's own authentication
   context is never handed to the server.
-- **Appendix A**: `-32040` Access refused, `data: { audience, reason }`.
+- **§5.4**: one path-specific exception to the wildcard rule — no pattern other than the exact
+  path `access.token` grants it.
+- **§6.5**: `access/token` is a server-initiated request that carries no `featureSet`; like
+  the channel methods it is authorized by the grant alone.
+- **Appendix A**: `-32040` Access refused, `data: { audience, kind, reason }`.
+- **Appendix B**: the B.2 `uses` enum gains `access.token`; the schema in RFC §11.
+- **Changelog**: an entry for this RFC.
 
 ---
 
@@ -319,20 +358,26 @@ caching (RFC §5) makes normal operation cheap.
 
 ```ts
 interface AccessTokenParams {
-  audience: string;          // 1..128
-  endpoint?: string;
-  purpose?: string;          // ≤ 256
+  audience: string;          // 1..128 code points
+  endpoint?: string;         // absolute URI, ≤ 2048 code points, no credentials (RFC §8.2)
+  purpose?: string;          // ≤ 256 code points
   fresh?: boolean;
+  _meta?: object;            // MCP's reserved member; any other member → -32602
 }
 interface AccessTokenResult {
   scheme: "bearer";
   credential: string;
-  expiresAt: string;         // ISO 8601
+  expiresAt: string;         // RFC 3339, UTC ("…Z")
   principal?: string;
+}
+interface AccessRefusedData {
+  audience: string;
+  kind: "no_identity" | "host_policy" | "provider_refused" | "rate_limited" | "upstream_refused" | "unavailable";
+  reason: string;            // free text
 }
 // experimental.mcpl.access?: { token?: boolean }   (server and host)
 // capability path: "access.token"
-// error: -32040 Access refused, data: { audience: string, reason: string }
+// error: -32040 Access refused, data: AccessRefusedData
 ```
 
 ---
@@ -343,14 +388,24 @@ Freeze before Draft→Accepted (RFC-005 §11):
 
 1. Request without the grant → `-32002`, `data.capability = "access.token"`.
 2. Request to a host that did not advertise `access` → the server does not send it.
-3. Granted request → result with `scheme`, `credential`, `expiresAt` in the future.
-4. Identity provider refuses → `-32040` with `audience` and `reason`; no credential.
-5. Unknown params member → `-32602`.
-6. A credential never appears in any `push/event`, tool result, or log line of the server
-   (syntactic scan over a recorded session).
+3. Granted request → result with `scheme`, `credential`, and an RFC 3339 UTC `expiresAt` in
+   the future.
+4. Identity provider refuses → `-32040` with `audience`, `kind: "provider_refused"` and a
+   `reason`; no credential.
+5. Unknown params member → `-32602`; a `_meta` object alongside valid params is accepted.
+6. A credential never appears in any `push/event`, tool result or channel message of a recorded
+   session, nor in the server's captured log output (stderr) for it.
 7. Two principals on one server: each request is answered with that principal's credential.
-8. Grant revoked → next request `-32002`.
-9. Chain: a hop without the grant refuses its upstream's request with `-32002`.
+8. Grant revoked → the server discards its credentials, and its next request gets `-32002`.
+9. Chain: a hop whose own host refuses answers its upstream `-32040` with
+   `kind: "upstream_refused"`; a hop without the grant does not advertise `access` to its
+   upstream.
+10. A host granted only `access.*` (or `*.token`) answers `-32002`: no wildcard grants the path.
+11. A malformed request from a server without the grant gets `-32002`, not `-32602` (order of
+    checks).
+12. A host that includes `access.token` in a grant but has no identity answers `-32040` with
+    `kind: "no_identity"`.
+13. The host's audit record of an `endpoint` with a query string holds no query string.
 
 ---
 
@@ -360,7 +415,10 @@ Freeze before Draft→Accepted (RFC-005 §11):
    token exchange) would let a service see "agent X, via server Y". Needs provider support.
 2. **Proof of possession.** Binding a credential to the server's own key would make a leaked
    credential useless elsewhere. Needs provider and verifier support.
-3. **Telling the server about revocation.** Today a server learns by its next request failing.
+3. **Revocation already in flight.** A server learns of a reduction from `featureSets/update`
+   (RFC §4.5) and discards its credentials; a credential it already presented remains valid at
+   that service until it expires. Whether hosts should also revoke at the identity provider is
+   open.
 4. **Other schemes.** OAuth access tokens, signed requests; the wire is ready, the vocabulary
    is not.
 

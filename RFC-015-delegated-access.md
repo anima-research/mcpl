@@ -1,9 +1,9 @@
 # MCPL RFC-015: Delegated Access
 
-**Status:** Draft (revision 5)
+**Status:** Draft (revision 6)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra
-**Date:** 2026-10-25 (revisions 1–5)
+**Date:** 2026-10-25 (revisions 1–6)
 **Depends on:** RFC-002 / SPEC §5.4 for authority. Adds one capability path (`access.token`),
 one method (`access/token`, Server → Host, Request), one advertisement member on each side
 (`access`), and one error code (`-32040`). Amends SPEC §4 (message flow and method overview),
@@ -13,6 +13,12 @@ one method (`access/token`, Server → Host, Request), one advertisement member 
 (tool presence, toolsets and surfaces; proposed alongside this one).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+> **Revision 6 note.** From review of revision 5. The error table no longer contradicts the
+> ignore-unknown rule; `timeoutMs` starts at 5000 so every bound can be met, and a hop that cannot
+> forward a valid one answers itself; a hop forwards every member; `schemes` entries have a
+> grammar; a forwarder's grant is named as consent to everything it forwards (RFC §9); vector 16
+> applies to hosts that cache.
 
 > **Revision 5 note.** From review of revision 4. Hosts **ignore** unknown members, so new ones
 > (like `schemes`) don't break older hosts; a server checks the returned `scheme` itself (RFC
@@ -130,8 +136,8 @@ surfaces are for.
 | `endpoint` | `string` (absolute URI without userinfo, ≤ 2048 code points) | No | Where the server will present it. For audit; see RFC §8.4 |
 | `purpose` | `string` (≤ 256 code points, no control characters) | No | Why, in words an operator reading an audit log would understand |
 | `fresh` | `boolean` | No | Do not return a cached credential (the endpoint refused the last one) |
-| `schemes` | `string[]` (1–8 entries) | No | The credential schemes the server can use, in order of preference. Absent means `["bearer"]` |
-| `timeoutMs` | `integer` (1000–120000) | No | How long the requester will wait for the answer. Absent means 30000. See RFC §3.4 |
+| `schemes` | `string[]` (1–8 entries, each matching `^[a-z0-9][a-z0-9._-]{0,31}$`) | No | The credential schemes the server can use, in order of preference. Absent means `["bearer"]` |
+| `timeoutMs` | `integer` (5000–120000) | No | How long the requester will wait for the answer. Absent means 30000. See RFC §3.4 |
 | `_meta` | `object` | No | MCP's reserved metadata member; ignored by this RFC |
 
 A value out of these bounds, an `endpoint` with userinfo, or an `audience` or `purpose`
@@ -158,7 +164,7 @@ that ignores `schemes` returns `bearer`; the server checks the scheme it got, RF
 |---|---|---|
 | `-32002` Capability denied | `access.token` is not in the effective grant | `{ capability: "access.token" }` |
 | `-32040` Access refused | The host has no identity to mint from, its policy refuses, it can offer none of the server's `schemes`, the identity provider refused or did not answer in time, the provider's answer is not a usable credential (no expiry), or (RFC §7) a hop's own host refused | `{ audience, kind, reason, forwarded? }` |
-| `-32602` Invalid params | Malformed request, unknown member | `{ field, reason }` |
+| `-32602` Invalid params | Malformed request: a member out of its bounds or of the wrong type (RFC §3.1). Unknown members are ignored, not refused | `{ field, reason }` |
 
 `kind` is one of `no_identity`, `host_policy` (including: none of the server's `schemes` can be
 offered), `provider_refused`, `rate_limited`, or `unavailable` (no answer within the host's time
@@ -190,8 +196,8 @@ the chain:
   passes.
 - A hop (RFC §7) forwards with `timeoutMs` reduced by at least 5000 ms, waits that long, and
   answers `unavailable` itself if it passes — so each hop's bound is shorter than the one
-  waiting on it, however long the chain. A hop whose remaining budget would fall below 1000 ms
-  answers `unavailable` without forwarding.
+  waiting on it, however long the chain. A hop whose reduced `timeoutMs` would fall below the
+  5000 minimum answers `unavailable` without forwarding.
 
 ---
 
@@ -327,8 +333,8 @@ A server that is itself the host of an upstream server (it dialed it) may receiv
 `access.token` **and** it granted `access.token` to the upstream (and advertised `access` to it,
 RFC §4.2). An upstream it has not granted gets `-32002`, as from any host.
 
-- It forwards `audience`, `endpoint`, `purpose`, `fresh` and `schemes` unchanged, and
-  `timeoutMs` reduced (RFC §3.4).
+- It forwards every member it received unchanged — `audience`, `endpoint`, `purpose`, `fresh`,
+  `schemes`, and members it does not know — except `timeoutMs`, which it reduces (RFC §3.4).
 - If its own host refuses, the hop passes the refusal on **unchanged** — the same `kind` and
   `reason` — adding `forwarded: true`, so the upstream can still tell throttling from a final
   refusal. Its host's `-32602` passes on unchanged too (the request was the upstream's). Any
@@ -403,6 +409,11 @@ problem that rule exists for does not arise.
 
 **Model context.** RFC §6.2 and §8.3 keep credentials out of everything a model reads.
 
+**Forwarders.** A server that advertises `access` as a forwarder (RFC §4.2) passes the grant on
+to whatever servers it dials. Granting `access.token` to such a server is therefore consent to
+everything it forwards for; a host **SHOULD** show the operator that a server it is asked to
+grant forwards, and a hop **SHOULD** forward only for upstreams its own operator configured.
+
 **Amplification.** A server could request credentials in a loop; hosts MAY rate-limit, and
 caching (RFC §5) makes normal operation cheap.
 
@@ -439,8 +450,8 @@ interface AccessTokenParams {
   endpoint?: string;         // absolute URI, no userinfo, ≤ 2048 code points (RFC §8.2)
   purpose?: string;          // ≤ 256 code points, no control characters
   fresh?: boolean;
-  schemes?: string[];        // 1..8; absent = ["bearer"]
-  timeoutMs?: number;        // 1000..120000; absent = 30000
+  schemes?: string[];        // 1..8, each ^[a-z0-9][a-z0-9._-]{0,31}$; absent = ["bearer"]
+  timeoutMs?: number;        // 5000..120000; absent = 30000
   _meta?: object;            // MCP's reserved member
   // a host ignores members it does not know
 }
@@ -492,18 +503,18 @@ Freeze before Draft→Accepted (RFC-005 §11):
     and keeps a non-default port.
 14. Bounds, each `-32602`: an empty audience; an audience of 129 code points, or with a newline;
     an endpoint that is relative, has userinfo, or is 2049 code points long; a non-boolean
-    `fresh`; a `purpose` with a newline; an empty `schemes`; a `timeoutMs` of 500. An audience of 128 astral-plane characters (256 UTF-16 units)
+    `fresh`; a `purpose` with a newline; an empty `schemes`; a `timeoutMs` of 4999; a `schemes` entry with a space. An audience of 128 astral-plane characters (256 UTF-16 units)
     is accepted.
 15. A host whose provider gives no expiry answers `-32040`, `kind: "unavailable"` — no result,
     no silence.
-16. Cache: two requests for one audience get the same credential; `fresh: true` gets a newly
-    minted one; two principals never share an entry.
+16. For a host that caches: two requests for one audience get the same credential; `fresh: true`
+    gets a newly minted one; two principals never share an entry.
 17. `schemes: ["example-pop"]` to a host that has only bearer → `-32040`, `kind: "host_policy"`;
     absent `schemes` → `scheme: "bearer"`.
 18. A server receiving an unknown `kind` treats the refusal as final.
 19. Time bounds: a host whose provider does not answer replies `-32040` `unavailable` within
     `timeoutMs` − 2000 ms; a hop forwards `timeoutMs` reduced by at least 5000 ms and answers
-    `unavailable` itself when that passes; a hop with less than 1000 ms left does not forward.
+    `unavailable` itself when that passes; a hop that would forward less than 5000 answers without forwarding.
 20. A hop without a grant of its own answers its upstream `-32040` `host_policy`, never `-32002`.
 21. `fresh: true` passes through a hop: the credential returned is newly minted.
 22. A result's `scheme` is one of the request's `schemes`; a server given one it did not list

@@ -1,131 +1,92 @@
-# MCPL RFC-014: Surfaces
+# MCPL RFC-014: Tool Presence, Toolsets and Surfaces
 
-**Status:** Draft (revision 1)
+**Status:** Draft (revision 2)
 **Targets:** MCPL Protocol Specification 0.5
-**Authors:** Claude Code, from a scope proposed by antra
-**Date:** 2026-10-24
-**Depends on:** nothing for authority. This RFC adds no method, no `uses` path and no grant;
-RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do. Every
-virtual tool runs through one ordinary MCP tool (`act`) under the server's existing `tools`
-grant. Adds: one advertisement member on each side (`surfaces`), one optional `push/event`
-params member (`surface`), two `_meta` keys (`mcpl/surface`, `mcpl/surfaceError`), a
-reserved tag namespace (`surface:`), and conventions for four tools. Uses SPEC §9 (push
-events), §16 (event tags), RFC-006 (plain and deferred coalescing) and RFC-008 (tool classes
-and the `mcpl/` `_meta` prefix). Amends SPEC §16.1 (reserved namespaces), Appendix B,
-Changelog.
+**Authors:** Claude Code, from a design worked out with antra
+**Date:** 2026-10-24 (revision 1); 2026-10-25 (revision 2)
+**Depends on:** nothing for authority. This RFC adds no `uses` path and changes no grant;
+RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do. It adds
+**hints** about tools — whether a tool belongs in a model's stable tool list, whether it is
+available right now, which toolset it belongs to — two host→server methods to open and close
+toolsets, and one server→host notification carrying hint changes. How tools reach a model is
+left to the host. Uses SPEC §9 (push events), §16 (tags), §17 (manifest), RFC-006
+(coalescing), RFC-008 (the `mcpl/` `_meta` prefix). Interacts with RFC-015 (a surface host
+outside the main host obtains credentials through it).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
-Reference implementation: `surfaces-mcpl` (RFC §16).
+
+> **Revision 2 note.** Revision 1 had each server implement four tools (`open`, `act`,
+> `look`, `close`) and carry a sub-protocol inside them. That put presentation in the
+> server, required a per-app adapter for every existing service, and could not express the
+> commonest case: a pinned server most of whose tools are only needed sometimes (a world's
+> builder tools while not building). Revision 2 moves presentation to the host. Servers keep
+> their ordinary tool list and say, per tool, whether it is **static** or **dynamic** and
+> whether it is **visible** now; they may group tools into **toolsets** that open and close,
+> optionally as named **instances**. The four tools survive as the host's own interface.
+> Kept from revision 1: "a call reports its own consequences", announcing a tool change once
+> on a lane that is never replaced, the `surface:` tags, and the coalescing lanes.
 
 ---
 
 ## 1. Summary
 
-An agent that plays Go, walks a robot dog, plays a card game, explores a map or drives a 3D
-pipeline needs a different set of actions for each, and within each a different set again
-depending on where it is: a menu, its turn, the other player's turn, a job running. Today
-every such activity is its own MCP server whose tools are listed all the time, whether or not
-the agent is engaged with it and whether or not the activity is in a state where they mean
-anything.
+A model's tool list holds two different kinds of tool that today share one place:
 
-This RFC lets one server host many such activities behind **four tools that never change**:
+- **Stable tools** — the server's core, useful at any time: look, say, search, status. These
+  belong in the request's tool list, which renders first and is cached; they should change
+  as rarely as possible.
+- **Contextual tools** — useful only in some state or while doing something: `play` on your
+  turn, `fire` in a game but not its menu, a world's builder tools while building, the
+  options of the decision in front of you. These change constantly, and every change to a
+  request's tool list rebuilds the whole cache.
 
+Servers cannot pick a presentation, because the right one depends on the host and the model.
+They can say what kind of tool each one is:
+
+```jsonc
+{ "name": "place_block", "description": "…", "inputSchema": { … },
+  "_meta": { "mcpl/presence": "dynamic", "mcpl/toolset": "builder", "mcpl/visible": false } }
 ```
-open   look   act   close
-```
 
-Opening an app creates a **surface** — a live, stateful instance, like a browser tab. A
-surface offers **virtual tools**: MCP tool definitions that are never listed in
-`tools/list`, are called through `act`, and change with the surface's **mode**. Changes are
-announced in the conversation — in the result of the call that caused them, or in a push
-event when something else caused them — which is append-only and therefore costs nothing
-the prompt cache has already paid for.
+…and agree with the host on which toolsets are open. The host decides what goes in the tool
+list (static tools), what reaches the conversation as events (dynamic tools appearing and
+disappearing), and when to remind the model of what is open.
 
-Two rules carry most of the design:
-
-> **Rule 1. What a call causes is reported in that call's result.** It is never also pushed.
->
-> **Rule 2. A change to a surface's active tool set is announced exactly once, on a lane
-> that is never replaced.**
-
-A host that knows nothing of this RFC still works: it lists four tools and shows text. A host
-that implements it can render virtual tools natively, aggregate several surface servers
-behind one set of four tools, and route attention on `surface:*` tags.
+A host that ignores all of it sees the server's full tool list, as today.
 
 ---
 
 ## 2. Motivation
 
-### 2.1 Tool bloat
+**Tool bloat.** One world server lists about 50 tools, its builder tools among them whether or
+not the agent is building. One resident's host lists about 300. The activity servers in one
+deployment list 7–8k tokens of definitions all the time; none narrows by state.
 
-The activity-shaped servers in one deployment (surveyed 2026-10-24) list, all the time:
+**Changing the list is the most expensive edit.** Tools render first. Adding, removing or
+re-describing one rebuilds the prompt cache for tools, system prompt and conversation, and on
+models with preserved thinking invalidates earlier thinking. So a server that narrows its
+list by state (MCP allows it, via `tools/list_changed`) makes every mode change a full rebuild.
+The conversation, by contrast, only grows: content appended to it costs nothing already
+cached.
 
-| Server | Tools | ≈ tokens of definitions |
-|---|---|---|
-| CANON card game | 18 | 2,400 |
-| Go2 robot dog (plain MCP) | 10 | 1,500 |
-| Doom (games-mcpl) | 9 | 1,100 |
-| screen watcher | 6 | 900 |
-| clawblox world | 6 | 900+ |
-| dog events | 4 | 400 |
-| tavern MUD | 7 | 300 |
-
-Roughly 7–8k tokens of definitions, present on every request whether the agent is playing,
-and growing with every activity added. None of these servers narrows its list by state. The
-surface server's four tools are about 2.5 KB (≈600 tokens), constant, regardless of how many
-apps it hosts.
-
-### 2.2 Changing the tool list is the most expensive edit a host can make
-
-Tools render first in a model request. Any change to the tool array — adding, removing, or
-re-describing a tool — invalidates the whole prompt cache: tools, system prompt and
-conversation. On models with preserved thinking it also invalidates every earlier thinking
-block (`tool_set_changed`, `tool_schema_changed`). So the obvious fix for §2.1 — list a
-server's tools only while it is engaged, or only the tools that make sense in the current
-state, via `notifications/tools/list_changed` — buys a full cache rebuild every time the
-agent enters a menu.
-
-Today's hosts behave exactly so: a list change reaches the next request's tool array. Feature
-sets (§6) do not hide tools. Enabling and disabling whole servers changes the list.
-
-### 2.3 Activities are stateful
-
-In a menu, `fire` is meaningless; on the other player's turn, `play` is; before a mesh exists,
-`rig` is. Servers today list everything and answer "you have no game running", which costs a
-round trip and teaches the model nothing about what it *can* do. The set of meaningful
-actions is part of the activity's state, and it should travel with the state.
-
-### 2.4 Engagement is temporary; servers are not
-
-An MCPL server stays connected until it is unloaded. An activity is engaged for a game, a
-walk, a session of work. The unit of loading should be the engagement, not the server.
-
-### 2.5 Why existing mechanisms do not do it
-
-| Mechanism | Why not |
-|---|---|
-| `tools/list_changed` with mode-specific tools | §2.2: a full cache rebuild per mode change |
-| One server per activity, enabled on demand | Same: enabling changes the list |
-| Feature sets (§6) | Gate inbound traffic; do not hide tools, and changing them is a grant change |
-| A generic `call(tool, args)` meta-tool | Constant, but has no notion of state, modes, or events — the model does not learn what it can do |
-| MCP resources + subscriptions | Passive: no wake, no affordances |
-| Provider tool search / deferred loading | Discovery, not control; provider-specific; the host, not the server, decides |
-| Context hooks injecting "current tools" | Re-rendered every inference — a history edit; RFC-010 deprecates injection |
+**The server knows the state; the host knows the context.** The server knows a tool is
+meaningless right now (it is not your turn; there is no mesh to rig). Only the host knows what
+the model has already been told, what has been compressed away, and what its model's API can
+do mid-conversation. The split of responsibilities follows.
 
 ### Design principles
 
-1. **The model-facing tool list never changes.** Everything that varies lives in the
-   conversation, which only grows.
-2. **The state carries its affordances.** A surface's active tools are part of its state and
-   are announced with it.
-3. **The server tells the truth; the host decides what to show.** Structured state goes to
-   hosts that ask for it; text goes to everyone. Only the host knows what a context already
-   holds.
-4. **Works in a host that knows nothing.** Four ordinary tools, ordinary text, ordinary
-   push events.
-5. **No new authority.** A virtual tool can do nothing `act` could not.
-6. **Nothing loads until engaged.** An app's backend connects on `open` and disconnects on
-   `close`.
+1. **The tool list is the server's whole truth.** `tools/list` keeps every definition.
+   Hints say how to treat them; nothing is hidden from a host that asks.
+2. **Hints, not presentation.** A server says *static or dynamic*, *visible or not*, *which
+   toolset*. It does not say how a model should see them or how often an agent will use them —
+   it cannot know.
+3. **Session awareness is optional and useful.** A server may track which toolsets a session
+   has open, which removes guesswork on both sides; a server that declares nothing works as
+   today.
+4. **Append, don't edit.** What changes mid-session reaches the model as appended content,
+   unless the host has an append-only way to change its tools.
+5. **No new authority.** Hints confer nothing. A hidden tool is not a revoked tool.
 
 ---
 
@@ -133,652 +94,361 @@ walk, a session of work. The unit of loading should be the engagement, not the s
 
 | Term | Meaning |
 |---|---|
-| **app** | A kind of activity a server can open: `go`, `doom`, `dog`. Named `^[a-z][a-z0-9-]{0,23}$`. |
-| **surface** | One open instance of an app, owned by one principal. Has an id unique on the connection, e.g. `go-1`. |
-| **virtual tool** | An MCP `Tool` definition (name, description, `inputSchema`, optional `annotations`, `_meta`) that a surface offers. Never listed in `tools/list`; called through `act`. |
-| **mode** | A surface's named state, e.g. `your-turn`, `menu`, `job-running`. Selects which virtual tools are active. |
-| **active set** | The virtual tools callable now. |
-| **rev** | A per-surface counter that advances on every change a model could observe. |
-| **principal** | Whoever owns surfaces on a connection. Several connections may share a principal; surfaces belong to the principal, so a reconnect finds them. |
-
-A surface's state is opaque to this RFC. Its *affordances* — mode and active set — are not.
+| **static tool** | Belongs in a model's stable tool list. Changes rarely (a deploy, not a state). The default. |
+| **dynamic tool** | Comes and goes with state or engagement. Hosts present it outside the stable list unless they can change their tools append-only. |
+| **visible** | The server's statement that a tool is available right now. Applies to dynamic tools; a static tool is always visible. |
+| **toolset** | A named group of dynamic tools that is open or closed for a session: `builder`, `game`, `table`. |
+| **instance** | A named, separately opened copy of a toolset with its own state: two games of Go at once. Only for toolsets that declare `instances: true`. |
+| **header** | The host's stable tool list for a model request. |
+| **surface mode** | A host presentation in which a whole server is engaged on demand: nothing of it in the header; connected when opened; everything through events. |
+| **mixed mode** | The default presentation: static tools in the header, dynamic tools through events. |
 
 ---
 
-## 4. The four tools
+## 4. Tool hints
 
-A server implementing this RFC lists four tools, with these names unless the host's naming
-policy requires otherwise, and marks each with its role in `_meta["mcpl/surface"]`:
+### 4.1 The hints
+
+Carried in a tool definition's `_meta` (in `tools/list`) and in hint changes (RFC §6):
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `mcpl/presence` | `"static"` \| `"dynamic"` | `"static"` | Which list the tool belongs in |
+| `mcpl/visible` | `boolean` | `true` | Available right now (meaningful for dynamic tools) |
+| `mcpl/toolset` | `string` | — | The toolset it belongs to. Implies `presence: "dynamic"` |
+
+Rules:
+
+- A tool whose availability depends on state or engagement **SHOULD** be dynamic. A static tool
+  **SHOULD NOT** change its definition except across deploys, and **SHOULD NOT** become
+  invisible; a static tool that cannot run right now answers its call with an error.
+- A tool in a toolset is visible only while that toolset (or instance) is open **and** the
+  server says it is visible. Two controllers, one rule.
+- `tools/list` **MUST** list every tool, visible or not, so that a host that ignores hints sees
+  today's behaviour. Calling an invisible tool returns an ordinary tool error that says why.
+- Hints are statements, like `annotations` (RFC-008 §6). They confer and remove no authority.
+
+### 4.2 Moving between static and dynamic
+
+Moves are rare and are announced like any hint change (RFC §6). A host **MAY** apply a move
+at a time of its choosing — at once if its model API can change tools append-only, otherwise
+at a natural boundary such as compaction or a new session. Until it applies the move, the
+tool keeps working where it is. When it applies it, the host **SHOULD** tell the model where
+the tool went (RFC §8.3).
+
+---
+
+## 5. Toolsets and instances
+
+### 5.1 Declaration
+
+In the manifest (§17), so changes are announced by `mcpl/manifestChanged`:
 
 ```jsonc
-{ "name": "act", "description": "…", "inputSchema": { … },
-  "_meta": { "mcpl/surface": "act", "mcpl/class": ["body", "comms", "computer", "media"] } }
+"experimental": { "mcpl": { "version": "0.5", …,
+  "toolHints": true,
+  "toolsets": {
+    "builder": { "title": "Building", "summary": "Place, paint and remove blocks in a world you may edit",
+                 "default": "closed" },
+    "game":    { "title": "Go", "summary": "A game of Go against the bot or another agent",
+                 "default": "closed", "instances": true,
+                 "options": { "type": "object", "properties": { "size": { "enum": [9, 13, 19] } } } }
+  },
+  "surface": { "title": "Arcade", "summary": "Games" } } }
 ```
 
-The server **MUST NOT** change these four definitions over the life of a connection on
-account of surfaces opening, closing, or changing mode, and **MUST NOT** send
-`notifications/tools/list_changed` for such changes. (It may of course list other, ordinary
-tools; they are outside this RFC.)
+| Field | Meaning |
+|---|---|
+| `title`, `summary` | For the host's catalog and reminders |
+| `default` | `"open"` or `"closed"` at the start of a session |
+| `instances` | `true`: the toolset may be opened more than once, each a named instance |
+| `options` | JSON Schema for `toolsets/open` options |
+| `view` | Optional resource URI (an RFC 6570 template with `{instance}`) the host reads for the toolset's current state |
 
-### 4.1 `open`
+`surface` is a server-level hint: everything this server offers is engagement, so a host may
+present it in surface mode, connecting only when it is opened.
 
-`{ app: string, options?: object }` — open an app. The result reports the new surface's id,
-title, mode, a view of its state, and its active set (RFC §8.1). Option schemas are per app
-and discoverable with `look {app}`.
-
-### 4.2 `act`
+### 5.2 `toolsets/open` and `toolsets/close` (Host → Server, Request)
 
 ```jsonc
-{ "surface": "go-1", "tool": "play", "args": { "point": "D4" },
-  "then":   [ { "tool": "…", "args": { } } ],      // optional, ≤ 16
-  "expect": { "mode": "your-turn", "rev": 7 } }     // optional
+{ "method": "toolsets/open",  "params": { "toolset": "game", "instance": "vs-ada", "options": { "size": 9 } } }
+→ { "toolset": "game", "instance": "vs-ada", "title": "Go 9×9 vs Ada" }
+
+{ "method": "toolsets/close", "params": { "toolset": "game", "instance": "vs-ada" } }
+→ { }
 ```
 
-Calls one virtual tool. The server **MUST** validate `args` against the tool's `inputSchema`
-and refuse without side effect on failure. A tool not in the active set **MUST** be refused
-without side effect, with `tool_inactive` when it belongs to the surface in some other mode
-and `unknown_tool` otherwise (RFC §5.4).
+- `instance` is a name the host proposes (the agent's or its own). The server MAY return a
+  different one if it must; the returned name is the instance's id for the session. For a
+  toolset without `instances`, `instance` is absent.
+- The server **MAY** refuse an open (unknown toolset, a limit, bad options) with a JSON-RPC
+  error; the host shows the refusal.
+- Opening and closing are the host's acts. The **agent** asks through the host's tools; the
+  **host** may open or close by its own policy (close a toolset idle for many turns); the
+  **server** may only suggest (RFC §6.2).
+- Open toolsets belong to the session. On reconnect the host re-opens what it considers open,
+  and a server that keeps state across connections (a game in progress) reattaches it.
+- The result of an open carries the hint changes the open caused (`_meta["mcpl/hints"]`):
+  which of the toolset's tools are visible now.
 
-- **`then`** runs further calls on the same surface in order, each checked against the active
-  set *at the moment it runs*, stopping at the first refusal or error. The result reports
-  each step.
-- **`expect`** makes the call conditional: if the surface is not in that mode (and, if given,
-  at that rev), nothing is done and the result is `expectation_failed`, carrying the current
-  active set. This is how an agent says "play D4, if it is still my turn" across a gap in
-  which events may have moved the surface.
+### 5.3 Calling an instance's tools
 
-### 4.3 `look`
+Every instance of a toolset shares the same tool definitions; the instance a call is for rides
+in the call's `_meta`:
 
-| Arguments | Returns |
-|---|---|
-| none | Open surfaces (id, title, mode) and the apps that can be opened |
-| `{app}` | The app's description and option schema |
-| `{surface}` | The surface's full view and its whole active set, every tool described |
-| `{surface, tool}` | That virtual tool's full definition, schema included |
-| `image: boolean` | Whether to include images, where the surface has them |
+```jsonc
+{ "method": "tools/call", "params": { "name": "play", "arguments": { "point": "D4" },
+                                      "_meta": { "mcpl/instance": "vs-ada" } } }
+```
 
-`look {surface}` is the recovery path for everything this RFC delivers in the conversation:
-after context compression, after a reconnect, or when in doubt, one `look` restores the
-current mode and tools.
-
-### 4.4 `close`
-
-`{surface}` — end the surface. Its virtual tools and events stop, and the server SHOULD
-release its backend. A later `act` on the id is refused with `surface_closed`.
-
-### 4.5 Classes
-
-`act` runs whatever the surfaces offer, so its RFC-008 class is the union of the classes of
-the server's apps. A host that does not implement this RFC applies that union — strict, and
-correct. A host that does reads each virtual tool's own `_meta["mcpl/class"]` (RFC §11.3).
+A call to an instance-bound tool without `mcpl/instance`, while more than one instance is
+open, is an ordinary tool error naming the open instances.
 
 ---
 
-## 5. Calls
+## 6. Hint changes
 
-### 5.1 Virtual tool definitions
-
-A virtual tool is an MCP `Tool`:
-
-- `name` **MUST** match `^[a-z][a-z0-9_]{0,47}$` and be unique among the surface's tools.
-  Different surfaces may reuse names.
-- `inputSchema` **MUST** be a JSON Schema with `type: "object"`.
-- `description`'s first sentence **SHOULD** stand alone: compact projections show only it
-  (RFC §8.1).
-- `annotations` and `_meta["mcpl/class"]` keep their MCP and RFC-008 meanings;
-  `_meta["mcpl/preempt"]` is defined in RFC §5.5.
-- Dynamic choices — menu entries, the options of a pending decision, the ids of items just
-  listed — **SHOULD** be expressed as `enum`s in the schema, so the definition itself says
-  what is possible.
-
-### 5.2 Modes and the active set
-
-The active set is a function of the surface's state. A server **SHOULD** offer in each mode
-only the tools that can succeed in it, and **SHOULD** keep each mode's set small; a tool that
-must always be reachable (an emergency stop) is simply in every mode's set.
-
-Two definitions are the same tool exactly when they are equal as canonical JSON. A
-definition that changes — a new `enum` of options — is a change to the active set.
-
-### 5.3 Rule 1: a call reports its own consequences
-
-Everything a call causes — its direct result, a reply it provokes (a bot's answering move),
-a mode change, a change to the active set, the surface closing — **MUST** be reported in that
-call's result, and **MUST NOT** also be pushed as an event. The model is already reading the
-result; a second copy would arrive later, out of order, and wake it for nothing.
-
-When the call changed the mode or the active set, the result ends with the new mode and, if
-the set changed, the new set (RFC §8.1). When it changed neither, the result says nothing
-about affordances.
-
-"Caused by the call" means caused by it, not merely concurrent with it. An event from a
-background source — a telemetry poll, an upstream push, the other player — that happens to
-land while a call is running is pushed as the event it is; folding it into an unrelated
-result would hide it from a host's wake policy and misattribute it. (The reference
-implementation attributes by async context.)
-
-### 5.4 Errors
-
-Refusals are MCP tool results with `isError: true`, never JSON-RPC errors — they are answers
-the model should read. The result's `_meta["mcpl/surfaceError"]` carries a code:
-
-| Code | Meaning |
-|---|---|
-| `unknown_app` | No such app |
-| `app_unavailable` | The app's backend is not configured or not reachable |
-| `invalid_options` | `open` options failed the app's schema |
-| `unknown_surface` | No such surface on this principal (the server may have restarted) |
-| `surface_closed` | The surface was closed |
-| `unknown_tool` | The surface has no such tool in any mode |
-| `tool_inactive` | The tool exists but is not active in the current mode |
-| `invalid_args` | `args` failed the tool's schema; nothing was done |
-| `expectation_failed` | `expect` did not hold; nothing was done |
-| `busy` | A limit (open surfaces, concurrent calls) was reached |
-| `failed` | The tool ran and failed |
-
-Every refusal before execution (`tool_inactive`, `invalid_args`, `expectation_failed`)
-**MUST** leave the surface unchanged, and its text **SHOULD** name what is possible instead.
-
-### 5.5 Preemptive tools
-
-Calls on one surface are serialized: a call sees the state the previous one left. That is
-wrong for exactly one kind of tool — the one that exists to interrupt the call in flight. A
-robot's `stop` cannot wait for the `walk` it should end.
-
-A virtual tool whose definition carries `_meta["mcpl/preempt"]: true` **MUST** be executed
-without waiting for a call in flight on the same surface. It is still checked against the
-active set and its schema first. The interrupted call **SHOULD** observe the interruption
-and say so in its own result; the preemptive call's result reports where things came to
-rest. A preemptive tool cannot be chained with `then`. Servers **SHOULD** mark stop, abort
-and emergency tools preemptive and **SHOULD NOT** mark anything else.
-
-### 5.6 Results carry state
-
-Every `open`, `act` and `look {surface}` result **MUST** carry the surface's state object
-(RFC §6) in `_meta["mcpl/surface"]`. `look` with no arguments carries an array of them. A
-host that does not implement this RFC ignores `_meta`; one that does tracks each surface's
-mode and active set from it without parsing text.
-
----
-
-## 6. The surface state object
+### 6.1 The change object
 
 ```ts
-interface SurfaceState {
-  id: string;            // "go-1"
-  app: string;           // "go"
-  title: string;         // human label
-  rev: number;           // advances on every observable change
-  mode: string;          // "your-turn" | … | "closed"
-  status: "open" | "closed";
-  tools: Tool[];         // the active set, full MCP Tool definitions
-  toolset: string;       // digest of the active set: sha256 over the canonical JSON of
-                         // the definitions sorted by name, base64url, prefixed "sha256:"
+interface HintChanges {
+  rev: number;                   // per connection, strictly increasing
+  tools?: Array<{
+    name: string;
+    instance?: string;           // visibility is per instance
+    presence?: "static" | "dynamic";
+    visible?: boolean;
+    definition?: Tool;           // dynamic tools only: a new definition (new enum options)
+  }>;
+  toolsets?: Array<{
+    toolset: string;
+    instance?: string;
+    state: "open" | "closed";    // the server closing one (game over), or confirming
+    title?: string;
+  }>;
+  suggest?: Array<{              // RFC §6.2
+    toolset: string;
+    instance?: string;
+    action: "open" | "close";
+    reason: string;
+  }>;
 }
 ```
 
-`toolset` lets a host detect a change without comparing definitions. Hosts **MUST NOT** treat
-it as authenticated; it is the server's statement, like everything else here.
+It travels three ways, sharing one `rev` counter:
+
+1. **In a tool result**, `_meta["mcpl/hints"]` — for what that call caused.
+2. **On a push event**, params member `hints` — for a change the event explains ("White
+   played E5", and `play` becomes visible).
+3. **Standalone**, as `tools/hints` (Server → Host, Notification) — for a change with nothing
+   to say.
+
+The host applies changes in `rev` order and ignores any with a `rev` it has already passed.
+
+`definition` lets a dynamic tool's options change without a `tools/list` round trip. A static
+tool's definition changes only through `tools/list_changed`.
+
+### 6.2 Who reports what
+
+- **A call reports its own consequences.** What a `tools/call` causes — tools appearing or
+  disappearing, a toolset closing, a reply it provoked — rides in its result. The server
+  **MUST NOT** also push it.
+- **Something else's consequences are pushed**, with the explaining event when there is one.
+  An event from a background source that lands while a call is running is pushed, not folded
+  into that call's result.
+- **Suggestions** (`suggest`) are the server's way to ask for an open or close: an opponent
+  challenges you, a world zone invites building, a game ended. The host decides; a suggestion
+  confers nothing, and hosts **SHOULD** let the agent see a suggestion to open rather than act
+  on it silently.
+
+### 6.3 Advertisement
+
+Server: `experimental.mcpl.toolHints: true` (it sends hints) and `toolsets` (it declares
+toolsets). Host: `experimental.mcpl.toolHints: true`. A server **MUST NOT** send `tools/hints`
+or the `hints` push member to a host that did not advertise `toolHints`; `_meta` on results is
+always allowed.
 
 ---
 
 ## 7. Events
 
-### 7.1 Kinds and the `surface` member
+Activity in a toolset reaches the agent as ordinary `push/event`s (§9). For routing:
 
-Surface events are ordinary `push/event`s (§9) under a feature set whose `uses` includes
-`pushEvents`. When the host advertised `surfaces` (RFC §9), the server adds a structured
-member to the params:
+- Push params carry `toolset` and `instance` when the event belongs to one; the host uses
+  them to place the event and to apply the `hints` member.
+- The `surface:` tag namespace (reserved by this RFC, alongside `chat:` and `mcpl:`):
+  `surface:turn` (waiting on you), `surface:alert` (needs attention now), `surface:done` (a
+  game or job finished), `surface:invite` (an open is suggested), `surface:update` (ambient,
+  latest-value). Hosts decide treatment; tags are never authority (§16.6).
+- Latest-value state (progress, pose, health) uses RFC-006 plain coalescing with a key per
+  instance. Activity uses RFC-006 deferred coalescing where the host supports it, so a burst
+  arrives as one message describing the present. A visibility change is never carried only by
+  a replaceable event.
 
-```jsonc
-{ "method": "push/event", "params": {
-    "featureSet": "surfaces.events", "eventId": "…", "timestamp": "…",
-    "tags": ["surface:turn", "go:move", "surface:app=go", "surface:id=go-1"],
-    "surface": { /* SurfaceState */ "kind": "activity" },
-    "payload": { "content": [ { "type": "text", "text": "[go-1 · your-turn] White played E5. Your move.\n…" } ] } } }
+When a toolset closes, its events stop.
+
+---
+
+## 8. Host presentation
+
+This section is guidance, except where it says MUST.
+
+### 8.1 What goes where
+
+| Presentation | Static tools | Dynamic tools |
+|---|---|---|
+| **plain** (no hint support) | header | header (the full list; today's behaviour) |
+| **mixed** (default) | header | announced in the conversation as they become visible and invisible; called through a host meta-tool, or projected (RFC §8.4) |
+| **surface** (server hinted `surface`) | none | everything through events and meta-tools; the host may connect only when the agent opens it, and disconnect when the last toolset closes |
+
+### 8.2 Meta-tools
+
+A host presenting dynamic tools exposes a small, constant set of its own, for example:
+
+```
+open  {toolset | server, instance?, options?}     look  {toolset?, instance?, tool?}
+act   {tool, instance?, args}                       close {toolset | server, instance?}
 ```
 
-| `kind` | When |
-|---|---|
-| `activity` | Something happened that the agent did not cause in a call: the other player moved, the robot fell, a job finished, a mode changed on a timer |
-| `state` | A latest value: progress, pose, health. Superseded by the next one |
-| `closed` | The surface ended on its own (game withdrawn, backend gone); `reason` says why |
+They are the host's interface, aggregated across every connection and named by the host.
+They are static.
 
-`payload.content` is always present and self-contained, so a host that ignores `surface`
-loses nothing a model needs.
+### 8.3 Announcing changes
 
-### 7.2 Rule 2: active-set changes are announced once, on a lane that is never replaced
+- When dynamic tools become visible, the host announces them in the conversation as compact
+  signatures, with each tool's first sentence the first time its definition appears. When they
+  become invisible, it says so. The API tool list does not change.
+- When a tool moves static → dynamic, it leaves the header (RFC §4.2) and the host shows where
+  it went; dynamic → static is the reverse.
+- **Reminders.** When the announcement of an open toolset has left the context — compressed,
+  or out of the window — the host **SHOULD** publish a reminder: what is open, its current
+  tools, and how to close it. Only the host knows what the context still holds; the server
+  need not repeat itself.
 
-A change to the active set that a call did not cause **MUST** be announced in an `activity`
-or `closed` event — never only in a `state` event, which a coalescing host may replace
-before it is read. The announcement **SHOULD** be folded into the activity event that
-explains it ("White played E5. Your move." with the new set), and **SHOULD** be its own
-activity event only when nothing else explains it.
+### 8.4 Projection
 
-A server **SHOULD NOT** re-announce an active set the model was already given. Where the
-server cannot know what was delivered (a refused push), it re-announces on the next
-opportunity.
+A host whose model API can add and remove tools append-only (for example, mid-conversation tool
+changes on the Claude API) **MAY** present visible dynamic tools as real tools for as long as
+they are visible. It **MUST** give them host-namespaced names that cannot collide with any
+other tool, **MUST** route each call only to its server (with `mcpl/instance` set), and
+**MUST** withdraw them when they become invisible or their toolset closes. Whether to project
+is the host's decision, from its own policy and what it observes of the agent's use; the
+server is not asked.
 
-### 7.3 Tags
+### 8.5 Host-made toolsets
 
-This RFC reserves the `surface:` namespace (§16.1), alongside `chat:` and `mcpl:`:
+A host **MAY** group the tools of servers that declare nothing — by operator configuration, by
+RFC-008 class, by name — and present them as toolsets of its own (open, close, reminders),
+without involving the server. That is how a host with hundreds of tools from many servers
+keeps its header small. Server-declared toolsets and host-made ones coexist.
 
-| Tag | Meaning |
-|---|---|
-| `surface:turn` | The surface is waiting on this agent: its move, a decision pending |
-| `surface:alert` | Something needs attention now: damage, a fall, a failure |
-| `surface:done` | A game or long operation finished |
-| `surface:invite` | Someone invites the agent to open or join a surface |
-| `surface:tools` | The event's main content is an active-set change |
-| `surface:update` | Ambient, latest-value state |
-| `surface:closed` | The surface closed on its own |
-| `surface:app=<app>` | Faceted: which app |
-| `surface:id=<id>` | Faceted: which surface |
+### 8.6 Surface hosts outside the main host
 
-Servers **SHOULD** emit `surface:app=` and `surface:id=` on every surface event, and the
-app's own tags (`go:move`, `dog:battery-low`) as producer tags. The usual §16.5–§16.6 rules
-hold: tags are hints for treatment, never authority. A typical consumer policy wakes on
-`surface:turn`, `surface:alert` and `surface:done`, and holds `surface:update`.
+A host that cannot present dynamic tools (a plain MCP client) can gain the capability from a
+**surface host**: an MCPL server that is itself a host for the servers behind it, exposes the
+meta-tools as its own static tools, and renders dynamic tools as events. It connects to those
+servers as the agent, so it obtains the agent's credentials from its own host through RFC-015.
 
-### 7.4 Lanes and coalescing
+---
 
-| Event | Without RFC-006 | Host advertises plain coalescing | Host advertises deferred |
+## 9. Use cases
+
+| Server | Static | Toolsets (dynamic) | Visibility by state |
 |---|---|---|---|
-| `activity` | append | append | deferred, key `surface/<id>` |
-| `state` | append, throttled by the server | plain, key `surface/<id>/state[/<k>]` | plain, as left |
-| `closed` | append | append | append |
-
-- **Activity events are never replaced** — they carry history and, by rule 2, affordances.
-  Under deferred coalescing, the server pushes a notice whose fallback content is
-  self-contained and whose `coalesce.data` carries the event's text (≤ 4 KiB). At
-  `push/render` it returns everything since the previous render, the surface's current
-  brief view, and the active set if it changed since last announced. A burst — three
-  opponent moves while the agent was busy — arrives as one message describing the present.
-- **State events are latest-value** and use plain coalescing where the host supports it.
-  Where it does not, the server throttles them per key (the reference implementation:
-  trailing, ≥ 10 s). The sub-key `<k>` keeps independent values (battery, pose) from
-  replacing each other.
-
-Events carrying images go immediately even under deferred coalescing, since `coalesce.data`
-cannot carry them.
-
-### 7.5 Delivery when disconnected
-
-Surfaces belong to the principal, not the connection. Events raised while a principal has no
-live connection are queued (bounded; state events collapse by key) and delivered on
-reconnect.
+| Eidoverse | look, say, move, who | `builder` (closed), `inventory`, `conjure` | builder tools visible only where the agent may build |
+| Go | — (`surface`) | `game` (instances; options size, opponent) | `play`/`pass` on your turn; `mark_dead`/`accept` in scoring |
+| CANON | search_cards, card, rules, decks | `table` | the decision tools, with enums of the legal options, while a decision is yours |
+| Doom | — (`surface`) | `game` | start and results in the lobby; move and attack while playing; restart when dead |
+| Robot dog | status | `body` | move and turn when standing; `stop` whenever reachable |
+| Orrery | projects | `node` | the ops valid after the selected node's kind |
+| Atlas | search, stats | `explore` | `step` choices from the current place |
 
 ---
 
-## 8. Rendering for the model
+## 10. Security considerations
 
-### 8.1 Text projection (every host)
-
-Every result and event carries text that is complete on its own. The reference format:
-
-```
-[go-1 · your-turn] White played E5. Your move.
-    A B C D E F G H J
- 9  . . . . . . . . .  9
- …
-Tools now — act {surface:"go-1", tool, args}:
-  play(point: string) — Place a stone: column letter (A–T, no I) then row number counted from the bottom, e.g. "D4".
-  pass() — Pass.
-  resign()
-```
-
-- A header `[<id> · <mode>]` on every event and on any result whose mode changed.
-- The active set as **compact signatures**: `name(param: type, opt?: type =default)`, enums
-  as `"a"|"b"`, ranges as `int 1..7`.
-- A tool's first sentence is shown the first time its definition appears, and only its
-  signature after. Full definitions are one `look {surface, tool}` away.
-
-A server cannot know what a host's context retains, so this is a heuristic; `look {surface}`
-always restores the whole picture.
-
-### 8.2 Native projection (optional, aware hosts)
-
-A host that tracks active sets from `_meta["mcpl/surface"]` and the `surface` event member
-**MAY** present virtual tools to the model as real tools, when its model API can change the
-tool set mid-conversation without editing the prompt prefix. On the Claude API, for example:
-
-- `tool_addition` / `tool_removal` blocks in an appended `role: "system"` message add and
-  withdraw tools while the cached prefix survives (beta
-  `mid-conversation-tool-changes-2026-07-01`; a tool added *by reference* must be declared
-  in `tools` with `defer_loading: true`).
-- Under the `inline-tools-2026-09-15` beta, a `tool_addition` may carry the full definition,
-  so tools learned mid-session — which surface tools are — need no up-front declaration, and
-  a same-name definition change is expressible.
-
-A host doing this:
-
-- **MUST** give each projected tool a host-namespaced name (e.g. `go_1__play`) that cannot
-  collide with any other tool, and **MUST** route a call to it as
-  `act {surface, tool, args}` on the originating server and nowhere else;
-- **MUST** withdraw a surface's projected tools when the surface leaves the active set or
-  closes;
-- **SHOULD** weigh churn: a game that alternates between two modes every turn may be better
-  served by projecting the union and letting `tool_inactive` refusals teach, or by text
-  projection alone;
-- **MUST NOT** let a projected tool's description alter how it presents the server's
-  ordinary tools.
-
-Native projection is a host rendering choice. Nothing on the wire changes.
-
-### 8.3 Aggregation (optional, aware hosts)
-
-A host connected to several surface servers **MAY** present a single set of four tools,
-hide the servers' own copies (recognized by `_meta["mcpl/surface"]`), qualify surface ids by
-server (`arcade/go-1`), and route each call to the owning server. The model then has four
-surface tools however many surface servers are attached.
+- **No authority.** Hints, toolset state and suggestions confer nothing. Hosts **MUST NOT**
+  treat a hint as permission, and a hidden tool remains subject to every policy on tool calls.
+- **Server-authored text mid-conversation.** Dynamic tool definitions reach the model inside
+  the conversation. They are the server's words, at the trust tier of any tool description;
+  hosts attribute them to the server.
+- **Projection** (RFC §8.4) must not let a server's tool shadow a host's or another server's.
+- **Suggestions** to open are shown to the agent, not acted on silently, by default: a server
+  should not be able to put tools in front of a model by asking.
+- **Churn.** A server flipping visibility rapidly costs context. Hosts **MAY** rate-limit and
+  debounce announcements; servers **SHOULD** debounce.
 
 ---
 
-## 9. Advertisement
+## 11. Backward compatibility
 
-Server, in `initialize`:
-
-```jsonc
-"experimental": { "mcpl": { "version": "0.5", "pushEvents": true,
-                            "surfaces": { "version": 1 }, "featureSets": { … } } }
-```
-
-Host, in `initialize`:
-
-```jsonc
-"experimental": { "mcpl": { "version": "0.5", …, "surfaces": { "version": 1 } } }
-```
-
-A server **MUST NOT** send the `surface` push member to a host that did not advertise
-`surfaces`. `_meta["mcpl/surface"]` on results is always permitted: MCP hosts ignore
-unknown `_meta`.
-
-Per §3.2, a plain MCP host sees four tools and text results and loses only events.
+- A server that sends no hints is static throughout; nothing changes.
+- A host that ignores hints sees every tool in `tools/list`, and calls to invisible tools fail
+  with explanations.
+- `toolsets/open` and `toolsets/close` are only sent to servers that declared toolsets.
 
 ---
 
-## 10. Use cases
-
-Each was built against the reference implementation (RFC §16). The tables are what the
-model sees.
-
-### 10.1 Go — turn-based, two parties
-
-| Mode | Tools |
-|---|---|
-| `waiting` | `cancel` |
-| `your-turn` | `play(point)`, `pass`, `resign` (+ `undo` against the bot) |
-| `their-turn` | `resign` |
-| `scoring` | `mark_dead(points[])`, `accept`, `resume` |
-| `scoring-accepted` | `mark_dead`, `resume` |
-| `over` | `rematch`, `sgf` |
-
-Against the built-in bot, the bot's reply happens inside `act` (rule 1): one call, one
-exchange. Against another agent — the second agent opens with `{join: code}` — each move
-reaches the other as an `activity` event tagged `surface:turn`, carrying the board and the
-re-announced active set. Shows: modes that alternate every turn; one app, two principals;
-rule 1 versus events; `expect {mode:"your-turn"}` as the guard against a stale picture.
-
-### 10.2 Robot dog — safety-relevant affordances
-
-Wraps the existing plain-MCP Go2 server (10 tools) and the dog-events MCPL server.
-
-| Mode | Tools |
-|---|---|
-| `offline` | `status`, `retry` |
-| `standing` | `move`, `turn`, `tilt`, `pose`, `emote`, `photo`, `scan`, `avoidance`, `stop` |
-| `sitting` / `lying` | `pose`, `photo`, `scan`, `stop` |
-| `moving` | `stop`, `status` |
-| `stopped` (latched after an interrupt) | `resume`, `pose`, `photo`, `scan`, `stop` |
-| `fallen` / `damped` | `pose`, `photo`, `scan`, `stop` |
-
-`stop` is in every mode where the body is reachable, and is preemptive (RFC §5.5): it ends a
-walk whose call is still waiting. `pose`'s `enum` lists only postures other than the
-current one. A walk longer than its `wait` returns and finishes as a `surface:done` event;
-offline, battery-critical, a fall are `surface:alert`; battery and position drift are
-`state` events. While a motion runs, nothing but `abort` reaches the robot. Shows: a safety
-tool that must preempt; telemetry that must not flood the context; a plain-MCP server
-becoming a surface. (Built and tested against a fake relay only.)
-
-### 10.3 CANON — enumerated decisions
-
-The card game's 18 always-listed tools collapse into small per-stage sets:
-
-| Mode | Tools |
-|---|---|
-| `lobby` | `new_table`, `join_table(code: enum of open tables)`, `tables`, `search_cards`, `card`, `rules`, `decks` |
-| `open-table` | `cancel`, `card`, `rules` |
-| `waiting` (the other player decides) | `say`, `concede`, `card` |
-| `mulligan` | `keep`, `mulligan` (+ `say`, `concede`, `card`) |
-| `main-phase` | `choose(option: enum)`, `plan(steps[≤8])` (+ …) |
-| `response`, `targets`, `discard`, … | `choose(option: enum)` or `choose(options: enum[min..max])` [+ `decline`] (+ …) |
-| `over` | `rematch`, `leave`, `say`, `card` |
-
-Each pending decision is a mode whose tool is built from the decision's legal options —
-`choose(option: "1 End your turn"|"2 POST"|"3 Rack Claude 3 Opus"|…)` — so the definition
-is the menu, and a call made against a decision that has since passed fails schema
-validation instead of being applied to the next one. Table traffic (`channels/incoming`
-upstream) becomes `activity` events: a decision for the agent is `surface:turn`, the result
-`surface:done`, a decision taken by the timer `surface:alert`; the long-poll `wait`
-disappears. A decision that arrives while the agent's own call is still waiting is reported
-in that call's result instead (rule 1). Shows: dynamic `enum`s; a definition change as an
-active-set change; two principals at one table.
-
-### 10.4 Doom — real-time state, images
-
-Wraps games-mcpl (9 always-listed tools).
-
-| Mode | Tools |
-|---|---|
-| `lobby` | `start`, `games`, `results` |
-| `playing` | `act` (≤ 12 actions per turn), `explore`, `goto`, `attack`, `use`, `view`, `say`, `stop` |
-| `dead` | `restart`, `start`, `view`, `say`, `stop` |
-| `level-complete` | `next` (absent after the last map), `restart`, `start`, `view`, `say`, `stop` |
-| `offline` | `reconnect` |
-
-Frames are images in `act` results and `look`, never in events. Watcher chat becomes
-`activity` events with `chat:*` tags; a game ended elsewhere is `surface:done`; a lost
-connection is `surface:alert`. Shows: images on the call lane only; the upstream server's
-own per-turn batching inside one virtual tool; a mode (`offline`) that exists only because
-the backend is remote.
-
-### 10.5 Atlas — navigation as state
-
-| Mode | Tools |
-|---|---|
-| `browsing` | `search`, `random`, `writers`, `go(to: enum of items just listed)`, `visit`, `back` |
-| `at-place` | `read`, `step(to: enum)`, `nearby`, `same_seed`, `visit`, `back`, `home` |
-| `at-creature` | `read`, `step`, `nearby`, `fill` (only if enabled), `visit`, `back`, `home` |
-| `at-text` | `read`, `step`, `nearby`, `visit`, `back`, `home` |
-
-"Where am I" is the surface's state, and `step`'s `enum` is what is reachable from here.
-The one write Atlas offers agents (filling a cell, from a shared daily pool) is off unless
-configured, and its completion is a `surface:done` event. Shows: affordances that are a
-function of position; enums as the map's edges.
-
-### 10.6 Orrery — long jobs, work tools
-
-| Mode | Tools |
-|---|---|
-| `projects` | `open_project(project: enum)`, `new_project`, `quick`, `refresh` |
-| `project` | `select(node: enum)`, `generate_images`, `op_info`, `cancel_chain` (while a chain runs), `leave` |
-| `node` (completed) | `branch(op: enum of ops valid after this node)`, `chain`, `retry`, `mark`, `see`, `select`, `up`, `op_info` |
-| `running` | `cancel`, `mark`, `select`, `up` |
-| `failed` | `retry`, `mark`, `select`, `up`, `op_info` |
-| `choose` (a chain waits for a star) | `star(node: enum of candidates)`, `see`, `select`, `cancel_chain`, `up` |
-
-No rigging before a mesh: `branch`'s `enum` is the pipeline's legal next ops for the
-selected node, and options are checked against the catalogue before anything that spends
-credits is sent. Starting an op returns at once (rule 1); progress is a `state` event,
-completion `surface:done`, failure `surface:alert`, and a chain waiting on a human-or-agent
-choice is `surface:turn`. Shows: rule 1 for starting a job versus events for finishing it;
-money-spending ops gated by state.
-
-### 10.7 Any existing server, without code
-
-The reference implementation's `mount` app turns any configured MCP or MCPL server into an
-app: connect on `open`, its tools become virtual tools, its events become surface events,
-and an optional declarative mode map (a probe tool plus regex rules) narrows the active set
-by state. A server with forty tools used once a week costs four tools until it is opened.
-
----
-
-## 11. Security considerations
-
-### 11.1 No new authority
-
-A virtual tool executes inside the server, through `act`, which is an ordinary MCP tool
-under the connection's `tools` grant (§5.4). There is nothing a virtual tool can reach that
-the server could not reach through any tool it lists. Opening, acting and closing are
-`tools/call`s and inherit every host policy on tool calls.
-
-### 11.2 Virtual tool text is server-authored
-
-Virtual tool names, descriptions and schemas arrive mid-conversation, inside results and
-events. They are the same trust tier as an MCP tool description or an event's content: the
-server's words. Hosts **SHOULD** render them attributed to the server, as they render
-events. Natively projected tools (RFC §8.2) **MUST** be namespaced and routed only to their
-server, so a surface cannot shadow a host tool or another server's.
-
-### 11.3 Classes and approvals
-
-An unaware host applies `act`'s union class — strictest of all apps the server hosts. An
-aware host **MAY** compute an effective class per virtual tool (RFC-008 §5: operator
-override, host knowledge, server declaration) and apply approval and observation policy per
-call. A virtual tool without a class is unclassed, and the most restrictive answer applies.
-
-### 11.4 Events from other principals
-
-When a surface is shared — two agents at one Go board — an event on one principal's surface
-reports another principal's action. It is the server's testimony about what happened in an
-activity it referees, nothing more. Tags remain hints (§16.6): `surface:turn` is a
-suggestion to wake, and a host's own rules decide.
-
-### 11.5 Cost
-
-Every active-set announcement costs tokens. Rule 2 and the signature projection bound it:
-an unchanged set is never repeated, a repeated definition is shown as a signature. A server
-whose surfaces change mode faster than the agent can act **SHOULD** debounce, and hosts
-**MAY** rate-limit surface events like any others.
-
----
-
-## 12. Alternatives considered
-
-1. **New MCPL methods (`surfaces/open`, `surfaces/act`, …).** Would require host support
-   for anything to work at all. Expressing the operations as four tools keeps plain MCP hosts
-   working; aggregation (RFC §8.3) needs only the role marker.
-2. **A `surfaces/changed` notification for active sets.** A host-only channel would leave
-   the model uninformed in every host that does not implement it. The conversation is the
-   channel that every host has; structured state rides along in `_meta` and the `surface`
-   member.
-3. **Diffs instead of full sets.** Cheaper per announcement, but a diff is meaningful only
-   relative to what the model saw, which only the host knows; under coalescing it can be
-   applied to the wrong base. Full sets as signatures are small enough.
-4. **Put the four tools in the host.** Hosts may (RFC §8.3), but a server that carries its
-   own four tools works everywhere today.
-5. **Modes declared up front, events say only "mode → X".** Cheapest of all, and the model
-   must then remember a catalog announced at `open`, which compression may have dropped.
-   Rejected as the only mechanism; a server may still keep mode sets stable so that
-   re-announcements are signatures only.
-
----
-
-## 13. Schema
+## 12. Schema
 
 ```ts
-// Tool definitions (tools/list): the four tools carry
-//   _meta["mcpl/surface"]: "open" | "act" | "look" | "close"
-// Virtual tool definitions may carry
-//   _meta["mcpl/preempt"]: true                                  // RFC §5.5
-
-// tools/call result (open, act, look):
-//   _meta["mcpl/surface"]: SurfaceState | SurfaceState[]      // RFC §5.6, §6
-//   _meta["mcpl/surfaceError"]?: SurfaceErrorCode              // RFC §5.4, with isError
-
-type SurfaceErrorCode =
-  | "unknown_app" | "app_unavailable" | "invalid_options"
-  | "unknown_surface" | "surface_closed"
-  | "unknown_tool" | "tool_inactive" | "invalid_args"
-  | "expectation_failed" | "busy" | "failed";
-
-interface SurfaceState {
-  id: string; app: string; title: string; rev: number; mode: string;
-  status: "open" | "closed"; tools: Tool[]; toolset: string;
+// Tool._meta
+//   "mcpl/presence"?: "static" | "dynamic"     (default "static")
+//   "mcpl/visible"?:  boolean                  (default true)
+//   "mcpl/toolset"?:  string                   (implies dynamic)
+// tools/call params._meta
+//   "mcpl/instance"?: string
+// tools/call result._meta (and toolsets/open result._meta)
+//   "mcpl/hints"?: HintChanges
+// push/event params
+//   hints?: HintChanges; toolset?: string; instance?: string
+// Notification (Server → Host): "tools/hints", params: HintChanges
+// Requests (Host → Server): "toolsets/open"  {toolset, instance?, options?} → {toolset, instance?, title?}
+//                           "toolsets/close" {toolset, instance?} → {}
+// Manifest: experimental.mcpl.toolsets: Record<string, ToolsetDecl>; experimental.mcpl.surface?: {title, summary}
+// Advertisement: experimental.mcpl.toolHints: true (both sides)
+interface ToolsetDecl {
+  title: string; summary: string;
+  default: "open" | "closed";
+  instances?: boolean;
+  options?: JsonSchema;
+  view?: string;     // resource URI, or a template with {instance}
 }
-
-// push/event params, only to hosts advertising surfaces:
-//   surface?: SurfaceState & { kind: "activity" | "state" | "closed"; reason?: string }
-
-// Advertisement (both sides):
-//   experimental.mcpl.surfaces?: { version: 1 }
-
-// Coalescing keys (RFC-006, feature-set scope):
-//   activity (deferred): "surface/<id>"
-//   state (plain):       "surface/<id>/state" | "surface/<id>/state/<k>"
 ```
 
-`mcpl/surface`, `mcpl/surfaceError` and `mcpl/preempt` are defined by this RFC under the `mcpl/` prefix
-reserved by RFC-008 §3.
+---
+
+## 13. Conformance vectors (to freeze before acceptance)
+
+1. A server with hints lists every tool in `tools/list`, visible or not.
+2. A call that makes tools visible carries `mcpl/hints` in its result; no push follows for it.
+3. A push explaining a visibility change carries it in `hints`; the host applies it once.
+4. Out-of-order `rev`: the stale change is ignored.
+5. `toolsets/open` on a toolset with `instances` returns an instance name; calls carry it.
+6. A call to an instance-bound tool with two instances open and no `mcpl/instance` fails,
+   naming them.
+7. A `definition` change to a dynamic tool reaches the host without `tools/list_changed`.
+8. A server whose host did not advertise `toolHints` sends no `tools/hints`.
 
 ---
 
-## 14. Conformance vectors
+## 14. Open questions
 
-Before Draft→Accepted, following RFC-005 §11, freeze executable vectors for at least:
-
-1. `tools/list` is identical before and after opening, acting on, and closing surfaces; no
-   `tools/list_changed` is sent.
-2. `act` with a tool from another mode → `tool_inactive`, surface `rev` unchanged.
-3. `act` with schema-invalid `args` → `invalid_args`, no side effect.
-4. `expect` mismatch → `expectation_failed`, no side effect, current set in the result.
-5. A call that changes the mode → the result names the new mode and set; no push follows for
-   that change (rule 1).
-6. A change caused elsewhere → one `activity` push carrying the new set; a second event with
-   the set unchanged does not repeat it (rule 2).
-7. A `state` event never carries an active-set change.
-8. Deferred: three notices, one render → one message, all three events, current view, set
-   only if changed since last announced.
-9. `then`: the second step is checked against the set produced by the first.
-10. `surface` push member absent when the host did not advertise `surfaces`.
-11. Reconnect as the same principal: surfaces and queued events survive.
-12. A preemptive tool called while a call is in flight completes before it; the in-flight
-    call's result reports the interruption.
-13. An event from a background source during a call is pushed, not folded into that call's
-    result.
+1. **Views.** Is a resource the right carrier for a toolset's state, or should
+   `toolsets/open` and hint changes carry a short view directly?
+2. **Reattachment.** Should a host learn on reconnect which toolsets the server still holds
+   open (a `toolsets/list` request), rather than re-opening its own idea of them?
+3. **Hinted groups without declaration.** May a server hint a grouping (`mcpl/toolset`)
+   without declaring the toolset, leaving open and close entirely to the host?
 
 ---
 
-## 15. Open questions
+## 15. Implementation status
 
-1. **Reserving `surface:`.** This RFC asks for it in §16.1. Alternatively the tags could live
-   under `mcpl:surface-*`.
-2. **Shared surfaces.** Joining another principal's activity is per-app today (`join` codes).
-   A common `open` option for joining, and an `invite` event shape, may be worth
-   standardizing once there are more examples.
-3. **Persistence.** Surfaces do not survive a server restart in the reference
-   implementation; apps may persist their own state (Go games do) and offer resumption via
-   `open` options. Whether ids should survive is open.
-4. **Host-initiated close.** Should a host close surfaces when it resets or compacts a
-   context that holds them? Today a `look` after compression is the remedy.
-5. **Images in deferred renders.** `coalesce.data` cannot carry them; image events bypass
-   deferral. RFC-005 references would let them defer.
-6. **Native projection churn.** Guidance in RFC §8.2 is qualitative; real numbers from a host
-   implementation should replace it.
-7. **Per-principal backend credentials.** A shared surface server reaches backends (a games
-   server, a card table) as someone. Today each app maps principals to its own credentials;
-   a common shape may be worth standardizing.
-8. **Long enums in compact signatures.** An enum is often the whole menu. The reference
-   rendering shows every value up to a length budget and points to `look {surface, tool}`
-   beyond it; whether the budget belongs to the host is open.
+`surfaces-mcpl` implements revision 1 (server-side four tools, Go, a generic mount, and
+per-service adapters later found unnecessary). The plan for revision 2:
 
----
-
-## 16. Reference implementation
-
-`surfaces-mcpl` (TypeScript, `@animalabs/mcpl-core` 0.3): stdio for one agent, WebSocket for
-several (surfaces belong to principals and survive reconnects). Apps: `go` (rules engine,
-Monte Carlo bot, agent-vs-agent by code), `doom` (games-mcpl), `canon` (CANON card game),
-`dog` (Unitree Go2 MCP server), `orrery`, `atlas`, and `mount` (any MCP/MCPL server, with a
-declarative mode map). Delivery follows RFC §7.4 for hosts with no coalescing, plain, and
-deferred.
+- a host-side presentation layer (meta-tools, announcements, reminders, projection), usable
+  in-process by a host or as a surface host (RFC §8.6);
+- an SDK for servers declaring toolsets and hints;
+- games-mcpl as the first server to adopt the hints natively.

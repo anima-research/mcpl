@@ -13,7 +13,7 @@ function resolve(input) {
     if (d === '.' || d === '..') throw new Error('reject: dot segment');
   }
   const wss = 'wss://' + input.slice(input.indexOf('//') + 2);
-  const u = new URL(wss);          // throws on bad port etc.
+  const u = new URL(wss);          // throws on an invalid port or host
   return { resolved: u.href, canonical: 'mcpl://' + u.href.slice('wss://'.length) };
 }
 const cases = [

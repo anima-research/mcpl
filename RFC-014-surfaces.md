@@ -406,6 +406,8 @@ A host **MUST** ignore hint `_meta` and `tools/hints` from a server that did not
   disappearing, a toolset closing, a reply it provoked — rides in its result. The server
   **MUST NOT** also push it.
 - **Something else's consequences are pushed**, with the explaining event when there is one.
+  "Something else" includes another principal acting in a shared instance — an opponent's move
+  reaches you as a push carrying your visibility change.
   An event from a background source that lands while a call is running is pushed, not folded
   into that call's result. A server that finds changes by comparing state before and after a
   call may occasionally attribute a concurrent background change to the call; that is
@@ -444,6 +446,11 @@ Activity in a toolset reaches the agent as ordinary `push/event`s (§9). For rou
   A server whose explaining event would be coalesced sends the changes standalone instead.
 
 When a toolset closes, its events stop.
+
+**A principal with no connection that can take events** (offline while an opponent moves): the
+server **MAY** hold its events, bounded, and deliver them after that principal's next
+`toolsets/list` — without `hints`, since the list states the state. Toolsets that ended in the
+meantime are reported in `ended` (RFC §5.3) either way.
 
 ---
 

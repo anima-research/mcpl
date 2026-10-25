@@ -1,4 +1,3 @@
-// These are harness regression tests, not another Host implementation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -58,25 +57,19 @@ test('a refused local case names a payload a Host could read whole', () => {
     assert.throws(() => assertCorpus(edited(id, c => { c.maxBytes = 8; })), fails);
     assert.throws(() => assertCorpus(edited(id, c => { c.blocks[0].sizeBytes = 12; })), fails);
   }
-  // Any file: URI is held to it, however it is spelt: here the corpus itself, past the ceiling.
   const literal = edited('11-file-refused', c => { c.blocks[0].uri = new URL('./bulk-reference-vectors.json', import.meta.url).href; });
   assert.throws(() => assertCorpus(literal), /11-file-refused: a local URI must name a payload readable whole/);
-  // The scheme is read as the URL parser reads it, in capitals after leading space:
-  // the payload is measured whole, and a wrong declared size is refused.
+  // The URL parser drops leading spaces and reads a scheme in any case, so these are still local URIs.
   const respell = (id, uri) => c => { c.blocks[0].uri = uri(expand(c, 'http://origin.invalid').blocks[0].uri); };
   for (const [id, uri] of [['11-data-refused', u => ' DATA:' + u.slice('data:'.length)], ['11-file-refused', u => ' FILE:' + u.slice('file:'.length)]]) {
     assertCorpus(edited(id, respell(id, uri)));
     assert.throws(() => assertCorpus(edited(id, c => { respell(id, uri)(c); c.blocks[0].sizeBytes = 12; })),
       new RegExp(id + ': a local URI must name a payload readable whole'));
   }
-  // A data: payload decodes as fetch() decodes it: percent-escapes bytewise, the
-  // fragment dropped, then forgiving-base64 if the type says so.
   const dataUri = (uri, size = 19) => edited('11-data-refused', c => { c.blocks[0].uri = uri; c.blocks[0].sizeBytes = size; });
   assertCorpus(dataUri('data:audio/wav;case=11-data-refused,RIFF0000WAVEpayload'));
   assertCorpus(dataUri('data:audio/wav;case=11-data-refused,%FF', 1));
   assertCorpus(dataUri('data:audio/wav;case=11-data-refused;base64,UklGRjAwMDBXQVZFcGF5bG9hZA==#ignored'));
-  // A local URI fetch() couldn't read names no payload, so a refused case can't rest
-  // on it. Each declares the size a looser reading would give it.
   for (const [uri, size] of [['data:audio/wav;case=11-data-refused;base64,AA-_', 3], ['data:audio/wav;case=11-data-refused', 30], ['file://exa mple/x.wav', 19]]) {
     assert.throws(() => assertCorpus(dataUri(uri, size)), /11-data-refused: a local URI must name a payload readable whole/, uri);
   }
@@ -136,11 +129,9 @@ test('a rejected field shown in a lane cannot pass', () => {
     else out.before[lane] += 'n'.repeat(120) + '…';
     assert.throws(() => check(c, out), /rejected name shown in before /, lane);
   }
-  // Shown in its JSON-escaped form, as a serialized lane carries it.
   const quoted = structuredClone(c); quoted.blocks[0].name = 'say "hi" ' + 'n'.repeat(247);
   const escaped = observation(); escaped.before.history += JSON.stringify({ name: quoted.blocks[0].name.slice(0, 120) });
   assert.throws(() => check(quoted, escaped), /rejected name shown in before history/);
-  // Every block's rejected value counts, not only the first block's.
   const second = structuredClone(c);
   second.blocks = [{ ...c.blocks[0], name: 'short.wav' }, { ...c.blocks[0], uri: 'https://example.invalid/second', name: 'm'.repeat(256) }];
   const out = observation(); out.before.wake += 'm'.repeat(120) + '…';
@@ -166,7 +157,6 @@ test('cross-origin forwarding of a connection credential cannot pass', () => {
   const c = { ...vector, operation: 'fetch', expect: { ...vector.expect, redirectSafe: true } };
   const net = { requests: [{ authorization: 'Bearer ' + token }], redirected: [{ authorization: 'Bearer ' + token }] };
   assert.throws(() => check(c, refused(), net), /credential leak/);
-  // The redirect is exercised, and followed at most one hop.
   check(c, refused(), { requests: [{ authorization: 'Bearer ' + token }], redirected: [{ authorization: null }] });
   assert.throws(() => check(c, refused(), { requests: [{ authorization: 'Bearer ' + token }], redirected: [{ authorization: null }, { authorization: null }] }), /redirect traversal must be bounded/);
   assert.throws(() => check(c, refused(), { requests: [], redirected: [] }), /initial redirect response must be exercised/);
@@ -188,7 +178,6 @@ test('an evicted-id alias, a missing live id or an undefined tool error cannot p
   check(c, out);
   assert.throws(() => check(c, { ...out, fresh: { ...out.fresh, refId: 'old' }, live: 'old' }), /reused/);
   assert.throws(() => check(c, { ...out, live: null }), /live id resolves/);
-  // Each registry rule fails on its own fault.
   const faults = [
     [{ stableId: 'other' }, /keeps a live reference stable/],
     [{ evicted: { refId: 'old' } }, /evicted reference must be a defined miss/],
@@ -197,14 +186,12 @@ test('an evicted-id alias, a missing live id or an undefined tool error cannot p
     [{ fresh: { ...out.fresh, testimony: { uri: 'https://example.invalid/b' } } }, /fresh record is for the same URI/],
   ];
   for (const [fault, pattern] of faults) assert.throws(() => check(c, { ...out, ...fault }), pattern);
-  // A lookup error is model-visible: no unsafe label character, no rejected value.
   const labelled = { ...c, expect: { ...c.expect, cleanLabel: true } };
   check(labelled, out);
   assert.throws(() => check(labelled, { ...out, unknownError: { ...error, error: 'unknown reference \u202e' } }), /unsafe display-label characters in the unknown lookup error/);
   const rejected = { ...c, blocks: [{ ...c.blocks[0], name: 'n'.repeat(256) }], expect: { ...c.expect, missingFields: ['name'] } };
   check(rejected, out);
   assert.throws(() => check(rejected, { ...out, evictedError: { ...error, error: 'unknown reference ' + 'n'.repeat(16) } }), /rejected name shown in the evicted lookup error/);
-  // Each of these errors is wrong in one way only.
   for (const wrong of [{ ...error, success: true }, { ...error, isError: false }, { ...error, error: 'not found' }]) {
     assert.throws(() => check(c, { ...out, unknownError: wrong }), JSON.stringify(wrong));
   }
@@ -237,8 +224,8 @@ for (const lane of ['push', 'wake', 'history']) {
   });
 }
 test('truncation markers and thresholds come from the declared display profile', () => {
-  // A letter in neither the stub's text nor any marker, so no label character occurs by chance.
-  const label = 'z'.repeat(255);
+  const letterInNoStubOrMarker = 'z';
+  const label = letterInNoStubOrMarker.repeat(255);
   const c = { ...vector, blocks: [{ ...vector.blocks[0], name: label }], expect: { ...vector.expect, displayField: 'name' } };
   const render = text => {
     const out = observation();
@@ -247,18 +234,16 @@ test('truncation markers and thresholds come from the declared display profile',
   };
   for (const marker of ['…', '[truncated]']) {
     const profile = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 120 }, truncationMarkers: [marker] } };
-    check(c, render('[ref_fixture] ' + 'z'.repeat(119) + marker), network, profile);
-    check(c, render('[ref_fixture] ' + 'z'.repeat(120) + marker), network, profile);
-    assert.throws(() => check(c, render('[ref_fixture] ' + 'z'.repeat(120)), network, profile), /must be marked/);
-    // The mark belongs at the end of the label as shown, not elsewhere.
-    assert.throws(() => check(c, render('[ref_fixture] ' + 'z'.repeat(100) + ' x' + marker), network, profile), /must be marked/);
+    check(c, render('[ref_fixture] ' + letterInNoStubOrMarker.repeat(119) + marker), network, profile);
+    check(c, render('[ref_fixture] ' + letterInNoStubOrMarker.repeat(120) + marker), network, profile);
+    assert.throws(() => check(c, render('[ref_fixture] ' + letterInNoStubOrMarker.repeat(120)), network, profile), /must be marked/);
+    assert.throws(() => check(c, render('[ref_fixture] ' + letterInNoStubOrMarker.repeat(100) + ' x' + marker), network, profile), /must be marked/);
     assert.throws(() => check(c, render('[ref_fixture] ' + label + marker), network, profile), /past the declared display limit/);
-    // A mark alone doesn't show the field.
     assert.throws(() => check(c, render('[ref_fixture] ' + marker), network, profile), /over the display limit must still be shown/);
   }
   const wider = { ...adapter, maxViewChars: 1024, displayProfile: { fieldChars: { name: 255 }, truncationMarkers: ['[truncated]'] } };
   check(c, render('[ref_fixture] ' + label), network, wider);
-  assert.throws(() => check(c, render('[ref_fixture] ' + 'z'.repeat(200) + '[truncated]'), network, wider), /shown whole/);
+  assert.throws(() => check(c, render('[ref_fixture] ' + letterInNoStubOrMarker.repeat(200) + '[truncated]'), network, wider), /shown whole/);
 });
 const corpusCase = id => expand(corpus.cases.find(c => c.id === id), 'http://fixture.invalid');
 const viewOf = text => ({ push: [{ type: 'text', text }], wake: text, history: text });
@@ -297,8 +282,6 @@ test('the refused local cases hide their payload and leave the stub unchanged', 
     const restubbed = refused(); restubbed.after.wake += ' (refused)';
     assert.throws(() => check(c, restubbed), /leave stub unchanged/, id);
   }
-  // A Host's read error names the file's path, which holds the file's name, as
-  // every spelling of its URI does.
   const file = corpusCase('11-file-refused');
   for (const path of [fileURLToPath(file.blocks[0].uri), new URL(file.blocks[0].uri).pathname]) {
     const named = refused(); named.tool.error = "ENOENT: no such file or directory, open '" + path + "'";
@@ -306,18 +289,15 @@ test('the refused local cases hide their payload and leave the stub unchanged', 
   }
 });
 test('a rejected field or an unsafe label in the fetch_reference result cannot pass', () => {
-  // The refused fetch's error must not echo the rejected value.
   const field = corpusCase('field-rule-expiresAt');
   check(field, refused());
   const echoed = refused(); echoed.tool.error = 'refused: expiresAt ' + field.blocks[0].expiresAt;
   assert.throws(() => check(field, echoed), /rejected expiresAt shown in the fetch_reference result/);
-  // The successful fetch's data must not carry the unsafe label.
   const label = corpusCase('18-label-controls');
   const fetched = () => successfulVerifiedReference({ ...label, expect: { ...label.expect, decodedBase64: label.response.bodyBase64 } });
   check(label, fetched(), authenticatedRequest);
   const unsafe = fetched(); unsafe.tool.data = JSON.stringify({ ...JSON.parse(unsafe.tool.data), name: label.blocks[0].name });
   assert.throws(() => check(label, unsafe, authenticatedRequest), /unsafe display-label characters in the fetch_reference result/);
-  // Structured data is read as the model reads it, not as one opaque value.
   const structured = fetched(); structured.tool.data = { name: label.blocks[0].name };
   assert.throws(() => check(label, structured, authenticatedRequest), /unsafe display-label characters in the fetch_reference result/);
 });
@@ -327,13 +307,11 @@ test("a label's own tab or line break is found, and a Host's own layout passes",
   check(c, laidOut);
   for (const layout of ['\t', '\n', '\r']) {
     const named = { ...c, blocks: [{ ...c.blocks[0], name: 'two' + layout + 'lines' }] };
-    // The Host's own layout passes, and so does the label stripped or with a space for the break.
     check(named, laidOut);
     for (const shown of ['twolines', 'two lines']) {
       const out = observation(); out.before.history += '\n' + shown + '\r\n';
       check(named, out);
     }
-    // The label's break kept, in its own form or another, fails in every lane and in the result.
     for (const shown of ['two' + layout + 'lines', 'two\r\nlines', 'two\u2028lines']) {
       for (const lane of ['push', 'wake', 'history']) {
         const kept = observation(); addVisible(kept.before, lane, '\n\t' + shown + '\n');
@@ -344,9 +322,6 @@ test("a label's own tab or line break is found, and a Host's own layout passes",
       assert.throws(() => check(fetched, result), /a display label's tab or line break in the fetch_reference result/, JSON.stringify([layout, shown]));
     }
   }
-  // A case that checks labels gives its label's break three ASCII letters or digits
-  // on each side, so the text looked for doesn't depend on what a Host does with
-  // the label's other characters. Exactly three on each side is enough.
   const edited = (id, edit) => { const copy = structuredClone(corpus); edit(copy.cases.find(x => x.id === id)); return copy; };
   const withName = name => x => { x.blocks[0].name = name; };
   assertCorpus(edited('18-label-controls', withName('abc\ndef')));
@@ -354,12 +329,9 @@ test("a label's own tab or line break is found, and a Host's own layout passes",
     assert.throws(() => assertCorpus(edited('18-label-controls', withName(name))),
       /18-label-controls: a label's tab or line break has 3 ASCII letters or digits on each side/, JSON.stringify(name));
   }
-  // The rule holds for a case that checks labels at one stage only.
   assert.throws(() => assertCorpus(edited('17-oversized-name', x => { withName('ab\ncdef')(x); x.expect.before = { cleanLabel: true }; })),
     /17-oversized-name: a label's tab or line break has 3 ASCII letters or digits on each side/);
-  // A case that doesn't check labels may carry any.
   assertCorpus(edited('17-oversized-name', withName('a\nb')));
-  // A result laid out over several lines conforms in both label cases.
   for (const id of ['18-label-device', '18-label-controls']) {
     const label = corpusCase(id);
     const pretty = successfulVerifiedReference({ ...label, expect: { ...label.expect, decodedBase64: label.response.bodyBase64 } });
@@ -392,7 +364,6 @@ test('each successful-fetch rule fails on its own fault', () => {
     const out = successfulVerifiedReference(c); fault(out);
     assert.throws(() => check(c, out, authenticatedRequest), pattern);
   }
-  // A declared empty body is compared too: the saved bytes must be empty.
   const empty = { ...c, expect: { ...c.expect, decodedBase64: '' } };
   assert.throws(() => check(empty, successfulVerifiedReference(c), authenticatedRequest), /saved bytes must be decoded identity octets/);
   const PAYLOAD = 'UklGRjAwMDBXQVZFcGF5bG9hZA==';

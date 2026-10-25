@@ -1,7 +1,3 @@
-// Independent cross-check of conformance/manifest-digest-vectors.json.
-// Deliberately shares NO code with generate_vectors.py: JCS here is built on
-// JavaScript's own JSON.stringify (which is what RFC 8785 §3.2.2 defers to for
-// strings and numbers) plus a recursive key sort.
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
@@ -14,11 +10,12 @@ const SET_PATHS = [
   ['featureSets', '*', 'tagOntology', 'coreTags'],
   ['featureSets', '*', 'tagOntology', 'tags', '*', 'implies'],
 ];
+const LIST_INDEX = '[i]';
+// SPEC §17.2: these paths are written against the object-keyed shape, so '*' never matches a list index.
 const matches = (p, pat) =>
-  p.length === pat.length && p.every((s, i) => pat[i] === '*' ? s !== '[i]' : pat[i] === s); // '*' = dict-key wildcard, never a list index (differ adjudication 2026-08-02)
+  p.length === pat.length && p.every((s, i) => pat[i] === '*' ? s !== LIST_INDEX : pat[i] === s);
 const isSet = (p) => SET_PATHS.some((pat) => matches(p, pat));
 
-// UTF-8 byte-order comparator, built from actual UTF-8 bytes.
 const enc = new TextEncoder();
 function utf8cmp(a, b) {
   const x = enc.encode(a), y = enc.encode(b);
@@ -27,17 +24,17 @@ function utf8cmp(a, b) {
   return x.length - y.length;
 }
 
-// JCS object member order: UTF-16 code-unit sequence == JS default string <.
 function normalize(v, path = []) {
   if (Array.isArray(v)) {
-    const items = v.map((x) => normalize(x, [...path, '[i]']));
-    // §17.2 totality: set semantics only for the conforming all-string
-    // shape; a non-string member leaves the array verbatim (2026-08-03).
+    const items = v.map((x) => normalize(x, [...path, LIST_INDEX]));
+    // SPEC §17.2 totality: set semantics only for the conforming all-string
+    // shape; a non-string member leaves the array verbatim.
     if (isSet(path) && items.every((x) => typeof x === 'string')) return [...new Set(items)].sort(utf8cmp);
     return items;
   }
   if (v && typeof v === 'object') {
     const out = {};
+    // JCS object member order: UTF-16 code-unit sequence == JS default string <.
     for (const k of Object.keys(v).sort()) out[k] = normalize(v[k], [...path, k]);
     return out;
   }
@@ -45,9 +42,7 @@ function normalize(v, path = []) {
 }
 
 function jcs(v) {
-  // JSON.stringify emits ES6 Number::toString for numbers and the ES6 escape
-  // set for strings; key order is insertion order, which normalize() has
-  // already made JCS order.
+  // RFC 8785 §3.2.2 serializes strings and numbers as ES6 JSON.stringify does.
   return JSON.stringify(v);
 }
 
@@ -80,7 +75,6 @@ for (const s of doc.sortVectors) {
     fails++;
     console.log(`SORT MISMATCH ${s.name}\n  node: ${JSON.stringify(got)}\n  file: ${JSON.stringify(s.sorted)}`);
   }
-  // Show where the naive JS comparator diverges, to prove the vector bites.
   const naive = [...new Set(s.input)].sort();
   if (JSON.stringify(naive) !== JSON.stringify(s.sorted)) {
     console.log(`  (note) ${s.name}: default JS sort() DIVERGES -> ${JSON.stringify(naive)}`);

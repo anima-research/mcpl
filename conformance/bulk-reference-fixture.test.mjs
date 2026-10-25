@@ -1,13 +1,9 @@
-// Exercise the actual streaming instrument with known client behavior.
-// Run with the Host's target Bun version as well as the suite's development version.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fixture } from './check-bulk-references.mjs';
 
 const stream = { chunks: 64, chunkBytes: 32, intervalMs: 8 };
 const pause = ms => new Promise(done => setTimeout(done, ms));
-// A bound on the whole test rather than a deadline inside it, so a slow machine
-// doesn't turn a correct transfer into a failure.
 const LONG = { timeout: 30000 };
 
 test('an aborting client closes the fixture stream before the producer finishes', LONG, async () => {
@@ -21,7 +17,6 @@ test('an aborting client closes the fixture stream before the producer finishes'
     assert.ok(first.value.byteLength > 0, 'the live stream must have begun');
     controller.abort();
     while (!network.streamClosed && network.chunksSent < stream.chunks) await pause(5);
-    // Inspect before fixture cleanup, which closes its own sockets.
     assert.equal(network.streamClosed, true, 'fixture must observe the known client abort');
     assert.ok(network.chunksSent > 0 && network.chunksSent < stream.chunks, 'aborted producer must stop early');
   } finally {

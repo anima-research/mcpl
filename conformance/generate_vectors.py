@@ -40,10 +40,6 @@ RFC_CANONICAL = (
 RFC_DIGEST = "sha256:_YZTS0h1tqTAMZI6eElCszSQE2WNx3xhAhmgUvNI9H4"
 
 
-# --------------------------------------------------------------------------
-# RFC 8785 (JCS) primitives
-# --------------------------------------------------------------------------
-
 # RFC 8785 §3.2.2.2: serialize as ECMAScript JSON.stringify does. Escape only
 # QUOTATION MARK, REVERSE SOLIDUS and C0 controls, using the two-character
 # escapes where ECMAScript defines them and \u00xx otherwise. Everything else,
@@ -87,12 +83,11 @@ def jcs_number(x):
     d = Decimal(repr(abs(x)))
     dsign, digits, exp = d.as_tuple()
     digits = list(digits)
-    # Make k minimal: strip trailing zeros, folding them into the exponent.
     while len(digits) > 1 and digits[-1] == 0:
         digits.pop()
         exp += 1
     k = len(digits)
-    n = exp + k  # value == 0.<digits> * 10**n
+    n = exp + k
     ds = "".join(str(c) for c in digits)
     if k <= n <= 21:
         return sign + ds + "0" * (n - k)
@@ -138,35 +133,33 @@ def jcs(value):
     raise ValueError("unserializable value: %r" % (value,))
 
 
-# --------------------------------------------------------------------------
-# MCPL-specific normalization (RFC-003 §3.1)
-# --------------------------------------------------------------------------
-
 IDENT_RE = re.compile(r"^[A-Za-z0-9._:*-]+$")
 
-# Paths (relative to the manifest root, "*" = any member name) whose arrays are
-# SETS: byte-sorted ascending and deduplicated. RFC-003 §3.1 names `uses`,
-# `coreTags` and `tagOntology.tags.*.implies`; these are the only locations the
-# 0.5 manifest shape puts them in. Everything else is a list (order preserved).
+MEMBER_NAMES = "#key"
+ELEMENTS = "[]"
+LIST_INDEX = "[i]"
+
+# RFC-003 §3.1 names `uses`, `coreTags` and `tagOntology.tags.*.implies` as sets;
+# any array not listed is a list.
 SET_PATHS = (
     ("featureSets", "*", "uses"),
     ("featureSets", "*", "tagOntology", "coreTags"),
     ("featureSets", "*", "tagOntology", "tags", "*", "implies"),
 )
 
-# Positions whose string values are IDENTIFIERS and so MUST match
-# [A-Za-z0-9._:*-]. "#key" means the object's member names at that path.
+# SPEC §17.2's identifier positions other than capability member names, which
+# _is_capability_member_name_path covers, and each tag's `facet`.
 IDENT_PATHS = (
-    ("featureSets", "#key"),                                  # feature set names
-    ("featureSets", "*", "uses", "[]"),                       # capability paths
-    ("featureSets", "*", "tagOntology", "coreTags", "[]"),
-    ("featureSets", "*", "tagOntology", "tags", "#key"),
-    ("featureSets", "*", "tagOntology", "tags", "*", "implies", "[]"),
-    ("featureSets", "*", "tagOntology", "keyed", "#key"),
-    ("featureSets", "*", "tagOntology", "keyed", "*", "values", "[]"),
-    ("featureSets", "*", "tagOntology", "suggestedTreatment", "*", "tagsAny", "[]"),
-    ("featureSets", "*", "tagOntology", "suggestedTreatment", "*", "tagsAll", "[]"),
-    ("featureSets", "*", "tagOntology", "suggestedTreatment", "*", "tagsNone", "[]"),
+    ("featureSets", MEMBER_NAMES),
+    ("featureSets", "*", "uses", ELEMENTS),
+    ("featureSets", "*", "tagOntology", "coreTags", ELEMENTS),
+    ("featureSets", "*", "tagOntology", "tags", MEMBER_NAMES),
+    ("featureSets", "*", "tagOntology", "tags", "*", "implies", ELEMENTS),
+    ("featureSets", "*", "tagOntology", "keyed", MEMBER_NAMES),
+    ("featureSets", "*", "tagOntology", "keyed", "*", "values", ELEMENTS),
+    ("featureSets", "*", "tagOntology", "suggestedTreatment", "*", "tagsAny", ELEMENTS),
+    ("featureSets", "*", "tagOntology", "suggestedTreatment", "*", "tagsAll", ELEMENTS),
+    ("featureSets", "*", "tagOntology", "suggestedTreatment", "*", "tagsNone", ELEMENTS),
     ("featureSets", "*", "tagOntology", "tags", "*", "facet"),
 )
 
@@ -183,7 +176,7 @@ def _is_capability_member_name_path(path):
     capability paths" and §5.4 requires a "generic recursive walk", so this is
     the whole capabilities subtree at every depth, not just the root."""
     if path == ():
-        return True                       # root: capability members
+        return True
     return path[0] not in ROOT_NON_CAPABILITY
 
 
@@ -192,13 +185,11 @@ def _path_matches(path, pattern):
         return False
     for got, want in zip(path, pattern):
         if want == "*":
-            # "*" is a DICT-KEY wildcard. It never matches a list index
-            # ("[i]") — SPEC §17.2's set/identifier paths are written against
-            # the object-keyed shape, and the non-conforming array shape is
-            # hashed verbatim (differ adjudication 2026-08-02; the sorted
-            # reading shipped once, in Rust, and produced a second revision
-            # for identical bytes).
-            if got == "[i]":
+            # SPEC §17.2's set paths are written against the object-keyed
+            # featureSets shape, and the non-conforming array shape is hashed
+            # verbatim, never set-normalized or refused, so "*" never matches a
+            # list index.
+            if got == LIST_INDEX:
                 return False
             continue
         if got != want:
@@ -232,7 +223,7 @@ def normalize(value, path=()):
     if isinstance(value, dict):
         out = {}
         for k, v in value.items():
-            check = _is_ident_path(path + ("#key",))
+            check = _is_ident_path(path + (MEMBER_NAMES,))
             if _is_capability_member_name_path(path):
                 check = not (path == () and k in ROOT_NON_CAPABILITY)
             if check:
@@ -240,20 +231,16 @@ def normalize(value, path=()):
             out[k] = normalize(v, path + (k,))
         return out
     if isinstance(value, list):
-        items = [normalize(v, path + ("[i]",)) for v in value]
-        # SPEC §17.2 totality (adjudicated 2026-08-03, Sol's library review):
-        # set semantics AND identifier checks apply only to the CONFORMING
-        # all-string shape. A set-declared array containing any non-string
-        # member is non-conforming input: left untouched for JCS — no sort,
-        # no dedupe, no charset check — and validation rejects it later.
-        # (The identifier refusal exists solely to keep the UTF-8/UTF-16
-        # sort divergence unreachable; an unsorted array cannot diverge.)
-        # Mirrors the wrong-typed-set-FIELD and array-form-featureSets rules.
+        items = [normalize(v, path + (LIST_INDEX,)) for v in value]
+        # SPEC §17.2 totality: set semantics and identifier checks apply only
+        # to the conforming all-string shape. A set-declared array containing
+        # any non-string member is hashed verbatim: no sort, no dedupe, no
+        # charset check.
         all_strings = all(isinstance(it, str) for it in items)
-        epath = path + ("[]",)
+        epath = path + (ELEMENTS,)
         if all_strings and _is_ident_path(epath):
             for it in items:
-                _check_ident(it, ".".join(path) + "[]")
+                _check_ident(it, ".".join(path) + ELEMENTS)
         if all_strings and _is_set_path(path):
             seen, uniq = set(), []
             for it in items:
@@ -261,7 +248,6 @@ def normalize(value, path=()):
                     continue
                 seen.add(it)
                 uniq.append(it)
-            # RFC-003 §3.1: sort by UTF-8 byte sequence, ascending.
             uniq.sort(key=lambda s: s.encode("utf-8"))
             return uniq
         return items
@@ -286,10 +272,6 @@ def digest(manifest):
     b64 = base64.urlsafe_b64encode(h).decode("ascii").rstrip("=")
     return canonical, h.hex(), "sha256:" + b64
 
-
-# --------------------------------------------------------------------------
-# Vector inputs
-# --------------------------------------------------------------------------
 
 UNICODE_DESC = (
     "Caf\u00e9 \u65e5\u672c\u8a9e \U0001f642 "
@@ -747,8 +729,6 @@ def build_vectors():
         "differentDigestFrom": "null-and-false-members-are-content",
     })
 
-    # ---- negative vectors -------------------------------------------------
-
     V.append({
         "name": "negative-non-ascii-tag-identifier",
         "description": (
@@ -865,9 +845,8 @@ def build_vectors():
         "expectError": "identifier_charset",
     })
 
-    # ── Differ adjudications, 2026-08-02 (SPEC §17.2 "the digest is total") ──
-    # Each pins a case where the two library implementations diverged. See the
-    # review comments on mcpl-core-ts#6 and Anarchid/mcpl-core#3.
+    # SPEC §17.2, "the digest is total": see the review comments on
+    # mcpl-core-ts#6 and Anarchid/mcpl-core#3.
 
     V.append({
         "name": "wrong-typed-set-field-hashed-verbatim",
@@ -963,10 +942,6 @@ def build_vectors():
     return V
 
 
-# Comparator vectors: the RFC's UTF-8 rule "governs anything else", but no
-# set-valued array in the 0.5 manifest shape can legally hold a non-ASCII
-# string (see README). These test the comparator directly so the rule is still
-# pinned for future set-valued fields.
 SORT_VECTORS = [
     {
         "name": "ascii-punctuation-and-case",
@@ -1017,14 +992,9 @@ SORT_VECTORS = [
 ]
 
 
-# --------------------------------------------------------------------------
-# Assembly and self-check
-# --------------------------------------------------------------------------
-
 def assemble():
     problems = []
 
-    # Gate everything on the RFC's own worked example.
     h = hashlib.sha256(RFC_CANONICAL.encode("utf-8")).digest()
     got = "sha256:" + base64.urlsafe_b64encode(h).decode("ascii").rstrip("=")
     if got != RFC_DIGEST:
@@ -1057,7 +1027,6 @@ def assemble():
         vectors.append(out)
         by_name[spec["name"]] = out
 
-    # Cross-vector assertions.
     for v in vectors:
         ref = v.get("sameDigestAs")
         if ref and v["digest"] != by_name[ref]["digest"]:
@@ -1179,8 +1148,6 @@ def main():
         if on_disk != text:
             print("FAIL: %s is stale (regenerate)" % VECTOR_PATH, file=sys.stderr)
             return 1
-        # Re-verify every digest by parsing the file back, so the check does not
-        # merely compare the generator to itself.
         parsed = json.loads(on_disk)
         for v in parsed["vectors"]:
             if "expectError" in v:

@@ -1,4 +1,3 @@
-// Real-Host regression: reuse the origin deliberately, not probabilistically.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -15,7 +14,6 @@ test('distinct cases cannot inherit a cached fetch when the origin is reused', {
   try {
     const observed = [];
     for (const raw of [first, second]) {
-      // Same origin, but each case is served its own declared response.
       network.respond(raw.response);
       network.requests.length = 0;
       const c = expand(raw, network.origin);

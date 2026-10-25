@@ -14,9 +14,6 @@ const localPayloadURL = pathToFileURL(localPayloadPath).href;
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'));
 const pause = ms => new Promise(done => setTimeout(done, ms));
 
-// $ORIGIN is the case's loopback origin, $CASE its URL-encoded id, and $LOCAL_PAYLOAD
-// the file URL of the small payload beside this corpus that the refused file: case
-// names. The payload's name carries that case's id, so its URI needs no query.
 export function expand(value, origin, caseId = value?.id) {
   if (typeof value === 'string') {
     if (value.includes('$CASE')) assert.ok(typeof caseId === 'string' && caseId.length > 0, 'case namespace requires a case id');
@@ -45,7 +42,6 @@ async function listen(server) {
   return 'http://127.0.0.1:' + server.address().port;
 }
 
-// All network endpoints are loopback. The second server is a cross-origin trap.
 export async function fixture(response = {}) {
   const requests = [], redirected = [];
   let chunksSent = 0, streamClosed = false, current = response ?? {};
@@ -69,7 +65,7 @@ export async function fixture(response = {}) {
         if (chunksSent === chunks) { clearInterval(timer); timers.delete(timer); res.end(); }
       }, intervalMs);
       timers.add(timer);
-      // Observe the transport: Bun 1.3.x can omit ServerResponse.close on client abort.
+      // Observe the transport: Bun 1.3.14 can omit ServerResponse.close on client abort.
       req.socket.once('close', () => {
         streamClosed = true;
         clearInterval(timer);
@@ -90,10 +86,7 @@ export async function fixture(response = {}) {
     origin, requests, redirected,
     get chunksSent() { return chunksSent; },
     get streamClosed() { return streamClosed; },
-    // Serve another case's own response from the same origin.
     respond(next) { current = next ?? {}; },
-    // Wait for the stream's close event when an abort is expected, then for a quiet
-    // window with no new request; a deadline bounds both.
     async settle({ closed = false, quietMs = 100, deadlineMs = 5000 } = {}) {
       const deadline = Date.now() + deadlineMs;
       while (closed && !streamClosed && Date.now() < deadline) await pause(5);
@@ -113,8 +106,6 @@ export async function fixture(response = {}) {
   };
 }
 
-// Inspect values as the model receives them, rather than JSON escape sequences.
-// Object keys count, since a Host can put a value in a key.
 export function semanticStrings(value) {
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) return value.flatMap(semanticStrings);
@@ -122,27 +113,16 @@ export function semanticStrings(value) {
   return [];
 }
 
-// The corpus's shape, frozen: the cases per RFC row, and the expectation keys the checker reads.
 const CASES_PER_ROW = { 1: 4, 2: 3, 3: 1, 4: 2, 5: 1, 6: 1, 7: 2, 8: 2, 9: 3, 10: 1, 11: 2, 12: 1, 13: 1, 14: 1, 15: 3, 16: 1, 17: 11, 18: 2, 19: 2, 20: 1 };
 const STAGE_KEYS = ['stub', 'hidden', 'includes', 'stubOrInlineBase64', 'displayField', 'cleanLabel'];
 const EXPECT_KEYS = [...STAGE_KEYS, 'kind', 'missingFields', 'ok', 'requests', 'redirectSafe', 'decodedBase64',
   'savedMime', 'digestVerified', 'storageFromId', 'abortStream', 'unchanged', 'before', 'after'];
 // A rejected string value of at least this many UTF-16 code units is looked for
-// by its first ones, as RFC-005 says: a run this long doesn't occur in a lane by
-// chance, where a number or a shorter string could.
+// by its first ones, as RFC-005 says.
 const REJECTED_RUN = 16;
-// Control and bidi characters a display label must not carry (row 18). These are
-// characters: an escaped form is plain text. The checker can't tell a Host's own
-// such characters from the label's, so in a case that checks labels any of them
-// in a view fails it.
+// Control and bidi characters a display label must not carry (RFC-005 row 18),
+// apart from tabs and line breaks, which RFC-005 §11 counts only as the label's own.
 const UNSAFE_LABEL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
-// A tab or line break also lays out a Host's own text, so it doesn't count alone.
-// A label's own one is looked for as the label's three ASCII letters or digits on
-// each side of it, joined by any run of tabs or line breaks, so a Host that keeps
-// the break in another form is found too. A case that checks labels must give
-// each such break those characters: they're the same whatever a Host does with
-// the label's other characters, and a Host's own break is unlikely to fall
-// exactly between them. Breaks at a label's ends can't be told from a Host's.
 const LABEL_CONTEXT = 3;
 export function labelBreaks(blocks, id) {
   const patterns = [];
@@ -160,9 +140,6 @@ export function labelBreaks(blocks, id) {
   return patterns;
 }
 
-// The bytes a Host that dereferenced a local URI would read: a file: URI's file,
-// or a data: URI's own payload, with the scheme as the URL parser reads it. Null
-// for any other URI; empty for a local one that can't be read.
 function localPayload(uri) {
   let url;
   try { url = new URL(uri); } catch { return /^[\u0000-\u0020]*(file|data):/i.test(uri) ? Buffer.alloc(0) : null; }
@@ -196,26 +173,19 @@ export function assertCorpus(vectors) {
     for (const stub of [c.expect.stub, c.expect.before?.stub, c.expect.after?.stub]) {
       assert.ok(stub === undefined || stub === true, c.id + ': a stub expectation is true or absent');
     }
-    // An inline form that decodes to nothing would be found in any view.
     for (const inline of [c.expect.stubOrInlineBase64, c.expect.before?.stubOrInlineBase64, c.expect.after?.stubOrInlineBase64]) {
       assert.ok(inline === undefined || Buffer.from(inline, 'base64').length > 0, c.id + ': stubOrInlineBase64 must decode to bytes');
     }
-    // A case that expects a successful fetch declares the bytes it must save.
     if (c.operation === 'fetch' && c.expect.ok === true) {
       assert.equal(typeof c.expect.decodedBase64, 'string', c.id + ': a successful fetch declares its decodedBase64');
     }
     const blocks = expand(c.blocks, 'http://origin.invalid', c.id);
-    // A label's own tab or line break can be looked for only with its context around it.
     if ([c.expect, c.expect.before, c.expect.after].some(stage => stage?.cleanLabel)) labelBreaks(blocks, c.id);
     for (const block of blocks) {
       if (typeof block.uri !== 'string') continue;
       // Process-global Host caches key references by URI, so no two cases share one.
       assert.ok(!uris.has(block.uri), c.id + ': URI shared with ' + uris.get(block.uri));
       uris.set(block.uri, c.id);
-      // A Host that dereferenced a local URI and accepted its payload would read
-      // it whole and succeed, so the case fails such a Host, however the corpus
-      // spells the URI. Only what reaches the model, storage or the network is
-      // observed.
       const local = localPayload(block.uri);
       if (local) {
         assert.ok(local.length > 0 && block.sizeBytes === local.length && c.maxBytes >= local.length,
@@ -226,13 +196,11 @@ export function assertCorpus(vectors) {
 }
 
 function forbiddenForms(value) {
-  // Also the JSON-escaped form, as a serialized history lane shows it.
   return [...new Set([value, JSON.stringify(value).slice(1, -1)])];
 }
 
 export function checkObservation(c, out, network, adapter, token) {
   const e = c.expect;
-  // The joined text catches a value within one piece and one split across two.
   const checkHidden = (pieces, hidden, where) => {
     const text = pieces.join('');
     hidden.forEach((value, index) => {
@@ -241,8 +209,6 @@ export function checkObservation(c, out, network, adapter, token) {
       }
     });
   };
-  // Nothing the model reads holds an unsafe label character, or the value of a
-  // field rejected as invalid: rejection reaches past testimony.
   const checkLabelsAndFields = (pieces, visible, where) => {
     const text = pieces.join('');
     if (visible.cleanLabel) {
@@ -260,7 +226,6 @@ export function checkObservation(c, out, network, adapter, token) {
       }
     }
   };
-  // A stage's visibility fields override the shared ones, and its hidden values add to theirs.
   const visibleAt = stage => ({ ...e, ...e[stage], hidden: [...(e.hidden ?? []), ...(e[stage]?.hidden ?? [])] });
   if (c.operation === 'registry') {
     assert.equal(out.stableId, out.firstId, 'registration keeps a live reference stable');
@@ -272,7 +237,6 @@ export function checkObservation(c, out, network, adapter, token) {
       assert.equal(error.isError, true, 'lookup error is an error');
       assert.match(error.error, /unknown reference/i, 'lookup error says unknown reference');
     }
-    // A lookup error is model-visible, as the views are.
     for (const [error, where] of [[out.evictedError, 'the evicted lookup error'], [out.unknownError, 'the unknown lookup error']]) {
       checkHidden([error.error], e.hidden ?? [], where);
       checkLabelsAndFields([error.error], e, where);
@@ -293,11 +257,8 @@ export function checkObservation(c, out, network, adapter, token) {
       const where = stage + ' ' + lane;
       assert.ok(text.length <= adapter.maxViewChars, 'view exceeds declared Host display bound');
       checkHidden(pieces, visible.hidden, where);
-      // An included text appears within one piece, not across two.
       for (const included of visible.includes ?? []) assert.ok(pieces.some(piece => piece.includes(included)), 'missing text: ' + included);
       if (visible.stub) {
-        // Registering the same testimony returns the Host's record, so a stub
-        // that names any other id fails here.
         assert.ok(out.records.length > 0, 'reference record absent');
         for (const record of out.records) assert.ok(text.includes(record.refId), 'stub must identify its Host record');
       }
@@ -306,15 +267,12 @@ export function checkObservation(c, out, network, adapter, token) {
         assert.ok(out.records.some(record => text.includes(record.refId)) || text.includes(inline) || text.includes(visible.stubOrInlineBase64), 'verified ref may inline or retain its stub');
       }
       if (visible.displayField) {
-        // This case uses a schema-valid ASCII label. Its shortening threshold
-        // and recognized marks belong to the declared Host profile, not MCPL.
         const profile = adapter.displayProfile;
         const limit = profile?.fieldChars?.[visible.displayField];
         assert.ok(Number.isSafeInteger(limit) && limit > 0, 'missing Host field display limit');
         const label = c.blocks[0][visible.displayField];
         if (label.length > limit) {
           assert.ok(!text.includes(label.slice(0, limit + 1)), visible.displayField + ' shown past the declared display limit in ' + where);
-          // The longest prefix of the label shown must end in a declared mark.
           let shown = 0;
           while (shown < limit && text.includes(label.slice(0, shown + 1))) shown++;
           assert.ok(shown > 0, visible.displayField + ' over the display limit must still be shown, shortened, in ' + where);
@@ -339,7 +297,6 @@ export function checkObservation(c, out, network, adapter, token) {
   }
   assert.equal(c.operation, 'fetch');
   assert.ok(out.outcome && Array.isArray(out.saves), 'fetch observation missing');
-  // The fetch_reference result is model-visible too, as the views after the fetch are.
   assert.ok(out.tool && typeof out.tool.success === 'boolean', 'fetch must observe the fetch_reference result');
   assert.equal(out.tool.success, out.outcome.ok, 'fetch_reference reports the fetch outcome');
   const result = semanticStrings(out.tool.success ? out.tool.data : out.tool.error), after = visibleAt('after');
@@ -347,8 +304,8 @@ export function checkObservation(c, out, network, adapter, token) {
   checkLabelsAndFields(result, after, 'the fetch_reference result');
   if ('ok' in e) assert.equal(out.outcome.ok, e.ok, 'fetch outcome ' + (out.outcome.ok ? 'succeeded' : 'failed: ' + out.outcome.error));
   if ('requests' in e) assert.equal(network.requests.length, e.requests, 'request count');
-  // §19.6.1 permits applying the connection credential; a Host may omit it.
-  // This fixture is public, so credential use is an explicit tested profile.
+  // §19.6.1 lets a Host apply the connection credential to the dialed origin
+  // through its own fetcher, or omit it.
   if (network.requests.length) {
     assert.ok(['connection-bearer', 'omit'].includes(adapter.credentialPolicy), 'declare the Host credential-use policy');
     const authorization = adapter.credentialPolicy === 'connection-bearer' ? 'Bearer ' + token : null;
@@ -423,15 +380,11 @@ export async function main(argv) {
     assert.ok(Number.isSafeInteger(c.registrations) && c.registrations > adapter.registryQuota, c.id + ' must register more records than the declared registry quota');
   }
   const ajvPackage = await readJson(resolve(dirname(options.ajv), '../package.json'));
-  // The suite is identified by its files' hashes, with or without a Git checkout.
   const suiteFiles = ['bulk-reference-vectors.json', 'bulk-reference-legacy-schema.json', 'bulk-reference-11-file-refused.wav', 'check-bulk-references.mjs'];
   const suiteHashes = {};
   for (const file of suiteFiles) suiteHashes[file] = createHash('sha256').update(await readFile(resolve(here, file))).digest('hex');
   suiteHashes['SPEC.md'] = createHash('sha256').update(spec).digest('hex');
   suiteHashes['adapter'] = createHash('sha256').update(await readFile(adapterPath)).digest('hex');
-  // A Host that reads a file: URI's path without decoding it finds the payload
-  // only where the path needs no percent-encoding, so its verdict on
-  // 11-file-refused depends on where this checkout is.
   const notes = localPayloadURL.includes('%')
     ? ['11-file-refused: this checkout\'s path needs percent-encoding in a file: URL, so the case can also pass a Host that reads the URL\'s path without decoding it, when its refusal doesn\'t name the file']
     : [];
@@ -466,7 +419,6 @@ export async function main(argv) {
         result.host = 'pass';
       } catch (error) { result.host = 'fail'; result.hostError = error.message; }
     } catch (error) {
-      // A case that can't be set up fails alone; the others still run.
       result.schema ??= 'fail';
       result.host = 'fail';
       result.hostError = 'setup: ' + error.message;

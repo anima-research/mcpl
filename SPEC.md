@@ -20,12 +20,18 @@ MCP Live (MCPL) is a backward-compatible extension to the Model Context Protocol
 7. **Manifest Changes** — Servers announce that their surface changed; hosts re-fetch and diff rather than trusting a payload
 8. **Endpoint URIs** — `mcpl://` names an MCPL endpoint as such; resolves deterministically to `wss://` and confers nothing
 9. **Bulk Content References** — Small testimony about large payloads; a server can veto context inclusion but never expand it
+10. **Channels** — Named, host-controlled destinations: a server registers the channels it handles, delivers their inbound messages, and delivers what the host publishes to them
+11. **State Management** — Stateful tools with checkpoints, branching and rollback, opt-in for hosts
+12. **Model Information** — Servers can ask the host which model is in use, and which others it exposes
+13. **WebSocket Transport** — One persistent, bidirectional connection, alongside MCP's stdio and Streamable HTTP transports
 
 MCPL enables servers to be active participants in the inference lifecycle rather than passive tool providers.
 
 ---
 
 ## Table of Contents
+
+- [Conventions and terms](#conventions-and-terms)
 
 1. [Motivation](#1-motivation)
 2. [Design Goals](#2-design-goals)
@@ -47,6 +53,44 @@ MCPL enables servers to be active participants in the inference lifecycle rather
 17. [Server Manifest Changes](#17-server-manifest-changes)
 18. [Endpoint URIs](#18-endpoint-uris)
 19. [Bulk Content References](#19-bulk-content-references)
+
+- [Appendix A: Error Codes](#appendix-a-error-codes)
+- [Appendix B: Schema](#appendix-b-schema)
+- [Changelog](#changelog)
+
+---
+
+## Conventions and terms
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT",
+"RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be
+interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119),
+[RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all
+capitals, as shown here.
+
+Some sections and notes are marked non-normative (§11.5, the implementation note in §17.10,
+§19.12), and §19 carries Draft strength within this draft, as its status note explains.
+
+Terms used throughout:
+
+- **Host.** The application that connects to servers and runs model inference. It computes
+  each connection's effective grant (§5.4) and decides what reaches model context.
+- **Server.** The other end of a connection. It is an MCP server, and an MCPL server when it
+  advertises `experimental.mcpl` (§3, §5.1).
+- **Agent.** The model-driven participant on whose behalf the host runs inference. An event
+  can be addressed to it (§16.2), `channels/publish` delivers its speech (§13.1), and the
+  host tells it or an operator about manifest changes (§17.6). This term doesn't define the
+  word in tag names such as `chat:from-agent` (§16.2).
+- **Capability path**, **effective grant.** Defined in §5.4.
+- **Manifest.** The complete `experimental.mcpl` object a server presents (§5.1, §17.1).
+- **Testimony.** What a server states about itself or its content, such as its feature sets,
+  tags, manifest revision and reference-block fields. The host weighs testimony, and
+  testimony confers no authority (§5.4, §16.6, §17.1, §19.1).
+- **Wake.** The host starting an inference because of an event, such as a `push/event`, a
+  `channels/incoming` message or a change receipt (§17.6). Host policy decides whether an
+  event wakes the agent (§16).
+- **Wake text.** What the host assembles into context to present the event that caused a
+  wake.
 
 ---
 
@@ -71,7 +115,7 @@ MCPL addresses these gaps as an orthogonal extension:
 - Push events add a proactive event lane (semantically richer than "resource changed")
 - Context hooks enable lifecycle participation
 - Server-initiated inference provides autonomous inference with host policy control
-- Feature sets provide granular permissions
+- Capability grants provide granular, host-computed permissions, and feature sets name bundles of behavior derived from them (§5.4, §6)
 
 ---
 
@@ -82,7 +126,7 @@ MCPL addresses these gaps as an orthogonal extension:
 | **Backward compatible** | MCPL servers degrade gracefully in MCP hosts; MCP servers work unchanged in MCPL hosts |
 | **Orthogonal extension** | Doesn't modify MCP semantics; adds new capabilities alongside existing ones |
 | **Host-controlled** | Hosts decide ordering, cost limits, and trust levels; protocol expresses server preferences |
-| **Granular permissions** | Feature sets allow users to enable specific behaviors without all-or-nothing trust |
+| **Granular permissions** | Capability grants let hosts allow specific capabilities without all-or-nothing trust; feature sets let users select named behaviors within the grant |
 | **Minimal complexity** | Only capabilities that require protocol-level support; trust hosts and servers to be reasonable |
 
 ---
@@ -130,36 +174,9 @@ The server functions normally for tools, resources, and prompts.
 
 ## 4. Protocol Overview
 
-MCPL extends the MCP message flow:
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        MCPL MESSAGE FLOW                            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│   MCP (unchanged)                 MCPL Extensions                   │
-│   ───────────────                 ───────────────                   │
-│                                                                     │
-│   tools/call, resources/read,    push/event (server → host)        │
-│   sampling/createMessage, etc.   context/beforeInference           │
-│                                   inference/lifecycle               │
-│                                   inference/request                 │
-│                                   inference/chunk                   │
-│                                   model/info                        │
-│                                   featureSets/update                │
-│                                   state/rollback                    │
-│                                   channels/register                 │
-│                                   channels/changed                  │
-│                                   channels/list                     │
-│                                   channels/open                     │
-│                                   channels/close                    │
-│                                   channels/outgoing/chunk           │
-│                                   channels/outgoing/complete        │
-│                                   channels/publish                  │
-│                                   channels/incoming                 │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+MCPL extends the MCP message flow. MCP's own methods (`tools/call`, `resources/read`,
+`sampling/createMessage`, and the rest) keep their semantics; MCPL adds the methods listed in
+§4.1.
 
 All messages use JSON-RPC 2.0, consistent with MCP.
 
@@ -170,25 +187,29 @@ Per JSON-RPC 2.0:
 - **Requests** include an `id` field and expect a response with the same `id`
 - **Notifications** omit `id` and expect no response
 
-| Method | Type | Direction |
-|--------|------|-----------|
-| `push/event` | Request | Server → Host |
-| `context/beforeInference` | Request | Host → Server |
-| `inference/lifecycle` | Notification | Host → Server |
-| `inference/request` | Request | Server → Host |
-| `inference/chunk` | Notification | Host → Server |
-| `model/info` | Request | Server → Host |
-| `featureSets/update` | Notification **or Request** | Host → Server |
-| `state/rollback` | Request | Host → Server |
-| `channels/register` | Request | Server → Host |
-| `channels/changed` | Notification **or Request** | Server → Host |
-| `channels/list` | Request | Either |
-| `channels/open` | Request | Host → Server |
-| `channels/close` | Request | Host → Server |
-| `channels/outgoing/chunk` | Notification | Host → Server |
-| `channels/outgoing/complete` | Notification | Host → Server |
-| `channels/publish` | Notification or Request | Host → Server |
-| `channels/incoming` | Request | Server → Host |
+| Method | Type | Direction | Section |
+|--------|------|-----------|---------|
+| `push/event` | Request | Server → Host | §9 |
+| `context/beforeInference` | Request | Host → Server | §10.1 |
+| `inference/lifecycle` | Notification | Host → Server | §10.5 |
+| `inference/request` | Request | Server → Host | §11 |
+| `inference/chunk` | Notification | Host → Server | §11.4 |
+| `model/info` | Request | Server → Host | §12 |
+| `featureSets/update` | Notification **or Request** | Host → Server | §5.3, §6.7 |
+| `state/rollback` | Request | Host → Server | §8.5 |
+| `channels/register` | Request | Server → Host | §14.3, §14.5 |
+| `channels/changed` | Notification **or Request** | Server → Host | §14.3, §14.5 |
+| `channels/list` | Request | Either | §14.3 |
+| `channels/open` | Request | Host → Server | §14.3 |
+| `channels/close` | Request | Host → Server | §14.3 |
+| `channels/outgoing/chunk` | Notification | Host → Server | §14.3 |
+| `channels/outgoing/complete` | Notification | Host → Server | §14.3 |
+| `channels/publish` | Notification or Request | Host → Server | §14.3 |
+| `channels/incoming` | Request | Server → Host | §14.3 |
+| `mcpl/manifestChanged` | Notification | Server → Host | §17.3 |
+| `mcpl/manifest` | Request | Host → Server | §17.4 |
+| `channels/acknowledge` | Not specified | Not specified | §14.1 |
+| `channels/typing` | Not specified | Not specified | §14.1 |
 
 ### 4.2 WebSocket Transport
 
@@ -271,8 +292,8 @@ replace request timeouts or the hook timeout policy (§10.6).
 
 #### 4.2.6 Authentication
 
-Authentication is endpoint-defined. Servers SHOULD document the mechanism and hosts must
-use a compatible client API. Existing deployments use a token in the upgrade URL's query;
+Authentication is endpoint-defined. Servers SHOULD document the mechanism, and hosts need
+a compatible client API. Existing deployments use a token in the upgrade URL's query;
 other deployments may authenticate the HTTP upgrade through headers or a transport-native
 identity. This section mandates no query parameter, WebSocket subprotocol, or authentication
 message before `initialize`.
@@ -389,8 +410,7 @@ behavior as unavailable, and a host MUST reject inbound privileged methods.
 
 The response is a degradation receipt — see §6.7.
 
-**Field semantics** (pinned 2026-08-02; four server implementations had each answered these
-identically from the fail-closed principle, but no text said so):
+**Field semantics:**
 
 - **Absent `effectiveCapabilities` in a Request is a grant of nothing**, not "no change".
   Absence is denial (§5.4) and there is no unspecified state; treating it as no-alteration
@@ -415,7 +435,7 @@ host to send a process a payload, all code in that process can read it.
   receive. Advertisement is an input, never an authorization.
 - Capability paths are dot-separated (§6.2). Matching is over full paths with `*` wildcards,
   and implementations MUST perform a **generic recursive walk** — a hardcoded set of
-  nestable keys is non-conforming, since the vocabulary is depth 3 and will grow.
+  nestable keys is non-conforming, since the vocabulary is depth 4 and will grow.
 
 **`*` matches exactly one path segment, and segment counts MUST be equal.** `channels.*`
 grants `channels.publish` but not `channels.publish.anything`; `contextHooks.*` grants
@@ -423,9 +443,7 @@ grants `channels.publish` but not `channels.publish.anything`; `contextHooks.*` 
 `*` is NOT a subtree match. There is no multi-segment wildcard. This is the deny-safe
 reading — a mistaken narrow pattern can only under-grant, which the host observes and
 corrects, while a suffix wildcard silently widens the grant class this section exists to
-narrow. *(Pinned 2026-08-02: two independent library implementations diverged here, one
-granting depth-4 injection under `contextHooks.*` and one granting nothing; every server
-implementation that faced the question had chosen the one-segment reading.)*
+narrow.
 
 **A bare parent path does not grant its leaves.** §5.1's boolean-`true` shorthand is an
 *advertisement* convention only; it is not restated for the grant. `channels` in
@@ -470,7 +488,8 @@ Servers declare feature sets in their capabilities:
       "featureSets": {
         "memory.retrieval": {
           "description": "Retrieve relevant memories before inference",
-          "uses": ["contextHooks.beforeInference"]
+          "uses": ["contextHooks.beforeInference.observe",
+                   "contextHooks.beforeInference.inject.system"]
         },
         "memory.extraction": {
           "description": "Extract new memories from conversations",
@@ -621,9 +640,6 @@ For unknown feature sets, hosts SHOULD reject with `-32003`; for a denied capabi
 to a request bearing an `id` leaves the caller hanging and makes the surface impossible to
 evaluate — apparent disuse becomes a measurement artifact rather than a signal.
 
-> `canEnable` is removed. It told an untrusted peer what it might obtain by asking, which
-> is the mirror image of the coercion `featureSets/update` refusals are barred from (§6.7).
-
 ### 6.7 Negotiated policy
 
 `featureSets/update` (Host → Server) MAY be sent as a Notification or as a Request — the
@@ -635,12 +651,10 @@ descriptive feature metadata that does not alter the grant, and a Notification *
 establish a ready state**.
 
 **Server handling of a non-conforming Notification** (one that nevertheless carries grant
-fields): apply a narrowing `disabled` list — reductions must be respected regardless of
-carrier — and **ignore everything else** with a diagnostic. `effectiveCapabilities`,
+fields): apply a narrowing `disabled` list — a reduction binds whatever carries it, as
+below — and **ignore everything else** with a diagnostic. `effectiveCapabilities`,
 `enabled`, and any widening are discarded: honouring a widening from an unacknowledgeable
-message would have the server acting on a path the host cannot know it accepted. *(Pinned
-2026-08-02: five implementations had each already chosen exactly this — narrow-only, never
-ready.)*
+message would have the server acting on a path the host cannot know it accepted.
 
 **The response is a degradation receipt**, not an acknowledgement:
 
@@ -697,42 +711,16 @@ Servers MUST immediately respect a reduction.
 **`featureSets/changed` is removed in 0.5.0.** It carried a server-authored account of what
 had changed, which is the self-attestation defect §5.4 exists to remove.
 
-> **Amended.** 0.5.0 originally justified this as "folded into reconnect semantics" — that
-> reconnection was sufficient. That rationale is **wrong**. This specification made the
-> manifest consequential (capabilities determine the grant, `uses` determines degradation,
-> ontology acceptance is bound to a snapshot), so a stale manifest is no longer cosmetic.
-> The method stays removed; the need is real and is met by the manifest mechanism of §17
-> (`mcpl/manifestChanged` + `mcpl/manifest`), where the host re-fetches and diffs rather
-> than trusting a payload.
+The manifest mechanism of §17 (`mcpl/manifestChanged` + `mcpl/manifest`) lets a server
+announce a changed manifest and the host re-fetch and diff it, rather than trust a payload.
 
 ---
 
 ## 7. Scoped Access — removed in 0.5.0
 
-**Removed.** Section 7 previously defined `scope/elevate` and scope whitelist/blacklist
-configuration. MCPL now has **two** authorization layers, not three: the connection
-capability grant (§5.4) and feature-set selection (§6).
-
-Two independent reasons:
-
-- **Nothing depended on it.** No server implemented `scope/elevate`; no feature set anywhere
-  declared `scoped: true`; hosts configured `scopes` locally and never put them on the wire.
-- **Its shape was unsafe.** The server supplied both `scope.label` and an arbitrary
-  `scope.payload`, and the host was instructed to match the *server-supplied label* against
-  its whitelist. A malicious server could label an `/etc/hosts` action as `/project/**`, or
-  make label and payload disagree — the same self-attestation defect as feature sets, one
-  layer down. Session-persisted approvals compounded it with no expiry, provenance, or
-  revocation.
-
-Mid-run elevation remains a real need for cooperative servers. When it returns it must be a
-**host-issued bounded grant**, not a trusted request: the host canonicalizes the scope from
-trusted method arguments or a host-owned adapter — never from the server's label — and
-approval returns an opaque grant id bound to server, capability, normalized target, expiry,
-and one-shot/lease semantics, against which execution is checked. The server's label
-survives only as display testimony.
-
-Per-channel narrowing (patterns like `discord:acme/*`) now attaches to the grant entry
-(§14.5), not to a separate layer.
+Removed in 0.5.0. The Changelog keeps why it was removed and the form any return of mid-run
+elevation would take. Per-channel narrowing (patterns like `discord:acme/*`)
+attaches to the grant entry (§14.5), not to a separate layer.
 
 ---
 
@@ -742,7 +730,7 @@ MCPL supports stateful tools with branching state. Servers choose per-response w
 
 Hosts are not required to implement the full checkpoint tree or branching. A minimal host may track only the latest checkpoint, or ignore state entirely. Branching and rollback are opt-in capabilities that hosts advertise and implement to the extent they choose.
 
-Compatibility note: MCPL extends MCP `tools/call` with optional parameters such as `state`, `checkpoint`, and `scope`. Servers MUST tolerate and ignore unknown request fields, and hosts MUST tolerate unknown response fields, to preserve backward compatibility.
+Compatibility note: MCPL extends MCP `tools/call` with optional parameters such as `state` and `checkpoint`. Servers MUST tolerate and ignore unknown request fields, and hosts MUST tolerate unknown response fields, to preserve backward compatibility.
 
 ### 8.1 Capability Declaration
 
@@ -1137,7 +1125,7 @@ signal. Gated on `inferenceLifecycle`.
     "inferenceId": "inf_xyz",
     "conversationId": "conv_123",
     "turnIndex": 7,
-    "phase": "started",
+    "phase": "completed",
     "model": { "…": "…" },
     "usage": { "inputTokens": 1250, "outputTokens": 340 }
   }
@@ -1169,12 +1157,6 @@ delivery guarantee is **best-effort**, deliberately:
 
 **Consumers MUST be defensive**: deduplicate terminals by `inferenceId`, tolerate a missing
 terminal, and **retain a safety timeout** for any state machine gated on turn completion.
-
-> An earlier draft claimed exactly-once delivery including crash recovery, and that servers
-> could rely on it. That is not achievable for an unacknowledged notification without durable
-> outbox, replay, acknowledgement and idempotency — a substantial mechanism this
-> specification does not have. The honest guarantee is above: much better than inferring a
-> dead turn from silence, but not a substitute for a timeout.
 
 > **Why the replacement.** `context/afterInference` handed every subscribing server the user
 > message plus the joined assistant message — including prose destined for *other* servers'
@@ -1338,8 +1320,7 @@ Example policy (illustrative):
 ## 12. Model Information
 
 Gated on `modelInfo`. A host that does not support or does not grant `model/info` MUST reply
-with an error (§6.6) — silently sending no response leaves the caller hanging and makes the
-surface impossible to evaluate.
+with an error, not silence (§6.6).
 
 Beyond identifying the text model, `model/info` is how a server discovers other models a
 host exposes, such as image generation.
@@ -1376,7 +1357,7 @@ host exposes, such as image generation.
 
 ### 13.1 Trust Model
 
-MCPL expands server capabilities significantly. Feature sets and scoped access provide granular control:
+MCPL expands server capabilities significantly. The capability grant (§5.4) provides granular control:
 
 | Capability | Risk | Mitigation |
 |------------|------|------------|
@@ -1419,12 +1400,12 @@ The control is the grant, not the instruction. `contextHooks.beforeInference.inj
 MUST be separately grantable and SHOULD be denied by default: for an untrusted server, write
 access to the system position is a larger hazard than read access to output.
 
-Hosts MUST authorize each returned injection by its typed `position` at response-receipt
-(§5.4, §10.8), and MAY additionally validate injected content.
+Hosts authorize each returned injection by its typed `position` at response-receipt (§5.4,
+§10.8), and MAY additionally validate injected content.
 
-> Earlier drafts stated only *"Servers MUST NOT inject content that attempts to override
-> system instructions"*. A MUST NOT addressed to the untrusted party is not a control. It is
-> retained as a conformance expectation for cooperative servers, and nothing more.
+Servers MUST NOT inject content that attempts to override system instructions. This is a
+conformance expectation for cooperative servers, and nothing more: a MUST NOT addressed to
+the untrusted party is not a control.
 
 ### 13.5 Locators and References
 
@@ -1432,8 +1413,8 @@ Two kinds of URI cross the protocol, and neither carries authority:
 
 - **Endpoint URIs** (§18). Possessing or resolving an `mcpl://` URI grants nothing; every
   question of authority is answered after connection by the grant (§18.6). Resolution is
-  subject to host egress/SSRF policy, and a redirect that changes the canonical origin
-  MUST NOT be followed without a new authorization decision.
+  subject to host egress/SSRF policy, and a host follows no redirect that changes the
+  canonical origin without a new authorization decision (§18.6).
 - **Reference URIs in content blocks** (§19). Server-supplied metadata is testimony at a
   security boundary. Receipt MUST NOT trigger a fetch; the fetcher allowlists schemes and
   origins, bounds redirects, streams under an actual-byte ceiling, and verifies digests
@@ -1446,7 +1427,7 @@ Two kinds of URI cross the protocol, and neither carries authority:
 
 ## 14. Channels of Communication
 
-Channels represent named destinations for messages (e.g., `ui`, `discord:#general`, `telegram:123456`, `signal:+15551234`). Channels are runtime‑extensible and host‑controlled. Channels are independent of moderation; hosts may run moderation on content before routing/publishing.
+Channels represent named destinations for messages (e.g., `ui`, `discord:#general`, `telegram:123456`, `signal:+15551234`). Channels are runtime-extensible and host-controlled. Channels are independent of moderation; hosts may run moderation on content before routing/publishing.
 
 ### 14.1 Capabilities
 
@@ -1521,7 +1502,7 @@ degradation reporting (§6.4), but they are not the authorization.
 }
 ```
 
-- `channels/changed` (Server → Host, Notification): Notify added/removed/updated channels.
+- `channels/changed` (Server → Host, Notification or Request; §14.5): Notify added/removed/updated channels.
 
 ```jsonc
 {
@@ -1607,9 +1588,8 @@ Response:
 - `channels/outgoing/chunk` (Host → Server, Notification): Moderated outgoing
   text deltas, streamed while the model is still generating. Semantics:
 
-  - **Opt-in**: sent only to servers that declared `channels.streaming: true`
-    in their initialize capabilities. Servers that did not declare it MUST NOT
-    receive these notifications.
+  - **Opt-in**: sent only to servers granted `channels.streaming` (§14.1,
+    §5.4). Servers not granted it MUST NOT receive these notifications.
   - **Recipient**: the server that registered the target channel (the one
     whose `channels/publish` will eventually deliver the same content). This
     enables live consumers — streamed message rendering, voice synthesis —
@@ -1661,7 +1641,7 @@ Response:
 }
 ```
 
-- `channels/publish` (Host → Server, Notification or Request): Ask connector to deliver content to a channel.
+- `channels/publish` (Host → Server, Notification or Request): Ask the server to deliver content to a channel.
 
 ```jsonc
 {
@@ -1759,7 +1739,7 @@ form returns an itemized result, one entry per submitted descriptor:
 ] }
 ```
 
-The same shape applies to `channels/register`. A host receiving a Notification it must
+The same shape applies to `channels/register`. A host receiving a Notification it has to
 partially reject MUST filter itemwise **and** emit a diagnostic — never silently, since
 silent filtering leaves the two sides disagreeing about which channels exist.
 
@@ -1779,14 +1759,9 @@ Hosts SHOULD moderate content before routing/publishing.
 
 ### 14.6 Error Codes
 
-Add to Appendix A:
-
-| Code | Message | Description |
-|------|---------|-------------|
-| `-32002` | Capability denied | Method requires a capability not in the effective grant; `data: { capability }` |
-| `-32017` | Channel not permitted | Lacking capability to publish to or receive from channel |
-| `-32023` | Unknown channel | Channel id doesn’t exist or not registered |
-| `-32024` | Channel open failed | Server could not open/connect the requested channel |
+Channel methods use these codes, defined in Appendix A: `-32002` (Capability denied),
+`-32017` (Channel not permitted), `-32023` (Unknown channel) and `-32024` (Channel open
+failed).
 
 ---
 
@@ -1955,7 +1930,7 @@ The host authorizes this injection by its `position` — `beforeUser` — agains
 response-receipt (§5.4). Had the same server returned a `system` injection it would be
 rejected, without the server's claimed `featureSet` entering the decision.
 
-**Turn end — exactly once, on every exit path:**
+**Turn end — one terminal phase, best-effort, on every exit path the host controls:**
 
 ```jsonc
 {
@@ -2058,8 +2033,9 @@ Fields (all optional): `coreTags` (which reserved tags this server emits, descri
 inherited from §16.2); per-tag `desc`, `facet`, `implies`, `suggestedTreatment`, `stability`;
 `keyed` families; a top-level `suggestedTreatment` rule list; and `open`.
 
-Discovery is at init only. There is no runtime ontology-query method: a mutable ontology
-cannot be meaningfully "accepted" per §16.5.
+The ontology is part of the manifest, so the host learns it at `initialize` and again
+whenever it fetches the manifest (§17.4). There is no ontology-specific query method, and a
+changed ontology invalidates prior acceptance rather than inheriting it (§17.5).
 
 ### 16.5 Suggested treatment is a hint, not policy
 
@@ -2099,7 +2075,7 @@ the closure-expanded tag set.
 
 A server's manifest became **consequential** in 0.5.0: capabilities determine the grant
 (§5.4), `uses` determines degradation (§6.4), and ontology acceptance is bound to a snapshot
-(§16.5). A stale manifest is therefore no longer cosmetic, and discovery at `initialize`
+(§17.5). A stale manifest is therefore no longer cosmetic, and discovery at `initialize`
 alone is insufficient.
 
 This section adds two optional methods:
@@ -2187,15 +2163,11 @@ all-string array** at one of the three named locations, in the object-keyed `fea
 shape those paths are written against. A set-declared array containing any non-string
 member is non-conforming input: hashed verbatim — no sort, no dedupe, no identifier
 check — since the identifier refusal exists solely to keep the sort-order divergence
-unreachable, and an array that is never sorted cannot diverge. *(Second totality
-corollary, adjudicated 2026-08-03: both libraries had implemented a
-`set_member_not_string` refusal contradicting this rule.)* A wrong-typed value in a set position (`"uses": "tools"`), an
+unreachable, and an array that is never sorted cannot diverge. A wrong-typed value in a set position (`"uses": "tools"`), an
 array-shaped `featureSets`, or any other non-conforming structure is **hashed verbatim** —
 canonicalized by JCS, never set-normalized, never refused. Validation (§6.4) is where a
 wrong type fails; the digest's job is to give any two libraries the same answer for the
-same bytes, including bytes that will then fail validation. *(Pinned 2026-08-02: the two
-library implementations diverged on both cases — digest-vs-error for a wrong-typed `uses`,
-and two different revisions for one array-shaped manifest.)*
+same bytes, including bytes that will then fail validation.
 
 The **only** input the digest refuses is an identifier-charset violation
 (`identifier_charset`): hashing a non-ASCII identifier makes the UTF-8/UTF-16 ordering
@@ -2249,7 +2221,7 @@ revision = sha256:_YZTS0h1tqTAMZI6eElCszSQE2WNx3xhAhmgUvNI9H4
 ```
 
 Note `uses` is reordered (set semantics) while object members are reordered by JCS — both
-must happen, and neither alone yields this value.
+are needed, and neither alone yields this value.
 
 A host **MAY** recompute the digest from a fetched manifest and compare. A mismatch is a
 **conformance defect**, not grounds to reject the manifest — the manifest's *content* is
@@ -2280,8 +2252,7 @@ A host **MAY** ignore the notification entirely. A host that acts on it **MUST**
 **Deriving `domains`:** an **absent** member and an **empty** one are different manifests —
 they canonicalize differently — so a member appearing or disappearing IS a change to its
 domain. Going from `{"version":"0.5"}` to `{"version":"0.5","featureSets":{}}` announces
-`featureSets` (and `tagOntology`, whose carrier appeared). *(Pinned 2026-08-02: the two
-libraries diverged; conflating absent with empty under-announces.)*
+`featureSets` (and `tagOntology`, whose carrier appeared).
 
 **No capability path gates this.** That is deliberate and is an exception worth stating:
 announcing conveys no authority, and gating it would perversely silence exactly the servers
@@ -2361,7 +2332,7 @@ into the narrowed grant.
 
 ### 17.6 The change receipt
 
-The host emits a single normalized, privacy-minimal receipt to the resident or operator.
+The host emits a single normalized, privacy-minimal receipt to the agent or operator.
 Impacts use a **closed, host-derived vocabulary** — never a server-authored flag such as
 `requiresReview`:
 
@@ -2377,14 +2348,14 @@ Impacts use a **closed, host-derived vocabulary** — never a server-authored fl
 
 Each impact carries a disposition: `applied` | `decision-needed` | `informational`.
 
-Whether a receipt **wakes** the resident is ordinary §16 policy evaluated against tags the
+Whether a receipt **wakes** the agent is ordinary §16 policy evaluated against tags the
 host attaches — not a property of the change and not the server's to decide.
 
 `ontology-reference-undeclared` is **informational by default**, and the name is deliberate.
 Tag ontologies are open-world, so a tag absent from the new declaration may still be emitted
 when `open: true`, and a consumer rule matches raw event tags regardless of what is declared.
 The certain fact is narrower — the accepted *description* disappeared, not that the rule
-stopped matching. A resident may well want to know, because it often *precedes* a rule going
+stopped matching. The agent may well want to know, because it often *precedes* a rule going
 dead, but the host cannot assert that it has.
 
 ### 17.7 Relationship to existing change notifications
@@ -2393,8 +2364,8 @@ MCP's `notifications/tools/list_changed` (and the resources/prompts equivalents)
 `channels/changed` (§14.5) **remain unchanged**. They are specialized, they carry no manifest
 authority, and they already work.
 
-The host **SHOULD** coalesce them into the same resident-facing changelog surface, so a
-resident sees one account of "what changed about this server" rather than four unrelated
+The host **SHOULD** coalesce them into the same agent-facing changelog surface, so the
+agent sees one account of "what changed about this server" rather than four unrelated
 ones.
 
 ### 17.8 Rate limiting
@@ -2450,8 +2421,8 @@ validated manifest digest; last negotiated effective grant with timestamp and pr
 accepted ontology digest; current feature degradation; last receipt delivered. The server
 tracks what it announced; the host tracks what it fetched, validated, negotiated, and
 delivered. A server's announcement log is not evidence the host acted on it. The server
-library **MUST NOT** generate resident-facing prose or policy conclusions — the impact
-vocabulary of §17.6 is host-derived precisely so that what a resident is told about a change
+library **MUST NOT** generate agent-facing prose or policy conclusions — the impact
+vocabulary of §17.6 is host-derived precisely so that what the agent is told about a change
 is not authored by the party that made it.
 
 ---
@@ -2953,7 +2924,7 @@ Server side, two requirements of different testability, stated separately:
 session auth): the authentication context is whatever transport-native identity the
 host-mediated fetcher can present — and where that is nothing, only references the server
 chooses to serve unauthenticated are fetchable. A server on such a transport that wants
-fetchable references must serve them accordingly; the host invents no credential on its
+fetchable references needs to serve them accordingly; the host invents no credential on its
 behalf.
 
 Credential lifetime and reference lifetime are independent: an `expiresAt` beyond the
@@ -3153,8 +3124,8 @@ puts a URI or a token anywhere a model could quote it.
 | `-32002` | Capability denied | Method requires a capability not in the effective grant (§5.4); `data: { capability }` |
 | `-32003` | Unknown feature set | Message used undeclared feature set |
 | `-32005` | Checkpoint not found | Rollback targeted a pruned or unknown checkpoint |
-| `-32017` | Channel not permitted | Lacking scope to publish or observe channel |
-| `-32023` | Unknown channel | Channel id doesn’t exist or not registered |
+| `-32017` | Channel not permitted | Lacking capability to publish to or receive from channel |
+| `-32023` | Unknown channel | Channel id doesn't exist or not registered |
 | `-32024` | Channel open failed | Server could not open/connect the requested channel |
 
 ---
@@ -3325,9 +3296,153 @@ additional properties are ignored.
 
 **ContentDisposition** (reference block `disposition`, §19.3.1)**:** `"never" | "ref"`
 
+**LifecyclePhase** (`inference/lifecycle`, §10.5)**:** `"started" | "completed" | "aborted" | "failed"`
+
+**Fallback** (degradation receipt, §6.7)**:** `"mcp-only" | "close"`
+
 ---
 
 ## Changelog
+
+### Editorial consolidation (October 2026), within 0.5.0-draft
+
+No normative change is intended, and the protocol is the one 0.5.0-draft specifies. This
+revision edits the text in place and keeps every section number, so existing citations still
+land where they did.
+
+- **Conventions and terms.** Added the BCP 14 statement and a list of terms (host, server,
+  agent, capability path and grant, manifest, testimony, wake, wake text), each in the sense
+  the text already uses.
+- **Lowercase "must" and "should"** carry no BCP 14 force under that statement. Where a
+  lowercase "must" stated a plain necessity (§4.2.6, §14.5, §17.2's test vector note,
+  §19.6.1) it now reads "need", "has to" or "are needed", and the one in §6.7 now points to
+  the MUST it restated. Those in §1 and in §7's moved body stay as written. Every lowercase
+  "should" stays as written, and so reads as advice: §5.1 (a server that only injects should
+  say so), §10.5's rationale, §10.7 (inference needed for hook processing), §13.3's
+  rationale, §17.9, the three in §17.10's non-normative note, two plain-English uses in §18,
+  and §19.3.1's description of what `ref` asks for. (One more is in 0.2.0's entry below.)
+- **"Agent" for "resident".** §17 said "resident" where the rest of the text says "agent".
+- **The grant is the only authority.** §1, §2 and §13.1 described feature sets (and, in
+  §13.1, scoped access) as the permission layer. They now describe the capability grant, as
+  §5.4 and §6.4 do.
+- **Older statements brought in line with the 0.5.0 text that superseded them:**
+  - §14.3 gave `channels/changed` as a Notification; §14.5 makes it dual-mode.
+  - `channels/outgoing/chunk` was sent to servers that *declared* `channels.streaming`; by
+    §14.1 and §5.4 it goes to servers *granted* it.
+  - §16.4 said ontology discovery is at initialization only; §17 makes the manifest, and the
+    ontology in it, re-fetchable, with acceptance bound to the revision it was given against.
+  - §15.2's heading said "exactly once, on every exit path"; §10.5 has the host attempt one
+    terminal phase on every exit path it controls, with delivery best-effort.
+  - Appendix A's `-32017` description used removed §7's "scope"; it now has the wording
+    §14.6's table gave it.
+  - §8's list of `tools/call` parameters no longer names `scope`, removed with §7.
+- **Corrected against the text they describe:**
+  - §6.1's example `uses` named a path §6.2 makes invalid; it now names leaves, as §15.1 does.
+  - §5.4 called the capability vocabulary "depth 3"; its injection leaves are depth 4.
+  - §10.5's example carried `usage` on `started`, which its table allows on `completed` only.
+  - §17's introduction cited §16.5 for snapshot-bound acceptance, which §17.5 states.
+- **One statement per rule.** §4's diagram, a second method list, is now a sentence, and
+  §4.1's table is the method index. It adds §17's two methods, rows for the two methods
+  §14.1 names without a shape, and a section column. §14.6 lists its codes and points to
+  Appendix A instead of repeating its table. §12 no longer repeats §6.6's reason. §13.4's
+  injection sentence and §13.5's redirect clause point to the rules they restated (§5.4 and
+  §10.8, §18.6) instead of restating them with their own keywords. §9.2's stub rule and
+  §13.5's fetch rule keep their keywords: both stood outside §19, and a pointer would leave
+  them only under §19's Draft strength.
+- **Summaries completed.** The Abstract lists channels, state management, model information
+  and the WebSocket transport. Appendix B.4 collects the lifecycle phases and receipt
+  fallbacks the text defines.
+- **§7** keeps its number and heading; its body is below.
+- **§13.4.** The rule earlier drafts stated is now stated in place, with the limit the text
+  gave it ("a conformance expectation for cooperative servers, and nothing more").
+- **History moved here, verbatim.** Dated notes, removal notes and amendment notes that sat
+  inside rule paragraphs:
+
+**From §5.3, after "Field semantics":**
+
+> (pinned 2026-08-02; four server implementations had each answered these identically from the fail-closed principle, but no text said so)
+
+**From §5.4, after the one-segment `*` rule:**
+
+> *(Pinned 2026-08-02: two independent library implementations diverged here, one
+> granting depth-4 injection under `contextHooks.*` and one granting nothing; every server
+> implementation that faced the question had chosen the one-segment reading.)*
+
+**From §6.6:**
+
+> `canEnable` is removed. It told an untrusted peer what it might obtain by asking, which
+> is the mirror image of the coercion `featureSets/update` refusals are barred from (§6.7).
+
+**From §6.7, after the rule for a non-conforming Notification:**
+
+> *(Pinned
+> 2026-08-02: five implementations had each already chosen exactly this — narrow-only, never
+> ready.)*
+
+**From §6.7, after the removal of `featureSets/changed` (its last sentence's point stays in §6.7):**
+
+> **Amended.** 0.5.0 originally justified this as "folded into reconnect semantics" — that
+> reconnection was sufficient. That rationale is **wrong**. This specification made the
+> manifest consequential (capabilities determine the grant, `uses` determines degradation,
+> ontology acceptance is bound to a snapshot), so a stale manifest is no longer cosmetic.
+> The method stays removed; the need is real and is met by the manifest mechanism of §17
+> (`mcpl/manifestChanged` + `mcpl/manifest`), where the host re-fetches and diffs rather
+> than trusting a payload.
+
+**From §7, its body:**
+
+> **Removed.** Section 7 previously defined `scope/elevate` and scope whitelist/blacklist
+> configuration. MCPL now has **two** authorization layers, not three: the connection
+> capability grant (§5.4) and feature-set selection (§6).
+>
+> Two independent reasons:
+>
+> - **Nothing depended on it.** No server implemented `scope/elevate`; no feature set anywhere
+>   declared `scoped: true`; hosts configured `scopes` locally and never put them on the wire.
+> - **Its shape was unsafe.** The server supplied both `scope.label` and an arbitrary
+>   `scope.payload`, and the host was instructed to match the *server-supplied label* against
+>   its whitelist. A malicious server could label an `/etc/hosts` action as `/project/**`, or
+>   make label and payload disagree — the same self-attestation defect as feature sets, one
+>   layer down. Session-persisted approvals compounded it with no expiry, provenance, or
+>   revocation.
+>
+> Mid-run elevation remains a real need for cooperative servers. When it returns it must be a
+> **host-issued bounded grant**, not a trusted request: the host canonicalizes the scope from
+> trusted method arguments or a host-owned adapter — never from the server's label — and
+> approval returns an opaque grant id bound to server, capability, normalized target, expiry,
+> and one-shot/lease semantics, against which execution is checked. The server's label
+> survives only as display testimony.
+
+**From §10.5, after the pairing rules:**
+
+> An earlier draft claimed exactly-once delivery including crash recovery, and that servers
+> could rely on it. That is not achievable for an unacknowledged notification without durable
+> outbox, replay, acknowledgement and idempotency — a substantial mechanism this
+> specification does not have. The honest guarantee is above: much better than inferring a
+> dead turn from silence, but not a substitute for a timeout.
+
+**From §13.4 (the rule it describes is now stated in §13.4 itself):**
+
+> Earlier drafts stated only *"Servers MUST NOT inject content that attempts to override
+> system instructions"*. A MUST NOT addressed to the untrusted party is not a control. It is
+> retained as a conformance expectation for cooperative servers, and nothing more.
+
+**From §17.2, after the rule for non-string set members:**
+
+> *(Second totality
+> corollary, adjudicated 2026-08-03: both libraries had implemented a
+> `set_member_not_string` refusal contradicting this rule.)*
+
+**From §17.2, after the rule for wrong-typed and array-shaped input:**
+
+> *(Pinned 2026-08-02: the two
+> library implementations diverged on both cases — digest-vs-error for a wrong-typed `uses`,
+> and two different revisions for one array-shaped manifest.)*
+
+**From §17.3, after the rule that an absent and an empty member differ:**
+
+> *(Pinned 2026-08-02: the two
+> libraries diverged; conflating absent with empty under-announces.)*
 
 ### 0.5.0-draft (August–September 2026)
 

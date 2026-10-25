@@ -130,7 +130,9 @@ Rules:
 - In `tools/list`, `mcpl/visible` on a toolset's tool means "visible in at least one open
   instance"; per-instance visibility travels in hint changes (RFC §6). The list carries the
   declared definitions, and its result carries `_meta["mcpl/rev"]`: the hint revision it
-  reflects, so a host applies only later changes on top of it.
+  reflects, so a host applies only later changes on top of it. That revision covers what the
+  list states — definitions and coarse visibility. **A host's per-instance baseline comes from
+  `toolsets/list`**, whose hints state every open instance's visibility in full.
 - **For a host that did not advertise `toolHints`, every toolset is implicitly open** and
   the server behaves as it would without this RFC; where a toolset cannot sensibly be open
   without options (a game needs its settings), the server may instead offer that host plain
@@ -223,7 +225,9 @@ present it in surface mode, connecting only when it is opened.
 
 What the principal has open on the server, with the hint state of their tools, and — so a
 host can tell "never had one" from "it ended while you were away" — toolsets that closed
-recently without this connection being told:
+recently while no connection of the principal could be told. Each connection hears each such
+record once, on its first `toolsets/list` after the end; servers keep the records for a
+bounded time (the reference SDK: an hour):
 
 ```jsonc
 → { "open": [ … ], "ended": [ { "toolset": "game", "reason": "idle for 30 minutes" } ] }

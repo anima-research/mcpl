@@ -171,7 +171,7 @@ In the manifest (§17), so changes are announced by `mcpl/manifestChanged`:
 | Field | Meaning |
 |---|---|
 | `title`, `summary` | For the host's catalog and reminders |
-| `default` | `"open"` or `"closed"` at the start of a session |
+| `default` | `"open"`: the server treats the toolset as open from the start of a session — it appears in `toolsets/list` without the host opening it. `"closed"`: the host opens it. Not allowed with `instances` |
 | `instances` | `true`: the toolset may be opened more than once, each a named instance |
 | `options` | JSON Schema for `toolsets/open` options |
 
@@ -275,7 +275,7 @@ interface HintChanges {
   rev: number;                   // per connection, strictly increasing
   tools?: Array<{
     name: string;
-    instance?: string;           // visibility is per instance
+    instance?: string;           // required for a toolset with instances: visibility is per instance
     presence?: "static" | "dynamic";
     visible?: boolean;
     definition?: Tool;           // dynamic tools only: a new definition (new enum options)
@@ -303,13 +303,23 @@ It travels three ways, sharing one `rev` counter:
 3. **Standalone**, as `tools/hints` (Server → Host, Notification) — for a change with nothing
    to say.
 
-The host applies changes in `rev` order and ignores any with a `rev` it has already passed.
+A server **MUST** send hint changes on a connection in `rev` order — whichever of the three
+ways each travels — so that a lower `rev` never arrives after a higher one (allocate the `rev`
+and write the message in one step). The host applies changes in `rev` order and ignores any
+with a `rev` it has already passed; a host that sees a gap or a reversal anyway re-reads the
+state with `toolsets/list`.
 A host applies the `hints` of a push only if it accepts the push; if it refuses one (or the
 server gets no answer), the server re-sends the same changes as `tools/hints` with the same
 `rev`. A host applies each `rev` at most once.
 
 `definition` lets a dynamic tool's options change without a `tools/list` round trip. A static
 tool's definition changes only through `tools/list_changed`.
+
+Hint changes need no capability to be applied: they describe the server's own tools. Delivering
+anything they cause into a model's context follows the host's usual rules for events (a host
+that has not granted `pushEvents` still tracks visibility, and shows it in results and `look`).
+A host **MUST** ignore hint `_meta` and `tools/hints` from a server that did not advertise
+`toolHints`.
 
 ### 6.2 Who reports what
 

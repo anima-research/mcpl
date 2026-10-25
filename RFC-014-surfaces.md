@@ -125,7 +125,12 @@ Rules:
 - A tool in a toolset is visible only while that toolset (or instance) is open **and** the
   server says it is visible. Two controllers, one rule.
 - `tools/list` **MUST** list every tool, visible or not, so that a host that ignores hints sees
-  today's behaviour. Calling an invisible tool returns an ordinary tool error that says why.
+  today's behaviour. Calling an invisible tool — or a tool of a toolset that is not open —
+  returns an ordinary tool error that says why.
+- In `tools/list`, `mcpl/visible` on a toolset's tool means "visible in at least one open
+  instance"; per-instance visibility travels in hint changes (RFC §6).
+- Tool names are unique across a server, static and toolset tools alike: instances share
+  their toolset's definitions, so a name identifies one definition.
 - Hints are statements, like `annotations` (RFC-008 §6). They confer and remove no authority.
 
 ### 4.2 Moving between static and dynamic
@@ -175,12 +180,15 @@ present it in surface mode, connecting only when it is opened.
     "content": [ { "type": "text", "text": "    A B C D E F G H J\n 9  . . . …" } ] }
 
 { "method": "toolsets/close", "params": { "toolset": "game", "instance": "vs-ada" } }
-→ { }
+→ { "content": [ { "type": "text", "text": "You left a live game: that is a forfeit." } ] }
 ```
 
 - `instance` is a name the host proposes (the agent's or its own). The server MAY return a
   different one if it must; the returned name is the instance's id for the session. For a
   toolset without `instances`, `instance` is absent.
+- Opening what is already open — a toolset without instances, or an instance by a name that is
+  open — **adopts** it: the result describes the existing one and changes nothing. This makes a
+  host's re-open after a reconnect safe.
 - The server **MAY** refuse an open (unknown toolset, a limit, bad options) with a JSON-RPC
   error; the host shows the refusal.
 - Opening and closing are the host's acts. The **agent** asks through the host's tools; the
@@ -190,6 +198,8 @@ present it in surface mode, connecting only when it is opened.
   holds open (`toolsets/list`, RFC §5.3) and reconciles: it adopts what the server reports
   (a game in progress, kept across the reconnect) and re-opens anything else it considers
   open.
+- The result of a close **MAY** carry `content` — what closing meant (a forfeit, a game kept on
+  the server) — and carries the hint changes it caused, like an open.
 - The result of an open carries the hint changes the open caused (`_meta["mcpl/hints"]`):
   which of the toolset's tools are visible now. It **MAY** carry `content` (content blocks, as
   in a tool result): what the agent sees on opening — the board, the surroundings, the
@@ -410,6 +420,10 @@ servers as the agent, so it obtains the agent's credentials from its own host th
 ## 11. Backward compatibility
 
 - A server that sends no hints is static throughout; nothing changes.
+- A server with toolsets **MAY** offer a host that did not advertise `toolHints` two plain
+  static tools that open and close toolsets (the reference SDK names them `toolset_open` and
+  `toolset_close`), so it remains usable there: the toolset's tools are in the list, and a
+  call without `mcpl/instance` goes to the only open instance.
 - A host that ignores hints sees every tool in `tools/list`, and calls to invisible tools fail
   with explanations.
 - `toolsets/open` and `toolsets/close` are only sent to servers that declared toolsets.
@@ -431,7 +445,7 @@ servers as the agent, so it obtains the agent's credentials from its own host th
 //   hints?: HintChanges; toolset?: string; instance?: string
 // Notification (Server → Host): "tools/hints", params: HintChanges
 // Requests (Host → Server): "toolsets/open"  {toolset, instance?, options?} → {toolset, instance?, title?, content?}
-//                           "toolsets/close" {toolset, instance?} → {}
+//                           "toolsets/close" {toolset, instance?} → {content?}
 //                           "toolsets/list"  {} → {open: [{toolset, instance?, title?}]}  (+ _meta["mcpl/hints"])
 // Manifest: experimental.mcpl.toolsets: Record<string, ToolsetDecl>; experimental.mcpl.surface?: {title, summary}
 // Advertisement: experimental.mcpl.toolHints: true (both sides)
@@ -472,6 +486,13 @@ interface ToolsetDecl {
 ---
 
 ## 15. Implementation status
+
+- **Server SDK and go-mcpl** (surfaces-mcpl, `src/sdk`, `src/servers/go`): revision 2's server
+  side, with tests for vectors 1–9 that apply to a server.
+- **Host** (mcpl-cc-bridge, branch `tool-hints`): in progress.
+- **games-mcpl**: adopting the hints natively, in progress.
+
+Earlier:
 
 `surfaces-mcpl` implements revision 1 (server-side four tools, Go, a generic mount, and
 per-service adapters later found unnecessary). The plan for revision 2:

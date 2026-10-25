@@ -128,7 +128,13 @@ Rules:
   today's behaviour. Calling an invisible tool — or a tool of a toolset that is not open —
   returns an ordinary tool error that says why.
 - In `tools/list`, `mcpl/visible` on a toolset's tool means "visible in at least one open
-  instance"; per-instance visibility travels in hint changes (RFC §6).
+  instance"; per-instance visibility travels in hint changes (RFC §6). The list carries the
+  declared definitions, and its result carries `_meta["mcpl/rev"]`: the hint revision it
+  reflects, so a host applies only later changes on top of it.
+- **For a host that did not advertise `toolHints`, every toolset is implicitly open** and
+  the server behaves as it would without this RFC; where a toolset cannot sensibly be open
+  without options (a game needs its settings), the server may instead offer that host plain
+  tools to open and close it (RFC §11).
 - Tool names are unique across a server, static and toolset tools alike: instances share
   their toolset's definitions, so a name identifies one definition.
 - Hints are statements, like `annotations` (RFC-008 §6). They confer and remove no authority.
@@ -194,10 +200,11 @@ present it in surface mode, connecting only when it is opened.
 - Opening and closing are the host's acts. The **agent** asks through the host's tools; the
   **host** may open or close by its own policy (close a toolset idle for many turns); the
   **server** may only suggest (RFC §6.2).
-- Open toolsets belong to the session. On reconnect the host asks the server what it still
-  holds open (`toolsets/list`, RFC §5.3) and reconciles: it adopts what the server reports
-  (a game in progress, kept across the reconnect) and re-opens anything else it considers
-  open.
+- Open toolsets belong to the **principal** (RFC §5.6). On reconnect the host asks the server
+  what is open (`toolsets/list`, RFC §5.3) and takes that as the truth: it adopts what the
+  server reports and treats anything else it believed open as closed. It does **not** re-open
+  on its own — opening can have effects (starting a new game) and is the agent's or the host's
+  deliberate act, not reconciliation.
 - The result of a close **MAY** carry `content` — what closing meant (a forfeit, a game kept on
   the server) — and carries the hint changes it caused, like an open.
 - The result of an open carries the hint changes the open caused (`_meta["mcpl/hints"]`):
@@ -214,10 +221,17 @@ present it in surface mode, connecting only when it is opened.
     "_meta": { "mcpl/hints": { "rev": 41, "tools": [ { "name": "play", "instance": "vs-ada", "visible": true } ] } } }
 ```
 
-What this session has open on the server, with the hint state of their tools. A server
-that keeps toolsets across connections (by principal) reports them after a reconnect; one
-that does not reports what was opened on this connection. Hosts send it after every
-(re)connect to a server that declared toolsets.
+What the principal has open on the server, with the hint state of their tools, and — so a
+host can tell "never had one" from "it ended while you were away" — toolsets that closed
+recently without this connection being told:
+
+```jsonc
+→ { "open": [ … ], "ended": [ { "toolset": "game", "reason": "idle for 30 minutes" } ] }
+```
+
+A server that keeps toolsets across connections reports them after a reconnect; one that does
+not reports what was opened on this connection. Hosts send it after every (re)connect to a
+server that declared toolsets, and tell the agent about anything `ended`.
 
 ### 5.4 Undeclared toolsets
 
@@ -241,6 +255,15 @@ in the call's `_meta`:
 A call to an instance-bound tool without `mcpl/instance`, while more than one instance is
 open, is an ordinary tool error naming the open instances.
 
+
+### 5.6 One principal, several connections
+
+Toolsets belong to the principal, not to a connection: a second connection of the same
+principal sees the same open toolsets (through `toolsets/list`, then hint changes). An open,
+close or visibility change made through one connection reaches the others as ordinary hint
+changes on their own `rev` counters — including `toolsets` state changes — not as
+suggestions.
+
 ---
 
 ## 6. Hint changes
@@ -260,8 +283,8 @@ interface HintChanges {
   toolsets?: Array<{
     toolset: string;
     instance?: string;
-    state: "open" | "closed";    // the server closing one (game over), or confirming
-    title?: string;
+    state: "open" | "closed";    // opened, closed (game over), confirmed, or — with a new
+    title?: string;              // title — retitled ("freedoom2 MAP02, skill 5")
   }>;
   suggest?: Array<{              // RFC §6.2
     toolset: string;
@@ -281,6 +304,9 @@ It travels three ways, sharing one `rev` counter:
    to say.
 
 The host applies changes in `rev` order and ignores any with a `rev` it has already passed.
+A host applies the `hints` of a push only if it accepts the push; if it refuses one (or the
+server gets no answer), the server re-sends the same changes as `tools/hints` with the same
+`rev`. A host applies each `rev` at most once.
 
 `definition` lets a dynamic tool's options change without a `tools/list` round trip. A static
 tool's definition changes only through `tools/list_changed`.
@@ -292,7 +318,9 @@ tool's definition changes only through `tools/list_changed`.
   **MUST NOT** also push it.
 - **Something else's consequences are pushed**, with the explaining event when there is one.
   An event from a background source that lands while a call is running is pushed, not folded
-  into that call's result.
+  into that call's result. A server that finds changes by comparing state before and after a
+  call may occasionally attribute a concurrent background change to the call; that is
+  acceptable — the host still learns the change, once.
 - **Suggestions** (`suggest`) are the server's way to ask for an open or close: an opponent
   challenges you, a world zone invites building, a game ended. The host decides; a suggestion
   confers nothing, and hosts **SHOULD** let the agent see a suggestion to open rather than act
@@ -302,8 +330,10 @@ tool's definition changes only through `tools/list_changed`.
 
 Server: `experimental.mcpl.toolHints: true` (it sends hints) and `toolsets` (it declares
 toolsets). Host: `experimental.mcpl.toolHints: true`. A server **MUST NOT** send `tools/hints`
-or the `hints` push member to a host that did not advertise `toolHints`; `_meta` on results is
-always allowed.
+or the `hints` push member to a host that did not advertise `toolHints`. It **MAY** tailor
+everything else to the host as well — omit the toolset declarations, hint `_meta` and any
+hints-only tools — so that a host without `toolHints` sees exactly what it saw before this
+RFC.
 
 ---
 
@@ -446,7 +476,8 @@ servers as the agent, so it obtains the agent's credentials from its own host th
 // Notification (Server → Host): "tools/hints", params: HintChanges
 // Requests (Host → Server): "toolsets/open"  {toolset, instance?, options?} → {toolset, instance?, title?, content?}
 //                           "toolsets/close" {toolset, instance?} → {content?}
-//                           "toolsets/list"  {} → {open: [{toolset, instance?, title?}]}  (+ _meta["mcpl/hints"])
+//                           "toolsets/list"  {} → {open: [{toolset, instance?, title?}], ended?: [{toolset, instance?, reason}]}  (+ _meta["mcpl/hints"])
+// tools/list result._meta: "mcpl/rev": number
 // Manifest: experimental.mcpl.toolsets: Record<string, ToolsetDecl>; experimental.mcpl.surface?: {title, summary}
 // Advertisement: experimental.mcpl.toolHints: true (both sides)
 interface ToolsetDecl {
@@ -490,7 +521,8 @@ interface ToolsetDecl {
 - **Server SDK and go-mcpl** (surfaces-mcpl, `src/sdk`, `src/servers/go`): revision 2's server
   side, with tests for vectors 1–9 that apply to a server.
 - **Host** (mcpl-cc-bridge, branch `tool-hints`): in progress.
-- **games-mcpl**: adopting the hints natively, in progress.
+- **games-mcpl** (branch `tool-hints`): native; one toolset `game`, static catalogue and
+  results; conformance tests against the real engine.
 
 Earlier:
 

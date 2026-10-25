@@ -1,9 +1,9 @@
 # MCPL RFC-015: Delegated Access
 
-**Status:** Draft (revision 4)
+**Status:** Draft (revision 5)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra
-**Date:** 2026-10-25 (revisions 1–4)
+**Date:** 2026-10-25 (revisions 1–5)
 **Depends on:** RFC-002 / SPEC §5.4 for authority. Adds one capability path (`access.token`),
 one method (`access/token`, Server → Host, Request), one advertisement member on each side
 (`access`), and one error code (`-32040`). Amends SPEC §4 (message flow and method overview),
@@ -13,6 +13,14 @@ one method (`access/token`, Server → Host, Request), one advertisement member 
 (tool presence, toolsets and surfaces; proposed alongside this one).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+> **Revision 5 note.** From review of revision 4. Hosts **ignore** unknown members, so new ones
+> (like `schemes`) don't break older hosts; a server checks the returned `scheme` itself (RFC
+> §3.1, §3.2). A request may carry `timeoutMs`, which each hop shrinks, so time bounds hold for
+> chains of any length (RFC §3.4). A hop forwards every member and maps its host's other errors
+> (RFC §7). The cache key includes the principal and scheme, and a cached credential is returned
+> only with at least two minutes left (RFC §5). `audience` may not carry control characters
+> either. More vectors.
 
 > **Revision 4 note.** From review of revision 3. Chains are made workable on a live
 > connection: a hop advertises `access` as a forwarder when it dials, and controls what its
@@ -123,17 +131,23 @@ surfaces are for.
 | `purpose` | `string` (≤ 256 code points, no control characters) | No | Why, in words an operator reading an audit log would understand |
 | `fresh` | `boolean` | No | Do not return a cached credential (the endpoint refused the last one) |
 | `schemes` | `string[]` (1–8 entries) | No | The credential schemes the server can use, in order of preference. Absent means `["bearer"]` |
+| `timeoutMs` | `integer` (1000–120000) | No | How long the requester will wait for the answer. Absent means 30000. See RFC §3.4 |
 | `_meta` | `object` | No | MCP's reserved metadata member; ignored by this RFC |
 
-Any other member, a value out of these bounds, an `endpoint` with userinfo, or a `purpose`
+A value out of these bounds, an `endpoint` with userinfo, or an `audience` or `purpose`
 containing a control character (U+0000–U+001F, U+007F–U+009F) **MUST** be rejected with
 `-32602 Invalid params`. Lengths are counted in Unicode code points, not UTF-16 units.
+
+A host **MUST ignore** members it does not know, so that a later revision can add members
+without breaking older hosts. A member whose being ignored would be unsafe is added together
+with an advertisement for it, and a server sends it only to a host that advertised it. (A host
+that ignores `schemes` returns `bearer`; the server checks the scheme it got, RFC §3.2.)
 
 ### 3.2 Result
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `scheme` | `string` | Yes | One of the request's `schemes` (absent: `"bearer"`). `"bearer"` is the only scheme this revision defines |
+| `scheme` | `string` | Yes | One of the request's `schemes` (absent: `"bearer"`). `"bearer"` is the only scheme this revision defines. A server that receives a scheme it did not list discards the credential and treats the answer as a `host_policy` refusal |
 | `credential` | `string` | Yes | The credential, opaque to MCPL |
 | `expiresAt` | `string` (RFC 3339, UTC, `Z` suffix) | Yes | When it stops being valid. A host that cannot state this **MUST NOT** return a result: it refuses (RFC §3.3) |
 | `principal` | `string` | No | Whom it identifies (e.g. `agent:example@animalabs.ai`) |
@@ -166,14 +180,18 @@ later; the server asks again on a later use, not in a loop.)
 ### 3.4 Time bounds
 
 Every party bounds its wait, and the party nearer the identity provider gives up first, so the
-server hears a refusal rather than a timeout:
+requester hears an answer rather than a timeout. `timeoutMs` carries the requester's bound down
+the chain:
 
-- A server **SHOULD** allow an `access/token` request at least **30 s** before abandoning it,
-  and treats an abandoned request as `unavailable`.
-- A host **SHOULD** answer within **20 s**: it bounds its call to the identity provider and
-  answers `-32040`, `kind: "unavailable"`, when the bound passes.
-- A hop (RFC §7) answers within the same 20 s, so it **SHOULD** give its own host no more than
-  **15 s** before answering `unavailable` itself.
+- A server waits `timeoutMs` (its own choice; **SHOULD** be at least 30000) and treats an
+  abandoned request as `unavailable`.
+- A host answers within `timeoutMs` − 2000 ms (and in any case **SHOULD** within 20 s): it bounds
+  its call to the identity provider and answers `-32040`, `kind: "unavailable"`, when the bound
+  passes.
+- A hop (RFC §7) forwards with `timeoutMs` reduced by at least 5000 ms, waits that long, and
+  answers `unavailable` itself if it passes — so each hop's bound is shorter than the one
+  waiting on it, however long the chain. A hop whose remaining budget would fall below 1000 ms
+  answers `unavailable` without forwarding.
 
 ---
 
@@ -277,9 +295,11 @@ credentials through it.
   expiry (the reference implementation renews 60 s early).
 - When the endpoint rejects a credential, the server **MAY** request once with
   `fresh: true`; a second rejection is the endpoint's answer, not a reason to retry.
-- Hosts **MAY** cache per (configured server, audience) — across reconnects of the same
-  configured server, never across principals — and **MAY** rate-limit; a server whose
-  requests are throttled degrades as for a refusal. `fresh: true` bypasses the cache.
+- Hosts **MAY** cache per (configured server, principal, audience, scheme) — across reconnects
+  of the same configured server — and **MAY** rate-limit; a server whose requests are throttled
+  degrades as for a refusal. `fresh: true` bypasses the cache. A host **MUST NOT** answer from
+  its cache with a credential that has less than **two minutes** left, so a server renewing
+  before expiry gets a new one.
 
 ---
 
@@ -307,9 +327,14 @@ A server that is itself the host of an upstream server (it dialed it) may receiv
 `access.token` **and** it granted `access.token` to the upstream (and advertised `access` to it,
 RFC §4.2). An upstream it has not granted gets `-32002`, as from any host.
 
+- It forwards `audience`, `endpoint`, `purpose`, `fresh` and `schemes` unchanged, and
+  `timeoutMs` reduced (RFC §3.4).
 - If its own host refuses, the hop passes the refusal on **unchanged** — the same `kind` and
   `reason` — adding `forwarded: true`, so the upstream can still tell throttling from a final
-  refusal.
+  refusal. Its host's `-32602` passes on unchanged too (the request was the upstream's). Any
+  other error from its host — `-32002` (a grant reduction still in flight), or an error this
+  RFC does not define — becomes `-32040` with `kind: "host_policy"` (for `-32002`) or
+  `"unavailable"`, and `forwarded: true`.
 - If at that moment it holds no grant of its own (not received yet, or lost before it reduced
   the upstream's grant), it answers `-32040` with `kind: "host_policy"` — never `-32002`, which
   would tell the upstream it lacks a grant that it holds.
@@ -337,9 +362,9 @@ How it does so is the provider's protocol (for archipelago-home: a signed key-pr
 The host **SHOULD** record each request: server, audience, endpoint, purpose, outcome,
 `expiresAt`. It **MUST NOT** record the credential, and records `endpoint` only as scheme,
 host (with its port) and path — without userinfo, query or fragment, where some deployments
-carry tokens (§4.2.6). A server **MUST NOT** put a credential in `endpoint`. `purpose` reaches
-the record as data: it cannot carry control characters (RFC §3.1), and a host escapes anything
-else its log format treats specially. This record is the audit of `access/token`; §13.2's
+carry tokens (§4.2.6). A server **MUST NOT** put a credential in `endpoint`. `audience` and
+`purpose` reach the record as data: they cannot carry control characters (RFC §3.1), and a host
+escapes anything else its log format treats specially. This record is the audit of `access/token`; §13.2's
 per-feature-set fields do not apply to a method that carries no `featureSet`.
 
 ### 8.3 Agent-facing surface
@@ -410,12 +435,14 @@ caching (RFC §5) makes normal operation cheap.
 
 ```ts
 interface AccessTokenParams {
-  audience: string;          // 1..128 code points
+  audience: string;          // 1..128 code points, no control characters
   endpoint?: string;         // absolute URI, no userinfo, ≤ 2048 code points (RFC §8.2)
   purpose?: string;          // ≤ 256 code points, no control characters
   fresh?: boolean;
   schemes?: string[];        // 1..8; absent = ["bearer"]
-  _meta?: object;            // MCP's reserved member; any other member → -32602
+  timeoutMs?: number;        // 1000..120000; absent = 30000
+  _meta?: object;            // MCP's reserved member
+  // a host ignores members it does not know
 }
 interface AccessTokenResult {
   scheme: string;            // one of the request's schemes; "bearer" in this revision
@@ -446,7 +473,7 @@ Freeze before Draft→Accepted (RFC-005 §11):
    the future.
 4. Identity provider refuses → `-32040` with `audience`, `kind: "provider_refused"` and a
    `reason`; no credential.
-5. Unknown params member → `-32602`; a `_meta` object alongside valid params is accepted.
+5. An unknown params member is ignored; a `_meta` object alongside valid params is accepted.
 6. A credential never appears in any `push/event`, tool result or channel message of a recorded
    session, nor in the server's captured log output (stderr) for it.
 7. Two principals on one server: each request is answered with that principal's credential.
@@ -461,11 +488,11 @@ Freeze before Draft→Accepted (RFC-005 §11):
     checks).
 12. A host that includes `access.token` in a grant but has no identity answers `-32040` with
     `kind: "no_identity"`.
-13. The host's audit record of an `endpoint` with a query string holds no query string, and
-    keeps a non-default port.
-14. Bounds, each `-32602`: an empty audience; an audience of 129 code points; an endpoint that is
-    relative, has userinfo, or is 2049 code points long; a non-boolean `fresh`; a `purpose` with
-    a newline; an empty `schemes`. An audience of 128 astral-plane characters (256 UTF-16 units)
+13. The host's audit record of an `endpoint` with a query string and a fragment holds neither,
+    and keeps a non-default port.
+14. Bounds, each `-32602`: an empty audience; an audience of 129 code points, or with a newline;
+    an endpoint that is relative, has userinfo, or is 2049 code points long; a non-boolean
+    `fresh`; a `purpose` with a newline; an empty `schemes`; a `timeoutMs` of 500. An audience of 128 astral-plane characters (256 UTF-16 units)
     is accepted.
 15. A host whose provider gives no expiry answers `-32040`, `kind: "unavailable"` — no result,
     no silence.
@@ -474,6 +501,17 @@ Freeze before Draft→Accepted (RFC-005 §11):
 17. `schemes: ["example-pop"]` to a host that has only bearer → `-32040`, `kind: "host_policy"`;
     absent `schemes` → `scheme: "bearer"`.
 18. A server receiving an unknown `kind` treats the refusal as final.
+19. Time bounds: a host whose provider does not answer replies `-32040` `unavailable` within
+    `timeoutMs` − 2000 ms; a hop forwards `timeoutMs` reduced by at least 5000 ms and answers
+    `unavailable` itself when that passes; a hop with less than 1000 ms left does not forward.
+20. A hop without a grant of its own answers its upstream `-32040` `host_policy`, never `-32002`.
+21. `fresh: true` passes through a hop: the credential returned is newly minted.
+22. A result's `scheme` is one of the request's `schemes`; a server given one it did not list
+    discards it.
+23. A server does not present a credential after its `expiresAt`, and a cached answer always has
+    at least two minutes left.
+24. A host returns two principals on one configured server different cached credentials for the
+    same audience.
 
 ---
 

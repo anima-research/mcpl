@@ -147,7 +147,8 @@ SET_PATHS = (
     ("featureSets", "*", "tagOntology", "tags", "*", "implies"),
 )
 
-# SPEC §17.2's identifier positions, and each tag's `facet`.
+# SPEC §17.2's identifier positions other than capability member names, which
+# _is_capability_member_name_path covers, and each tag's `facet`.
 IDENT_PATHS = (
     ("featureSets", MEMBER_NAMES),
     ("featureSets", "*", "uses", ELEMENTS),
@@ -186,7 +187,8 @@ def _path_matches(path, pattern):
         if want == "*":
             # SPEC §17.2's set paths are written against the object-keyed
             # featureSets shape, and the non-conforming array shape is hashed
-            # verbatim, so "*" never matches a list index.
+            # verbatim, never set-normalized or refused, so "*" never matches a
+            # list index.
             if got == LIST_INDEX:
                 return False
             continue
@@ -940,9 +942,6 @@ def build_vectors():
     return V
 
 
-# Comparator vectors: the RFC's UTF-8 rule "governs anything else", but no
-# set-valued array in the 0.5 manifest shape can legally hold a non-ASCII
-# string (see README).
 SORT_VECTORS = [
     {
         "name": "ascii-punctuation-and-case",

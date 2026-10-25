@@ -115,7 +115,7 @@ Carried in a tool definition's `_meta` (in `tools/list`) and in hint changes (RF
 |---|---|---|---|
 | `mcpl/presence` | `"static"` \| `"dynamic"` | `"static"` | Which list the tool belongs in |
 | `mcpl/visible` | `boolean` | `true` | Available right now (meaningful for dynamic tools) |
-| `mcpl/toolset` | `string` | — | The toolset it belongs to. Implies `presence: "dynamic"` |
+| `mcpl/toolset` | `string` | — | The toolset it belongs to. Implies `presence: "dynamic"`. The toolset need not be declared (RFC §5.4) |
 
 Rules:
 
@@ -163,7 +163,6 @@ In the manifest (§17), so changes are announced by `mcpl/manifestChanged`:
 | `default` | `"open"` or `"closed"` at the start of a session |
 | `instances` | `true`: the toolset may be opened more than once, each a named instance |
 | `options` | JSON Schema for `toolsets/open` options |
-| `view` | Optional resource URI (an RFC 6570 template with `{instance}`) the host reads for the toolset's current state |
 
 `surface` is a server-level hint: everything this server offers is engagement, so a host may
 present it in surface mode, connecting only when it is opened.
@@ -172,7 +171,8 @@ present it in surface mode, connecting only when it is opened.
 
 ```jsonc
 { "method": "toolsets/open",  "params": { "toolset": "game", "instance": "vs-ada", "options": { "size": 9 } } }
-→ { "toolset": "game", "instance": "vs-ada", "title": "Go 9×9 vs Ada" }
+→ { "toolset": "game", "instance": "vs-ada", "title": "Go 9×9 vs Ada",
+    "content": [ { "type": "text", "text": "    A B C D E F G H J\n 9  . . . …" } ] }
 
 { "method": "toolsets/close", "params": { "toolset": "game", "instance": "vs-ada" } }
 → { }
@@ -186,12 +186,39 @@ present it in surface mode, connecting only when it is opened.
 - Opening and closing are the host's acts. The **agent** asks through the host's tools; the
   **host** may open or close by its own policy (close a toolset idle for many turns); the
   **server** may only suggest (RFC §6.2).
-- Open toolsets belong to the session. On reconnect the host re-opens what it considers open,
-  and a server that keeps state across connections (a game in progress) reattaches it.
+- Open toolsets belong to the session. On reconnect the host asks the server what it still
+  holds open (`toolsets/list`, RFC §5.3) and reconciles: it adopts what the server reports
+  (a game in progress, kept across the reconnect) and re-opens anything else it considers
+  open.
 - The result of an open carries the hint changes the open caused (`_meta["mcpl/hints"]`):
-  which of the toolset's tools are visible now.
+  which of the toolset's tools are visible now. It **MAY** carry `content` (content blocks, as
+  in a tool result): what the agent sees on opening — the board, the surroundings, the
+  decision in front of it. Later state arrives as event content, and a toolset that wants
+  "look again" offers an ordinary tool for it. There is no separate view mechanism.
 
-### 5.3 Calling an instance's tools
+### 5.3 `toolsets/list` (Host → Server, Request)
+
+```jsonc
+{ "method": "toolsets/list", "params": {} }
+→ { "open": [ { "toolset": "game", "instance": "vs-ada", "title": "Go 9×9 vs Ada" } ],
+    "_meta": { "mcpl/hints": { "rev": 41, "tools": [ { "name": "play", "instance": "vs-ada", "visible": true } ] } } }
+```
+
+What this session has open on the server, with the hint state of their tools. A server
+that keeps toolsets across connections (by principal) reports them after a reconnect; one
+that does not reports what was opened on this connection. Hosts send it after every
+(re)connect to a server that declared toolsets.
+
+### 5.4 Undeclared toolsets
+
+A server may tag tools with `mcpl/toolset` without declaring that toolset. It then offers a
+grouping, nothing more: the host opens and closes the group on its own (as with host-made
+toolsets, RFC §8.5), sends no `toolsets/open` or `toolsets/close` for it, and the server does
+not track it. A tool in an undeclared toolset is visible while the host has the group open
+and the server's `visible` hint is true. Declaring the toolset is what makes the server
+session-aware of it, and is needed for instances and options.
+
+### 5.5 Calling an instance's tools
 
 Every instance of a toolset shares the same tool definitions; the instance a call is for rides
 in the call's `_meta`:
@@ -403,8 +430,9 @@ servers as the agent, so it obtains the agent's credentials from its own host th
 // push/event params
 //   hints?: HintChanges; toolset?: string; instance?: string
 // Notification (Server → Host): "tools/hints", params: HintChanges
-// Requests (Host → Server): "toolsets/open"  {toolset, instance?, options?} → {toolset, instance?, title?}
+// Requests (Host → Server): "toolsets/open"  {toolset, instance?, options?} → {toolset, instance?, title?, content?}
 //                           "toolsets/close" {toolset, instance?} → {}
+//                           "toolsets/list"  {} → {open: [{toolset, instance?, title?}]}  (+ _meta["mcpl/hints"])
 // Manifest: experimental.mcpl.toolsets: Record<string, ToolsetDecl>; experimental.mcpl.surface?: {title, summary}
 // Advertisement: experimental.mcpl.toolHints: true (both sides)
 interface ToolsetDecl {
@@ -412,7 +440,6 @@ interface ToolsetDecl {
   default: "open" | "closed";
   instances?: boolean;
   options?: JsonSchema;
-  view?: string;     // resource URI, or a template with {instance}
 }
 ```
 
@@ -429,17 +456,18 @@ interface ToolsetDecl {
    naming them.
 7. A `definition` change to a dynamic tool reaches the host without `tools/list_changed`.
 8. A server whose host did not advertise `toolHints` sends no `tools/hints`.
+9. After a reconnect, `toolsets/list` reports an instance the server kept; the host adopts
+   it rather than opening a second.
+10. A tool tagged with an undeclared toolset: the host never sends `toolsets/open` for it,
+    and the tool is visible only while the host has the group open.
 
 ---
 
 ## 14. Open questions
 
-1. **Views.** Is a resource the right carrier for a toolset's state, or should
-   `toolsets/open` and hint changes carry a short view directly?
-2. **Reattachment.** Should a host learn on reconnect which toolsets the server still holds
-   open (a `toolsets/list` request), rather than re-opening its own idea of them?
-3. **Hinted groups without declaration.** May a server hint a grouping (`mcpl/toolset`)
-   without declaring the toolset, leaving open and close entirely to the host?
+1. **State on open.** Revision 2 carries it as `content` in the open result, with later
+   state as event content and no view mechanism (RFC §5.2). Confirm, or name a case that
+   needs more.
 
 ---
 

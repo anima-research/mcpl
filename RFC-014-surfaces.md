@@ -440,8 +440,10 @@ and toolset membership change only through `tools/list`. With `instance`, the de
 instance's own current one (the legal moves of one game), and the host checks arguments for that
 instance against it; without, it is the toolset's (for a toolset without instances, its only
 instance's). A definition equal to the declared one returns the tool to it. A host applies its
-tool policy to a definition received this way exactly as to a listed one. A static tool's
-definition changes only through `tools/list_changed`.
+tool policy to a definition received this way exactly as to a listed one. A `tools/list` result
+replaces declared definitions only: a current definition from hints stays in force until hints
+change it or a `toolsets/list` restates it. A static tool's definition changes only through
+`tools/list_changed`.
 
 Hint changes need no capability to be applied: they describe the server's own tools, and
 `tools/hints` needs no grant. Delivering anything they cause into a model's context follows the

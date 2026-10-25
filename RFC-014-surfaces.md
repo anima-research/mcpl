@@ -1,9 +1,9 @@
 # MCPL RFC-014: Tool Presence, Toolsets and Surfaces
 
-**Status:** Draft (revision 5)
+**Status:** Draft (revision 6)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a design worked out with antra
-**Date:** 2026-10-24 (revision 1); 2026-10-25 (revisions 2–5)
+**Date:** 2026-10-24 (revision 1); 2026-10-25 (revisions 2–6)
 **Depends on:** nothing for authority — except that RFC §8.6's surface hosts obtain
 credentials through the draft RFC-015 (delegated access, proposed in a companion PR), whose own
 grant governs that. This RFC adds no `uses` path and changes no grant;
@@ -13,8 +13,9 @@ available right now, which toolset it belongs to — two host→server methods t
 toolsets, and one server→host notification carrying hint changes. How tools reach a model is
 left to the host. Amends SPEC §4 (message flow: `toolsets/open|close|list`, `tools/hints`),
 §5.1 and §5.2 (the `toolHints` advertisement, server and host), §9.2 (`push/event` params gain
-`hints`, `toolset`, `instance`), §16.1 (reserves the `surface:` tag namespace), §17.1 (a
-`toolsets` manifest domain), Appendix B, Changelog; and adds `_meta` members to MCP's
+`hints`, `toolset`, `instance`), §9.4 (a push carrying `hints` is not retried), §16.1 (reserves
+the `surface:` tag namespace), §17.1 and §17.3 (a `toolsets` manifest domain, its derivation
+from the members `toolHints`, `toolsets` and `surface`), Appendix B, Changelog; and adds `_meta` members to MCP's
 `tools/list` result (`mcpl/rev`) and `tools/call` params (`mcpl/instance`) and result
 (`mcpl/hints`). Uses
 RFC-006 (coalescing) and RFC-008 (the `mcpl/` `_meta` prefix). Interacts with the draft
@@ -22,6 +23,14 @@ RFC-015 (delegated access, proposed alongside this one), through which a surface
 the main host obtains credentials.
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+> **Revision 6 note.** From review of revision 5. Hosts apply hint changes in **`rev` order**,
+> which is arrival order on stdio and WebSocket; on Streamable HTTP, where streams interleave, a
+> host holds an early change briefly for the missing ones (RFC §6.1). A `toolsets/list` result
+> always carries its hints, empty or not, so an empty statement clears stale state (RFC §5.3).
+> "Principal" takes RFC-015 §4.4's definition (RFC §5.6); a server that does not keep toolsets
+> across connections ends them (RFC §5.3). Toolset names have a grammar (RFC §5.1). `act` and
+> `look` can name the server (RFC §8.2). The amendment list names §9.4 and §17.3.
 
 > **Revision 5 note.** From review of revision 4. Every message that carries hint changes takes
 > the next `rev` — the `toolsets/*` results included (RFC §6.1). A call that will get no result
@@ -228,6 +237,7 @@ on: every tool static, its dynamic presentation withdrawn.
 
 | Field | Meaning |
 |---|---|
+| (name) | The key: matches `^[a-z][a-z0-9_-]{0,31}$`, unique on the server |
 | `title`, `summary` | For the host's catalog and reminders |
 | `default` | `"open"`: the server treats the toolset as open from the start of a session — it appears in `toolsets/list` without the host opening it. `"closed"`: the host opens it. A toolset with `instances` is always `"closed"` |
 | `instances` | `true`: the toolset may be opened more than once, each a named instance |
@@ -294,7 +304,8 @@ What the principal has open on the server, and the hint state of its dynamic too
 result's `rev`, in full: every tool visible in each open instance, and every visible dynamic
 tool outside declared toolsets — **a dynamic tool not stated visible is invisible** — with every
 current definition that differs from the declared one. A host replaces its dynamic-tool state
-with it. Every server that advertised `toolHints` answers `toolsets/list`, with an empty `open`
+with it. The result **always** carries `_meta["mcpl/hints"]` and takes a `rev` — with an empty
+`tools` when nothing is visible — so that an empty statement still clears what a host believed. Every server that advertised `toolHints` answers `toolsets/list`, with an empty `open`
 if it declares no toolsets.
 
 It also carries `ended`, so a host can tell "never had one" from "it ended while you were
@@ -309,7 +320,8 @@ tells its agent about each `id` once, however often it reconnects in that time:
 ```
 
 A server that keeps toolsets across connections reports them after a reconnect; one that does
-not reports what was opened on this connection. Hosts send it after every (re)connect to a
+not ends a principal's instances when its last connection closes, and reports them in `ended`.
+Hosts send it after every (re)connect to a
 server that advertised `toolHints`, and tell the agent about each `ended` record once.
 
 ### 5.4 Undeclared toolsets
@@ -338,6 +350,9 @@ open, is an ordinary tool error naming the open instances.
 
 ### 5.6 One principal, several connections
 
+The **principal** of a connection is the identity the host acts as on it, as RFC-015 §4.4
+defines it: one per connection, chosen by the host's policy (SPEC §18.8 keeps identity models out
+of scope). A server that cannot tell principals apart treats each connection as its own.
 Toolsets belong to the principal, not to a connection: a second connection of the same
 principal sees the same open toolsets (through `toolsets/list`, then hint changes). An open,
 close or visibility change made through one connection reaches the others as ordinary hint
@@ -392,10 +407,13 @@ any takes none. A server **MUST** number them consecutively on a connection — 
 **MUST** write them in that order (allocate the `rev` and write the message in one step). A
 `tools/list` result carries no changes; its `mcpl/rev` names the last `rev` taken.
 
-**Applying.** A host applies a message's hint changes **when it reads the message, in the order
-messages arrive**, whatever it then does with the message: it applies the `hints` of a push it
+**Applying.** A host applies hint changes **in `rev` order, as soon as it has each one**,
+whatever it then does with the message that carried it: it applies the `hints` of a push it
 refuses or has not yet decided on, and the `_meta["mcpl/hints"]` of a result it no longer waits
-for (a timed-out call). Accepting an event is a decision about the event, not about the
+for (a timed-out call). On stdio and WebSocket, which deliver in order, `rev` order is arrival
+order. On MCP's Streamable HTTP a result and a notification can travel on different streams, so a
+change can arrive before a lower `rev`: the host holds it until the missing ones arrive, for a
+bounded time (5 s recommended), and then recovers. Accepting an event is a decision about the event, not about the
 server's state; a server never restates anything because a push was refused. Entries state
 values (`visible: true`, a definition), not differences.
 
@@ -405,15 +423,13 @@ result — cancelled under MCP, which then sends none — sends the changes it c
 `tools/hints` instead.
 
 A `tools/list` result states presence and declared definitions as of the `rev` it carries, and
-a `toolsets/list` result states per-instance state as of its own `rev`; each applies at its
-place in the arrival order.
+applies right after that `rev`; a `toolsets/list` result's hints are a statement under their own
+`rev`, applied in order like any other.
 
-**Recovering.** On an ordered connection nothing is lost. A host that nevertheless sees a `rev`
-other than one more than the last — it dropped a message unread, or a bug — re-reads
-`toolsets/list` and `tools/list` and goes on applying in arrival order. Each result states the
-server's state as of the moment it was written, and everything applies in the order it was
-written, so the two reads need no common baseline. A new connection starts from
-`toolsets/list` (RFC §5.3).
+**Recovering.** A host missing a `rev` it can no longer expect — it dropped a message unread, its
+bounded wait passed, or a bug — re-reads `toolsets/list` and `tools/list` and goes on applying in
+`rev` order from there. Each result states the server's state at the `rev` it names, so the two
+reads need no common baseline. A new connection starts from `toolsets/list` (RFC §5.3).
 
 **Definitions.** `definition` lets a dynamic tool's options change without a `tools/list` round
 trip. A host takes only its `description`, `inputSchema` and `annotations`, and **MUST** ignore
@@ -506,11 +522,12 @@ This section is guidance, except where it says MUST.
 A host presenting dynamic tools exposes a small, constant set of its own, for example:
 
 ```
-open  {toolset | server, instance?, options?}     look  {toolset?, instance?, tool?}
-act   {tool, instance?, args}                       close {toolset | server, instance?}
+open  {toolset | server, instance?, options?}     look  {server?, toolset?, instance?, tool?}
+act   {server?, tool, instance?, args}              close {toolset | server, instance?}
 ```
 
-They are the host's interface, aggregated across every connection and named by the host.
+They are the host's interface, aggregated across every connection and named by the host; where
+a tool or toolset name occurs on more than one server, `server` says which.
 They are static.
 
 ### 8.3 Announcing changes
@@ -692,6 +709,13 @@ interface ToolsetDecl {
     visibility and current definitions of its dynamic tools.
 35. A proposed instance name matching the grammar is not refused for its form; one that does not
     match is refused, never renamed.
+36. A host without `toolHints` gets no `tools/hints`, no `hints` push member and no hint `_meta`;
+    a toolset without instances is usable there without opening it, and any compat tools of RFC
+    §11 are static.
+37. Over Streamable HTTP, a change that arrives before a lower `rev` is held, then applied in
+    order once the lower one arrives.
+38. A `toolsets/list` with nothing visible carries `mcpl/hints` with an empty `tools`, and the
+    host's previously visible dynamic tools become invisible.
 
 ---
 

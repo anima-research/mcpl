@@ -2013,10 +2013,12 @@ not a turn in the conversation: someone joined or left, a message was pinned, th
 renamed, the weather changed in a world. `chat:ambient` says nobody spoke *to* the agent;
 `chat:system` says nobody *spoke*. Producers SHOULD emit it on such notices, and MAY emit it
 alongside `chat:ambient`, so that rules written for ambient traffic keep matching them.
+Producers SHOULD NOT put it on anything someone said.
 
-Hosts SHOULD NOT give a `chat:system` event the treatment a message gets: it does not make
-its channel the place the agent's plain speech goes, and it is not something the agent
-replies to. Like the lifecycle tags, this only withholds treatment; it grants nothing (§16.6).
+Kind is independent of addressing: a notice can also be addressed by its place (a pin in a
+DM carries `chat:dm`, hence `chat:addressed`), and is still a notice. Sender tags on a
+notice, if present, name who it is about (who joined), not a speaker. §16.7 recommends how
+hosts treat notices.
 
 ### 16.3 Normative core closure
 
@@ -2038,10 +2040,8 @@ additive it can produce both. After expansion a host MUST resolve this by **drop
 list, where the outcome would depend on rule ordering rather than on the event. Producers
 SHOULD NOT emit `chat:ambient` alongside anything implying `chat:addressed`.
 
-`chat:system` is excluded the same way: after expansion, a host MUST drop `chat:system` from
-an event that carries `chat:addressed`. Something directed at the agent (someone walked up to
-it, a notice that names it) is spoken to it, whoever the platform says sent it. Producers
-SHOULD NOT emit `chat:system` alongside anything implying `chat:addressed`.
+The exclusion does not touch `chat:system`, which answers a different question (kind, not
+addressing).
 
 **Producer-declared `implies` edges are advisory** and MUST NOT be applied automatically —
 in particular an edge targeting a reserved `chat:*` tag MUST NOT be applied unless the host
@@ -2092,6 +2092,12 @@ authorization (§14.5). Tags influence *treatment* only after admission.
 Hosts SHOULD evaluate treatment as an ordered, first-match-wins rule list with `tagsAny` /
 `tagsAll` / `tagsNone` matchers (globs allowed), composable with `source` / `channel`, over
 the closure-expanded tag set.
+
+**Notices.** A host that infers where an agent's unaddressed speech goes from the traffic it
+receives (for example, the channel of the most recent message) SHOULD NOT let a `chat:system`
+event decide it, and SHOULD NOT treat a notice as a message for the agent to reply to.
+Whether a notice wakes the agent stays an ordinary consumer rule. This guidance only
+withholds treatment; it grants nothing (§16.6).
 
 ---
 
@@ -3411,8 +3417,8 @@ evidence from it rather than by taste.
 - Producer `suggestedTreatment` is a hint requiring explicit acceptance (§16.5), not a
   middle tier of policy — otherwise a server purchases inference by declaration.
 - Added the `chat:system` kind tag (RFC-001 rev 3) for notices from the platform or the place
-  (joins, pins, weather), which hosts SHOULD NOT treat as messages. `chat:addressed` excludes
-  it as it excludes `chat:ambient`.
+  (joins, pins, weather), independent of addressing, and a §16.7 recommendation that hosts
+  not let a notice decide where an agent's unaddressed speech goes.
 
 **Manifest changes (§17)**
 - Added `mcpl/manifestChanged` (S→H Notification: opaque revision plus changed domains, **no

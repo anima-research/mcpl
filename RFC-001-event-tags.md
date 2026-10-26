@@ -14,10 +14,10 @@ This RFC preserves the proposal and its review history. SPEC.md is authoritative
 > world's weather change went out as `chat:ambient`, the tag for overheard chatter. A host
 > that follows the most recent message for where an agent's unaddressed speech goes then
 > followed the weather: a resident's reply meant for a private conversation was spoken
-> aloud in a world, because a forecast line had arrived there last. The lifecycle tags
-> already exempt reactions, edits and deletions from that treatment; nothing exempted a
-> notice. Revision 3 also extends §4.1's mutual exclusion: `chat:addressed` drops
-> `chat:system` as it drops `chat:ambient`.
+> aloud in a world, because a forecast line had arrived there last. That host already
+> exempted reactions, edits and deletions from that treatment; nothing let it exempt a
+> notice. Kind is independent of addressing, so §4.1's mutual exclusion does not touch the
+> new tag, and §6 gains a recommendation for how hosts treat notices.
 
 > **Revision 2 note.** The original RFC was written before any of it shipped. Since then
 > `tags`, `tagOntology`, and consumer matching have all been implemented, while three
@@ -167,13 +167,12 @@ already carry them in extension tags (`discord:pin`, `telegram:join`, `eidoverse
 
 Producers SHOULD emit `chat:system` on such notices, and MAY emit it alongside
 `chat:ambient` so that rules already written for ambient traffic keep matching them.
+Producers SHOULD NOT put it on anything someone said.
 
-Hosts SHOULD NOT give a `chat:system` event the treatment a message gets. In particular it
-does not make its channel the place the agent's plain, unaddressed speech goes — a host that
-follows the most recent message for that must skip notices, as it skips reactions — and it
-is not something the agent replies to. Whether a notice *wakes* the agent stays an ordinary
-consumer rule (§6). Like the lifecycle tags, `chat:system` only withholds treatment; it never
-grants anything (§7).
+Kind is independent of addressing. A notice can also be addressed by its place — a pin in a
+DM carries `chat:dm`, hence `chat:addressed` — and is still a notice. Sender tags on a
+notice, if present, name who it is about (who joined), not a speaker. How hosts treat
+notices is in §6.
 
 ### 4.1 Normative core closure
 
@@ -206,11 +205,9 @@ depend on rule ordering rather than on the event.
 
 Producers SHOULD NOT emit `chat:ambient` alongside any tag that implies `chat:addressed`.
 
-`chat:system` is excluded the same way (revision 3): after expansion, a host MUST drop
-`chat:system` from an event that carries `chat:addressed`. Something directed at the agent —
-someone walked up to it, a notice that names it — is spoken to it, whoever the platform
-says sent it, and a rule list must not be able to mute it as a notice by ordering. Producers
-SHOULD NOT emit `chat:system` alongside any tag that implies `chat:addressed`.
+The exclusion does not touch `chat:system` (revision 3): it answers a different question,
+kind rather than addressing. Copying the exclusion onto it would strip the tag from every
+notice addressed only by its place, such as a pin in a DM.
 
 **Producer-declared `implies` edges are advisory.** An edge declared in a `tagOntology`
 (§5.1) MUST NOT be applied automatically, and in particular an edge whose target is a
@@ -290,7 +287,7 @@ are inherited from §4, do not redescribe them — and describe only your own na
 |---|---|
 | `coreTags` | Which reserved `chat:*` tags this server emits; descriptions inherited from §4. |
 | `tags.<tag>.desc` | Human/agent-readable description — the core of discoverability. |
-| `tags.<tag>.facet` | Group: `addressing` / `sender` / `content` / `lifecycle` / `locus`. |
+| `tags.<tag>.facet` | Group: `addressing` / `sender` / `kind` / `content` / `lifecycle` / `locus`. |
 | `tags.<tag>.implies` | Subsumption edges. **Advisory** — see §4.1. |
 | `tags.<tag>.suggestedTreatment` | Per-tag suggested behaviour. **Advisory** — see §5.2. |
 | `tags.<tag>.stability` | `stable` (default) / `experimental` / `deprecated`. |
@@ -362,6 +359,12 @@ idioms:
 Recommended behaviour vocabulary: `immediate`, `mute`, `{ debounce: ms }`,
 `{ throttle: { perMs } }`, `{ sample: { every } }`.
 
+**Notices** (revision 3). A host that infers where an agent's unaddressed speech goes from
+the traffic it receives — for example, the channel of the most recent message — SHOULD NOT
+let a `chat:system` event decide it, and SHOULD NOT treat a notice as a message for the agent
+to reply to. Whether a notice *wakes* the agent stays an ordinary rule above. This only
+withholds treatment; it never grants anything (§7).
+
 ## 7. Tags are never authority
 
 **Admission is decided before tags are read.** Whether a `push/event` or `channels/incoming`
@@ -394,7 +397,7 @@ message is testimony, not authorization.
 
 ## 9. Implementation status (informative)
 
-Current as of 2026-08-02; see AUDIT-001 §5.
+Current as of 2026-08-02; see AUDIT-001 §5. The revision 3 rollout note below the tables is as of 2026-10-26.
 
 **Shipped:**
 
@@ -413,9 +416,13 @@ Current as of 2026-08-02; see AUDIT-001 §5.
 | `defaultTreatment` precedence chain | Declared, **never consumed**. Under §5.2 it must not be consumed automatically — so the gap is now partly the correct behaviour, and what is missing is the acceptance UI. |
 | `chat:reaction-remove` | **Never emitted.** discord-mcpl tags both add and remove as `chat:reaction`; the distinction survives only in `origin.action`. Needs fixing (§4). |
 | Rust `mcpl-core` | **No RFC-001 support at all.** No Rust peer can emit or read tags. Needs field parity. |
-| eidoverse | Emits flat un-namespaced `mention`/`whisper`/`activity` plus dual metadata booleans; declares no ontology. Needs migration to `chat:*` (§3.1). |
+| eidoverse | **Migrated after revision 2:** emits `chat:*` core plus `eidoverse:*` tags and declares an ontology; the `mentioned` / `isExplicitMention` metadata booleans remain as a transition shim for hosts that don't read tags yet. (Original gap: flat un-namespaced `mention`/`whisper`/`activity` tags, no ontology.) |
 | `tags/describe` | Removed from this RFC (§5.3). |
-| `chat:system` (revision 3) | In review: eidoverse emitting it on world notices (eidoverse-worlds#280); agent-framework keeping it out of speech routing (agent-framework#830); `CHAT_TAGS.system` in mcpl-core-ts (#27). discord-mcpl does not yet emit it for Discord's system messages (joins, pins, thread creation, boosts). |
+
+**Revision 3 rollout** (2026-10-26): `chat:system` is in review in eidoverse (world notices,
+eidoverse-worlds#280), agent-framework (kept out of speech routing, agent-framework#830) and
+mcpl-core-ts (`CHAT_TAGS.system`, #27). discord-mcpl does not yet emit it for Discord's
+system messages (joins, pins, thread creation, boosts).
 
 **Correction to revision 1.** §9.2 of the original stated that portal-mcpl carried a
 *copied* `mcpl-core` dependency while discord/x/heartbeat were symlinked. **The arrangement
@@ -450,6 +457,6 @@ group/supergroup → `chat:group`, channel → `chat:broadcast`. Extensions:
 
 **eidoverse** (world events) — current bespoke tags map to core: `mention` →
 `chat:mention`, `whisper` → `chat:dm`+`chat:private`, `activity` → `chat:ambient`.
-Extensions: `eidoverse:activity-digest`, `eidoverse:presence`. World notices — weather,
-world-change, presence, a departure, the catch-up header — carry `chat:system` alongside
-`chat:ambient` (revision 3).
+Extensions: `eidoverse:activity-digest`, `eidoverse:presence`. With revision 3 (in review,
+eidoverse-worlds#280), world notices — weather, world-change, presence, a departure, the
+catch-up header — carry `chat:system` alongside `chat:ambient`.

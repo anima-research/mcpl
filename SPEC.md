@@ -2001,11 +2001,22 @@ messages (§14.3).
 | | `chat:to-self` | Acts on the agent's own content |
 | Sender | `chat:from-human` / `chat:from-bot` / `chat:from-self` / `chat:from-agent` | Authorship |
 | Lifecycle | `chat:edited` / `chat:deleted` / `chat:reaction` / `chat:reaction-remove` | Plain creation is the implicit default and carries no tag |
+| Kind | `chat:system` | A notice from the platform or the place, not a message anyone sent. Plain messages carry no kind tag |
 | Content | `chat:has-image` / `chat:has-audio` / `chat:has-file` / `chat:has-link` / `chat:command` | Modality |
 | Locus | `chat:private` / `chat:group` / `chat:thread` | Conversation shape |
 
 `chat:reaction-remove` is distinct from `chat:reaction`: emitting the latter for a removal
 makes "wake on reactions to my messages" fire on un-reactions.
+
+**System notices.** `chat:system` marks an event about the place a conversation happens in,
+not a turn in the conversation: someone joined or left, a message was pinned, the channel was
+renamed, the weather changed in a world. `chat:ambient` says nobody spoke *to* the agent;
+`chat:system` says nobody *spoke*. Producers SHOULD emit it on such notices, and MAY emit it
+alongside `chat:ambient`, so that rules written for ambient traffic keep matching them.
+
+Hosts SHOULD NOT give a `chat:system` event the treatment a message gets: it does not make
+its channel the place the agent's plain speech goes, and it is not something the agent
+replies to. Like the lifecycle tags, this only withholds treatment; it grants nothing (§16.6).
 
 ### 16.3 Normative core closure
 
@@ -2026,6 +2037,11 @@ additive it can produce both. After expansion a host MUST resolve this by **drop
 `chat:ambient`**: an event carrying both is not interpretable by a first-match-wins rule
 list, where the outcome would depend on rule ordering rather than on the event. Producers
 SHOULD NOT emit `chat:ambient` alongside anything implying `chat:addressed`.
+
+`chat:system` is excluded the same way: after expansion, a host MUST drop `chat:system` from
+an event that carries `chat:addressed`. Something directed at the agent (someone walked up to
+it, a notice that names it) is spoken to it, whoever the platform says sent it. Producers
+SHOULD NOT emit `chat:system` alongside anything implying `chat:addressed`.
 
 **Producer-declared `implies` edges are advisory** and MUST NOT be applied automatically —
 in particular an edge targeting a reserved `chat:*` tag MUST NOT be applied unless the host
@@ -3394,6 +3410,9 @@ evidence from it rather than by taste.
   exclusion after expansion.
 - Producer `suggestedTreatment` is a hint requiring explicit acceptance (§16.5), not a
   middle tier of policy — otherwise a server purchases inference by declaration.
+- Added the `chat:system` kind tag (RFC-001 rev 3) for notices from the platform or the place
+  (joins, pins, weather), which hosts SHOULD NOT treat as messages. `chat:addressed` excludes
+  it as it excludes `chat:ambient`.
 
 **Manifest changes (§17)**
 - Added `mcpl/manifestChanged` (S→H Notification: opaque revision plus changed domains, **no

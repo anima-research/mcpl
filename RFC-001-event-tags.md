@@ -17,7 +17,8 @@ This RFC preserves the proposal and its review history. SPEC.md is authoritative
 > aloud in a world, because a forecast line had arrived there last. That host already
 > exempted reactions, edits and deletions from that treatment; nothing let it exempt a
 > notice. Kind is independent of addressing, so §4.1's mutual exclusion does not touch the
-> new tag, and §6 gains a recommendation for how hosts treat notices.
+> new tag. The tag says what an event is; what a host does with that, including whether it
+> directs speech at all, stays the host's (§6).
 
 > **Revision 2 note.** The original RFC was written before any of it shipped. Since then
 > `tags`, `tagOntology`, and consumer matching have all been implemented, while three
@@ -171,8 +172,8 @@ Producers SHOULD NOT put it on anything someone said.
 
 Kind is independent of addressing. A notice can also be addressed by its place — a pin in a
 DM carries `chat:dm`, hence `chat:addressed` — and is still a notice. Sender tags on a
-notice, if present, name who it is about (who joined), not a speaker. How hosts treat
-notices is in §6.
+notice, if present, name who it is about (who joined), not a speaker. What a consumer does
+with a notice is its own call, as for every tag (§6): a host may not direct speech at all.
 
 ### 4.1 Normative core closure
 
@@ -358,12 +359,6 @@ idioms:
 
 Recommended behaviour vocabulary: `immediate`, `mute`, `{ debounce: ms }`,
 `{ throttle: { perMs } }`, `{ sample: { every } }`.
-
-**Notices** (revision 3). A host that infers where an agent's unaddressed speech goes from
-the traffic it receives — for example, the channel of the most recent message — SHOULD NOT
-let a `chat:system` event decide it, and SHOULD NOT treat a notice as a message for the agent
-to reply to. Whether a notice *wakes* the agent stays an ordinary rule above. This only
-withholds treatment; it never grants anything (§7).
 
 ## 7. Tags are never authority
 

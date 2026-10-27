@@ -2017,8 +2017,8 @@ Producers SHOULD NOT put it on anything someone said.
 
 Kind is independent of addressing: a notice can also be addressed by its place (a pin in a
 DM carries `chat:dm`, hence `chat:addressed`), and is still a notice. Sender tags on a
-notice, if present, name who it is about (who joined), not a speaker. §16.7 recommends how
-hosts treat notices.
+notice, if present, name who it is about (who joined), not a speaker. What a consumer does
+with a notice is its own call, as for every tag.
 
 ### 16.3 Normative core closure
 
@@ -2092,12 +2092,6 @@ authorization (§14.5). Tags influence *treatment* only after admission.
 Hosts SHOULD evaluate treatment as an ordered, first-match-wins rule list with `tagsAny` /
 `tagsAll` / `tagsNone` matchers (globs allowed), composable with `source` / `channel`, over
 the closure-expanded tag set.
-
-**Notices.** A host that infers where an agent's unaddressed speech goes from the traffic it
-receives (for example, the channel of the most recent message) SHOULD NOT let a `chat:system`
-event decide it, and SHOULD NOT treat a notice as a message for the agent to reply to.
-Whether a notice wakes the agent stays an ordinary consumer rule. This guidance only
-withholds treatment; it grants nothing (§16.6).
 
 ---
 
@@ -3417,8 +3411,7 @@ evidence from it rather than by taste.
 - Producer `suggestedTreatment` is a hint requiring explicit acceptance (§16.5), not a
   middle tier of policy — otherwise a server purchases inference by declaration.
 - Added the `chat:system` kind tag (RFC-001 rev 3) for notices from the platform or the place
-  (joins, pins, weather), independent of addressing, and a §16.7 recommendation that hosts
-  not let a notice decide where an agent's unaddressed speech goes.
+  (joins, pins, weather), independent of addressing.
 
 **Manifest changes (§17)**
 - Added `mcpl/manifestChanged` (S→H Notification: opaque revision plus changed domains, **no

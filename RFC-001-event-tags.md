@@ -1,12 +1,24 @@
 # MCPL RFC-001: Event Tags
 
-**Status:** Accepted (revision 2) — incorporated into [SPEC.md 0.5.0-draft §16](./SPEC.md#16-event-tags).
+**Status:** Accepted (revision 3) — incorporated into [SPEC.md 0.5.0-draft §16](./SPEC.md#16-event-tags).
 **Targets:** MCPL Protocol Specification ≥ 0.5
 **Authors:** Antra (with Claude); revised by Claude Code and Sol
-**Date:** June 2026; revised 2026-08-02
+**Date:** June 2026; revised 2026-08-02, 2026-10-26
 **Depends on:** RFC-002 (capability grants) for the admission boundary — see §7.
 
 This RFC preserves the proposal and its review history. SPEC.md is authoritative for the current protocol.
+
+> **Revision 3 note.** Adds one core tag, `chat:system` (§4, §4.1), for notices from the
+> platform or the place rather than messages anyone sent. The core vocabulary could say who
+> an event was *for* (`chat:addressed` / `chat:ambient`) but not whether anyone *spoke*, so a
+> world's weather change went out as `chat:ambient`, the tag for overheard chatter. A host
+> that follows the most recent message for where an agent's unaddressed speech goes then
+> followed the weather: a resident's reply meant for a private conversation was spoken
+> aloud in a world, because a forecast line had arrived there last. That host already
+> exempted reactions, edits and deletions from that treatment; nothing let it exempt a
+> notice. Kind is independent of addressing, so §4.1's mutual exclusion does not touch the
+> new tag. The tag says what an event is; what a host does with that, including whether it
+> directs speech at all, stays the host's (§6).
 
 > **Revision 2 note.** The original RFC was written before any of it shipped. Since then
 > `tags`, `tagOntology`, and consumer matching have all been implemented, while three
@@ -130,6 +142,8 @@ tail into platform namespaces.
 | | `chat:deleted` | A deletion. |
 | | `chat:reaction` | An emoji reaction was added. |
 | | `chat:reaction-remove` | A reaction was removed. |
+| Kind | *(message)* | Something someone sent — the implicit default, no tag. |
+| | `chat:system` | A notice from the platform or the place, not a message anyone sent. |
 | Content | `chat:has-image` / `chat:has-audio` / `chat:has-file` / `chat:has-link` | Modality. |
 | | `chat:command` | A slash/bot command invocation. |
 | Locus | `chat:private` / `chat:group` / `chat:thread` | Conversation shape. |
@@ -142,6 +156,24 @@ the agent's own message, so a consumer can wake on reactions to its content
 `chat:reaction-remove` is a **distinct** tag from `chat:reaction`. Emitting `chat:reaction`
 for a removal — as discord-mcpl currently does, with the distinction surviving only in
 `origin.action` — makes "wake on reactions to my messages" fire on un-reactions.
+
+**System notices** (revision 3). `chat:system` marks an event about the place a conversation
+happens in rather than a turn in it: someone joined or left, a message was pinned, a channel
+was renamed or a thread opened, the weather changed in a world, a device reported its state.
+The addressing facet answers *who is this for*; `chat:ambient` says nobody spoke *to* the
+agent. Nothing in the core said nobody *spoke*, so producers tagged notices `chat:ambient`
+and hosts treated them as overheard messages. Every platform has such notices, and several
+already carry them in extension tags (`discord:pin`, `telegram:join`, `eidoverse:presence`);
+`chat:system` is the portable umbrella over them.
+
+Producers SHOULD emit `chat:system` on such notices, and MAY emit it alongside
+`chat:ambient` so that rules already written for ambient traffic keep matching them.
+Producers SHOULD NOT put it on anything someone said.
+
+Kind is independent of addressing. A notice can also be addressed by its place — a pin in a
+DM carries `chat:dm`, hence `chat:addressed` — and is still a notice. Sender tags on a
+notice, if present, name who it is about (who joined), not a speaker. What a consumer does
+with a notice is its own call, as for every tag (§6): a host may not direct speech at all.
 
 ### 4.1 Normative core closure
 
@@ -173,6 +205,10 @@ carrying both is not interpretable by a first-match-wins rule list, where the ou
 depend on rule ordering rather than on the event.
 
 Producers SHOULD NOT emit `chat:ambient` alongside any tag that implies `chat:addressed`.
+
+The exclusion does not touch `chat:system` (revision 3): it answers a different question,
+kind rather than addressing. Copying the exclusion onto it would strip the tag from every
+notice addressed only by its place, such as a pin in a DM.
 
 **Producer-declared `implies` edges are advisory.** An edge declared in a `tagOntology`
 (§5.1) MUST NOT be applied automatically, and in particular an edge whose target is a
@@ -252,7 +288,7 @@ are inherited from §4, do not redescribe them — and describe only your own na
 |---|---|
 | `coreTags` | Which reserved `chat:*` tags this server emits; descriptions inherited from §4. |
 | `tags.<tag>.desc` | Human/agent-readable description — the core of discoverability. |
-| `tags.<tag>.facet` | Group: `addressing` / `sender` / `content` / `lifecycle` / `locus`. |
+| `tags.<tag>.facet` | Group: `addressing` / `sender` / `kind` / `content` / `lifecycle` / `locus`. |
 | `tags.<tag>.implies` | Subsumption edges. **Advisory** — see §4.1. |
 | `tags.<tag>.suggestedTreatment` | Per-tag suggested behaviour. **Advisory** — see §5.2. |
 | `tags.<tag>.stability` | `stable` (default) / `experimental` / `deprecated`. |
@@ -356,7 +392,7 @@ message is testimony, not authorization.
 
 ## 9. Implementation status (informative)
 
-Current as of 2026-08-02; see AUDIT-001 §5.
+Current as of 2026-08-02; see AUDIT-001 §5. The revision 3 rollout note below the tables is as of 2026-10-26.
 
 **Shipped:**
 
@@ -375,8 +411,13 @@ Current as of 2026-08-02; see AUDIT-001 §5.
 | `defaultTreatment` precedence chain | Declared, **never consumed**. Under §5.2 it must not be consumed automatically — so the gap is now partly the correct behaviour, and what is missing is the acceptance UI. |
 | `chat:reaction-remove` | **Never emitted.** discord-mcpl tags both add and remove as `chat:reaction`; the distinction survives only in `origin.action`. Needs fixing (§4). |
 | Rust `mcpl-core` | **No RFC-001 support at all.** No Rust peer can emit or read tags. Needs field parity. |
-| eidoverse | Emits flat un-namespaced `mention`/`whisper`/`activity` plus dual metadata booleans; declares no ontology. Needs migration to `chat:*` (§3.1). |
+| eidoverse | **Migrated after revision 2:** emits `chat:*` core plus `eidoverse:*` tags and declares an ontology; the `mentioned` / `isExplicitMention` metadata booleans remain as a transition shim for hosts that don't read tags yet. (Original gap: flat un-namespaced `mention`/`whisper`/`activity` tags, no ontology.) |
 | `tags/describe` | Removed from this RFC (§5.3). |
+
+**Revision 3 rollout** (2026-10-26): `chat:system` is in review in eidoverse (world notices,
+eidoverse-worlds#280), agent-framework (kept out of speech routing, agent-framework#830) and
+mcpl-core-ts (`CHAT_TAGS.system`, #27). discord-mcpl does not yet emit it for Discord's
+system messages (joins, pins, thread creation, boosts).
 
 **Correction to revision 1.** §9.2 of the original stated that portal-mcpl carried a
 *copied* `mcpl-core` dependency while discord/x/heartbeat were symlinked. **The arrangement
@@ -389,7 +430,8 @@ resolves a copied directory pinned at 0.2.1.
 to-self|from-human|from-bot|from-agent|edited|deleted|has-*|thread`. Extensions:
 `discord:everyone`, `discord:here`, `discord:role-mention` (a role you hold, ≠ you),
 `discord:forum`, `discord:slash`, `discord:voice`, `discord:pin`, `discord:sticker`,
-`discord:nsfw`.
+`discord:nsfw`. Not yet emitted: `chat:system` on Discord's system messages (joins, pins, thread
+creation, boosts).
 
 **portal** (webhook personas over the relay) — maps `AddressInfo.reasons` to core:
 role/name mention → `chat:mention`, reply → `chat:reply`, subscription → `chat:ambient`;
@@ -410,4 +452,6 @@ group/supergroup → `chat:group`, channel → `chat:broadcast`. Extensions:
 
 **eidoverse** (world events) — current bespoke tags map to core: `mention` →
 `chat:mention`, `whisper` → `chat:dm`+`chat:private`, `activity` → `chat:ambient`.
-Extensions: `eidoverse:activity-digest`, `eidoverse:presence`.
+Extensions: `eidoverse:activity-digest`, `eidoverse:presence`. With revision 3 (in review,
+eidoverse-worlds#280), world notices — weather, world-change, presence, the activity
+digest, a departure, the catch-up header — carry `chat:system` alongside `chat:ambient`.

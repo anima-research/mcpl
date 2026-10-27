@@ -2001,11 +2001,24 @@ messages (§14.3).
 | | `chat:to-self` | Acts on the agent's own content |
 | Sender | `chat:from-human` / `chat:from-bot` / `chat:from-self` / `chat:from-agent` | Authorship |
 | Lifecycle | `chat:edited` / `chat:deleted` / `chat:reaction` / `chat:reaction-remove` | Plain creation is the implicit default and carries no tag |
+| Kind | `chat:system` | A notice from the platform or the place, not a message anyone sent. Plain messages carry no kind tag |
 | Content | `chat:has-image` / `chat:has-audio` / `chat:has-file` / `chat:has-link` / `chat:command` | Modality |
 | Locus | `chat:private` / `chat:group` / `chat:thread` | Conversation shape |
 
 `chat:reaction-remove` is distinct from `chat:reaction`: emitting the latter for a removal
 makes "wake on reactions to my messages" fire on un-reactions.
+
+**System notices.** `chat:system` marks an event about the place a conversation happens in,
+not a turn in the conversation: someone joined or left, a message was pinned, the channel was
+renamed, the weather changed in a world. `chat:ambient` says nobody spoke *to* the agent;
+`chat:system` says nobody *spoke*. Producers SHOULD emit it on such notices, and MAY emit it
+alongside `chat:ambient`, so that rules written for ambient traffic keep matching them.
+Producers SHOULD NOT put it on anything someone said.
+
+Kind is independent of addressing: a notice can also be addressed by its place (a pin in a
+DM carries `chat:dm`, hence `chat:addressed`), and is still a notice. Sender tags on a
+notice, if present, name who it is about (who joined), not a speaker. What a consumer does
+with a notice is its own call, as for every tag.
 
 ### 16.3 Normative core closure
 
@@ -2026,6 +2039,9 @@ additive it can produce both. After expansion a host MUST resolve this by **drop
 `chat:ambient`**: an event carrying both is not interpretable by a first-match-wins rule
 list, where the outcome would depend on rule ordering rather than on the event. Producers
 SHOULD NOT emit `chat:ambient` alongside anything implying `chat:addressed`.
+
+The exclusion does not touch `chat:system`, which answers a different question (kind, not
+addressing).
 
 **Producer-declared `implies` edges are advisory** and MUST NOT be applied automatically —
 in particular an edge targeting a reserved `chat:*` tag MUST NOT be applied unless the host
@@ -3394,6 +3410,8 @@ evidence from it rather than by taste.
   exclusion after expansion.
 - Producer `suggestedTreatment` is a hint requiring explicit acceptance (§16.5), not a
   middle tier of policy — otherwise a server purchases inference by declaration.
+- Added the `chat:system` kind tag (RFC-001 rev 3) for notices from the platform or the place
+  (joins, pins, weather), independent of addressing.
 
 **Manifest changes (§17)**
 - Added `mcpl/manifestChanged` (S→H Notification: opaque revision plus changed domains, **no

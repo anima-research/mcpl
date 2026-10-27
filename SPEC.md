@@ -24,6 +24,7 @@ MCP Live (MCPL) is a backward-compatible extension to the Model Context Protocol
 11. **State Management** — Stateful tools with checkpoints, branching and rollback, opt-in for hosts
 12. **Model Information** — Servers can ask the host which model is in use, and which others it exposes
 13. **WebSocket Transport** — One persistent, bidirectional connection, alongside MCP's stdio and Streamable HTTP transports
+14. **Tool Classes** — Servers say what each tool does in a coarse, fixed vocabulary; hosts key policy on it, and an unclassed tool gets the strictest handling
 
 MCPL enables servers to be active participants in the inference lifecycle rather than passive tool providers.
 
@@ -69,7 +70,8 @@ interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rf
 capitals, as shown here.
 
 Some sections and notes are marked non-normative (§11.5, the implementation note in §17.10,
-§19.12), and §19 carries Draft strength within this draft, as its status note explains.
+§19.12), and §13.6 and §19 carry Draft strength within this draft, as their status notes
+explain.
 
 Terms used throughout:
 
@@ -1422,6 +1424,162 @@ Two kinds of URI cross the protocol, and neither carries authority:
   context applied only by a host-mediated fetcher and only to the dialed origin — never
   forwarded cross-origin, never model-visible (§19.6.1). Under `disposition: "never"` the
   raw URI never reaches model context (§19.5).
+
+### 13.6 Tool Classes
+
+A host executes tools it did not write and cannot classify. It knows a tool's name, its
+schema, and which connection provides it. It does not know whether calling the tool sends a
+message to another person, writes the agent's diary, runs a shell command, or moves the
+mouse. Every policy question that turns on that distinction — what to show an observer, what
+to approve, what to audit, what to cap — is answered today by tool-name pattern lists that
+each operator writes by hand and that break when a server renames a tool.
+
+This section lets the providing server say what each tool **does**, in a rough, fixed
+vocabulary of **classes**:
+
+```
+comms  memory  notes  files  shell  web  computer  media  body  control
+```
+
+The class rides on the MCP tool definition, in `_meta`, as `mcpl/class`. It is a hint, in
+the same trust tier as MCP's `annotations`. The host computes an **effective class** per tool
+from the server's hint, its own knowledge of its built-in tools, and operator overrides, and
+uses it as a key for policy. A tool with no class is treated as the most restrictive class
+for every question asked of it, so classing is how a server earns looser handling, never how
+it is denied.
+
+> **Status within the draft.** Merged from RFC-008 revision 2 (Draft). This section opens
+> with RFC-008 §1 (its summary) and carries RFC-008 §3–§7 as §13.6.1–§13.6.5. RFC-008 §10
+> makes freezing its conformance vectors as executable vectors under `conformance/`, run
+> against at least one host implementation, a precondition for Accepted status. That freeze
+> has not happened yet; until it does, this section carries Draft strength within the
+> 0.5.0-draft. The vectors are in RFC-008 §10.
+
+#### 13.6.1 The class slot
+
+Tools are MCP tool definitions (`tools/list`). MCP reserves `_meta` on `Tool` for
+extensions, with prefixed keys. This section uses:
+
+```jsonc
+{
+  "name": "send_message",
+  "description": "Send a message to a channel or user",
+  "inputSchema": { "…": "…" },
+  "_meta": { "mcpl/class": ["comms"] }
+}
+```
+
+- **`mcpl/class`** is an array of one or more `ToolClass` strings (§13.6.2).
+- It is an array because tools straddle: a tool that sends a file to a person is `comms` and
+  `files`. A host applies the **union of restrictions** across every class named, so naming
+  more classes can only make handling stricter (§13.6.3).
+- Unknown class strings are ignored for policy and SHOULD be logged; a tool whose only
+  classes are unknown is unclassed (§13.6.3).
+- The slot is at MCP level, so a plain MCP server (not MCPL) can carry it too, and an MCPL
+  host reads it from either.
+
+**The key.** MCP (2025-06-18, Basic → General fields → `_meta`) defines a key as an optional
+prefix — dot-separated labels followed by a slash — and a name, and reserves for itself any
+prefix whose labels include `mcp` or `modelcontextprotocol` followed by a further label
+(`mcp.dev/`, `tools.mcp.com/`). `mcpl/` is a single label followed by a slash, so it is a
+valid prefix and is not in MCP's reserved space; `class` is a valid name. **The `mcpl/`
+prefix is reserved for keys this specification defines.** Servers and hosts MUST NOT use
+`mcpl/`-prefixed `_meta` keys for anything else, and a host MUST ignore an `mcpl/` key that
+this specification does not define (and SHOULD log it), rather than guess at its meaning.
+
+Servers SHOULD class every tool they expose. A server that changes a tool's class announces
+it as any tool change, via `notifications/tools/list_changed`; the host recomputes the
+effective class on re-list.
+
+#### 13.6.2 Vocabulary
+
+| Class | The tool… |
+|---|---|
+| `comms` | sends to, or reads from, **other parties**: chat, DM, email, posting, calls, voice to a person. Both directions. |
+| `memory` | reads or writes the **agent's own** recall: journals, diaries, memory stores, history of its own context. |
+| `notes` | reads or writes **documents the agent authors**: wiki pages, task lists, drafts, knowledge bases. |
+| `files` | reads or writes a **filesystem** or blob store: paths, contents, listings. |
+| `shell` | **executes** commands or code: shells, interpreters, build and test runners. |
+| `web` | fetches, searches, or browses the **public network**. |
+| `computer` | drives a **GUI**: screen capture, pointer, keyboard, window management. |
+| `media` | **generates or plays** images, audio, or video that are not messages to a person. |
+| `body` | the agent's **embodiment and presence**: avatar, expression, status, TTS output not addressed to a person. |
+| `control` | **host and agent settings**: spawning, lifecycle, configuration, grants, budgets. |
+
+Edges, decided:
+
+- Speech that reaches a person is `comms`, wherever it goes. A `say` tool that publishes to a
+  chat surface is `comms`, not `body`, even when the same server also animates a mouth.
+- Reading a person's messages is `comms`. The direction does not change what the data is.
+- A memory tool that stores *other people's* words verbatim is `memory` and `comms`.
+- A tool that runs code which may do anything (`execute_python`) is `shell`. Its
+  consequences are unknowable; the class describes the tool, not the script.
+- `web` is for the public network. A tool that fetches from the agent's own services or
+  private documents is `files` or `notes`.
+
+The vocabulary is deliberately coarse. A finer taxonomy would be argued about per tool and
+would not be applied consistently across servers written by different people. Ten classes
+that every author places a tool in within a few seconds are worth more than fifty that need
+a guide. New classes are added by amendment to Appendix B.4, not by servers inventing them.
+
+#### 13.6.3 Effective class
+
+**Sources.**
+A host computes each tool's effective class from, in precedence order:
+
+1. **Operator override**, by host policy, keyed on the model-facing tool name (pattern
+   syntax host-defined, as for §14.5 narrowing).
+2. **The host's own knowledge** of tools it implements itself.
+3. **The server's declaration** in `mcpl/class`.
+
+The first source that yields a class wins entirely; sources are not merged. An override that
+names a tool replaces the server's declaration, so that an operator can correct a
+misclassed tool or tighten one.
+
+**Unclassed.**
+A tool with no effective class is **unclassed**. For every policy question a host asks of
+class, an unclassed tool MUST be treated as the most restrictive answer any class would give.
+Under RFC-007, that is: metadata may be observed under grant, arguments never. Under an
+approval policy, it asks. Under a cap, it counts against the tightest cap.
+
+This is the deny-safe reading. A server that says nothing is handled as if its tool might
+be `comms`; classing is how it earns anything looser.
+
+**Multiple classes.**
+Where a tool has several classes, a host MUST apply the union of restrictions: the tool is
+subject to every rule that applies to any of its classes. A host asking "may this tool's
+arguments be shown?" answers no if any class says no. A host asking "does this call need
+approval?" answers yes if any class says yes.
+
+#### 13.6.4 Trust
+
+The class is the providing server's statement about its own tools, at the same tier as MCP
+`annotations`: **a hint, not a claim the host verifies.** What a lie can do:
+
+- A server that **over-classes** (says `comms` for a shell tool) gets its tool handled more
+  strictly. It harms only itself.
+- A server that **under-classes** (says `shell` for a messaging tool) can cause a host to
+  treat its arguments as less sensitive than they are — for example, to send them to an
+  RFC-007 observer. The data so exposed is data the lying server already holds and could
+  forward out of band. The class cannot affect how *another* server's tools are handled.
+
+So misclassing widens exposure only of what the liar already has. That is why the hint is
+sufficient for policy without being a security boundary. The boundary remains the grant
+(§5.4); the class decides how a host exercises its own discretion under it. Operators who
+distrust a server's classing override it (§13.6.3) or, as always, narrow the grant.
+
+Hosts SHOULD show a tool's effective class and its source to operators next to the grant
+(§13.2), so that a surprising class is visible before it matters.
+
+#### 13.6.5 What class does not do
+
+- It confers no authority and gates no method. A tool's class does not change whether the
+  agent may call it, or whether the providing server may do anything.
+- It is not a description for the model. Hosts MUST NOT alter a tool's model-facing
+  description or schema based on class. The model sees the tool as the server wrote it.
+- It is not a content type. Whether an argument is an image or a string is the schema's job.
+- It is not a rating of danger. MCP's `destructiveHint` and `openWorldHint` remain the place
+  for that, and hosts may use both.
 
 ---
 
@@ -3300,9 +3458,32 @@ additional properties are ignored.
 
 **Fallback** (degradation receipt, §6.7)**:** `"mcp-only" | "close"`
 
+**ToolClass** (`mcpl/class`, §13.6.2, Draft strength)**:** `"comms" | "memory" | "notes" | "files" | "shell" |
+"web" | "computer" | "media" | "body" | "control"`
+
 ---
 
 ## Changelog
+
+### Draft RFCs merged (October 2026), within 0.5.0-draft
+
+The draft RFCs below are merged as sections of this draft, each at Draft strength as its
+status note says. Each section carries its RFC's text, and the edits made in moving it are
+listed here. Their BCP 14 keywords stay inside those sections. Where another section mentions
+what they add, it describes and points, with no keyword of its own. Where the mention changes a
+rule there, or adds to a list a rule closes (the reserved tag namespaces, the manifest's
+domains, an enum), it names Draft strength, so no draft text takes on the strength of a section
+that mentions it. The indexes (the abstract, the table of contents and §4.1's method table) add
+their entries with the section and nothing more.
+
+- **§13.6 Tool Classes, from RFC-008 revision 2.** Adds the `mcpl/class` slot on MCP tool
+  definitions, the reservation of the `mcpl/` `_meta` prefix for keys this specification
+  defines, and the vocabulary of ten classes, also listed in Appendix B.4 as `ToolClass`.
+  RFC-008 §9 names its §3, §5, §6 and §7 for this section. §13.6.2 also carries RFC-008 §4,
+  the vocabulary's meanings and decided edges, which §3 cites and without which B.4 would list
+  names with no meanings. The section opens with RFC-008 §1, its summary, and RFC-008 §5.1–§5.3
+  become labelled paragraphs of §13.6.3. "This RFC" reads "this section", and RFC section
+  references are renumbered.
 
 ### Editorial consolidation (October 2026), within 0.5.0-draft
 

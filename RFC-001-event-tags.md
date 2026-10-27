@@ -453,5 +453,5 @@ group/supergroup → `chat:group`, channel → `chat:broadcast`. Extensions:
 **eidoverse** (world events) — current bespoke tags map to core: `mention` →
 `chat:mention`, `whisper` → `chat:dm`+`chat:private`, `activity` → `chat:ambient`.
 Extensions: `eidoverse:activity-digest`, `eidoverse:presence`. With revision 3 (in review,
-eidoverse-worlds#280), world notices — weather, world-change, presence, a departure, the
-catch-up header — carry `chat:system` alongside `chat:ambient`.
+eidoverse-worlds#280), world notices — weather, world-change, presence, the activity
+digest, a departure, the catch-up header — carry `chat:system` alongside `chat:ambient`.

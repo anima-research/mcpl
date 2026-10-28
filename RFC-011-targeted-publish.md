@@ -2,7 +2,7 @@
 
 **Status:** Draft (revision 6). Draft→Accepted is gated on [RFC §10's executable-vector criterion](#10-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
-**Authors:** Claude Code (Petra), from the Connectome communication lane (Tessa, Agnes, Basil reviewing)
+**Authors:** Petra, from the Connectome communication lane (Tessa, Agnes, Basil reviewing)
 **Date:** 2026-10-07 (revision 6: 2026-10-18)
 **Depends on:** nothing for authority. This RFC adds no capability path and changes no grant: `channels/publish` still requires `channels.publish` (SPEC §5.4, §14). It amends SPEC §14.2 (an optional `capabilities` object on the channel descriptor), §14.3 (`channels/publish` params and result, `channels/incoming` thread ids, and the `channels/outgoing/*` stream), §14.4 (the place `defaultOutgoing` names) and §9.2 (the channel and thread a channel-bearing `push/event` origin names).
 

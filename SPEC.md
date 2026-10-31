@@ -2304,7 +2304,7 @@ source or channel, or names a tag or a namespace in a `tagsAny` / `tagsAll` patt
 nothing, and nor does a source or channel of `*`. An event is *undecided* when its treatment
 came only from the host default or from a rule that decides nothing. An *attention tag* says
 something waits on the agent or needs it now: `chat:addressed`, after closure (§16.3), or,
-where the draft RFC-014 is implemented, `surface:turn` or `surface:alert` (RFC-014 §7). A
+at Draft strength, `surface:turn` or `surface:alert` (§21.7). A
 host SHOULD NOT discard an undecided event carrying an attention tag (treat it so that it
 never reaches the agent) unless a decision on that server's treatment (§16.5) has been
 surfaced to an acceptor for its current declaration, answered or not.
@@ -4881,6 +4881,14 @@ Activity in a toolset reaches the agent as ordinary `push/event`s (§9). For rou
   `surface:turn` (waiting on you), `surface:alert` (needs attention now), `surface:done` (a
   game or job finished), `surface:invite` (an open is suggested), `surface:update` (ambient,
   latest-value). Hosts decide treatment; tags are never authority (§16.6).
+- **Attention tags.** `surface:turn` and `surface:alert` are attention tags in the sense of
+  §16.7, as `chat:addressed` is, so an undecided event carrying one is discarded only as
+  §16.7 allows: once a decision on the server's current declaration has been surfaced to an
+  acceptor. `surface:invite`, `surface:done` and `surface:update` are not attention tags,
+  because nothing waits on the agent and nothing needs it now. A server may still suggest
+  `immediate` for them (§16.5). Surfacing a decision never itself applies a suggestion, and
+  how often a server can cause one is bounded (§16.7), so a server that tags everything
+  `surface:alert` buys one question, not inference.
 - Latest-value state (progress, pose, health) uses plain coalescing (§20.4) with a key per
   instance. Activity uses deferred coalescing (§20.5) where the host supports it, so a burst
   arrives as one message describing the present.
@@ -5338,11 +5346,13 @@ their entries with the section and nothing more.
   its §14 (open questions), §15 (implementation status) and revision notes stay in the RFC.
   §21.5.6 keeps RFC-014's definition of a principal by reference to RFC-015 §4.4. RFC section
   references are renumbered, and references to RFC-006 and RFC-008 point to §20 and §13.6.
-  "SPEC §18.8" reads "§18.8". "This RFC" reads "this section", or "RFC-014" where it names a
+  §21.7 also carries the attention-tags bullet RFC-014 §7 gained on 2026-10-30, with RFC-001
+  revision 4: its references to RFC-001 §5.2 and §6 read §16.5 and §16.7, and its dated note
+  is dropped. "SPEC §18.8" reads "§18.8". "This RFC" reads "this section", or "RFC-014" where it names a
   time before it; "resident"
   reads "agent"; "(amending §17.1's list of domains)" reads "(listed in §17.1)"; and the
   horizontal rules between its sections are dropped. Mentioned in §4.1, §5.1, §5.2, §9.2,
-  §9.4, §16.1, §17.1, §17.3 and Appendix B.3, B.4 and B.6. Lowercase "should", "must",
+  §9.4, §16.1, §16.7, §17.1, §17.3 and Appendix B.3, B.4 and B.6. Lowercase "should", "must",
   "required" and "recommended" are kept as RFC-014 wrote them, and carry no BCP 14 force here:
   in §21.1, §21.2, §21.6.1 (a schema comment's "required for a toolset with instances", and
   "5 s recommended") and §21.10 (two).

@@ -492,6 +492,14 @@ Activity in a toolset reaches the agent as ordinary `push/event`s (§9). For rou
   `surface:turn` (waiting on you), `surface:alert` (needs attention now), `surface:done` (a
   game or job finished), `surface:invite` (an open is suggested), `surface:update` (ambient,
   latest-value). Hosts decide treatment; tags are never authority (§16.6).
+- **Attention tags** *(added 2026-10-30, with RFC-001 revision 4)*. `surface:turn`,
+  `surface:alert` and `surface:invite` are attention tags in the sense of RFC-001 §6 (§16.7),
+  as `chat:addressed` is: a host **SHOULD NOT** discard an undecided event carrying one unless
+  a decision on the server's treatment has been surfaced to an acceptor (RFC-001 §5.2,
+  §16.5). `surface:done` and `surface:update` are not: they report a state, and nothing waits
+  on the agent. Surfacing a decision never itself applies a suggestion, and how often a server
+  can cause one is bounded (RFC-001 §6), so a server that tags everything `surface:alert` buys
+  one question, not inference.
 - Latest-value state (progress, pose, health) uses RFC-006 plain coalescing with a key per
   instance. Activity uses RFC-006 deferred coalescing where the host supports it, so a burst
   arrives as one message describing the present.

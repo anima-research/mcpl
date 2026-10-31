@@ -276,7 +276,8 @@ Claims above about manifest shape are from files read, not inferred:
   RFC-003's own worked example, both of which are object-keyed.
 - `tagOntology` fields (`coreTags`, `tags.*.{desc,facet,implies,suggestedTreatment,stability}`,
   `keyed.*.{desc,values,ordered}`, `suggestedTreatment`, `open`):
-  `RFC-001-event-tags.md:199-249`.
+  `RFC-001-event-tags.md:199-249`. RFC-001 revision 4 later added `rationale`, on
+  `tags.*` and on each `suggestedTreatment` rule: free text, not an identifier position.
 - `rollback: true` as an extra feature-set member: `SPEC.md:602-621` (§8.1) —
   which is why the vectors include a feature set carrying a member outside
   Appendix B.2's two required properties.
@@ -332,8 +333,8 @@ which is the point of freezing them.
    capability member names at **every** depth (per SPEC §5.4's recursive-walk
    requirement), feature-set names, `uses` entries, `coreTags`, `tags` keys,
    `implies` entries, `keyed` keys, `keyed.*.values` entries, and
-   `suggestedTreatment` rule matchers. Descriptions (`description`, `desc`) are
-   free text and are explicitly **not** checked; that is what makes the unicode
+   `suggestedTreatment` rule matchers. Descriptions (`description`, `desc`, and
+   RFC-001 revision 4's `rationale`) are free text and are explicitly **not** checked; that is what makes the unicode
    vector legal. **This list is the single item in this file most in need of RFC
    confirmation.**
 

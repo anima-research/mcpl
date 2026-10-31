@@ -2075,23 +2075,40 @@ producer tier.
 
 **Rationale.** Each suggested rule, and each tag carrying a per-tag `suggestedTreatment`, MAY
 carry a `rationale` string: what the rule is for and what declining it costs, written for
-whoever decides, possibly the agent. It is the server's words and confers nothing (§16.6): a
-host attributes it to the server and MAY truncate it. Like `desc`, it is free text, not an
-identifier position (§17.2).
+whoever decides, possibly the agent. It confers nothing (§16.6), and a host MAY truncate it.
+Like `desc`, it is free text, not an identifier position (§17.2).
 
-**Acceptors.** The host, an operator, or the agent the host serves may accept or decline. A
-host MAY present a server's suggestions to the agent, with their rationales, and record its
-decision, and MAY limit what each acceptor may accept. Acceptance of `implies` edges (§16.3)
-stays with the host or operator.
+**Acceptors.** The host, an operator, or the agent the host serves may accept or decline. The
+agent is free to accept unless the host's configuration does not let it edit its treatment
+rules. A host MAY restrict further what the agent may accept (for example, an operator's
+approval for `immediate` on tags that are not attention tags, §16.7), as a host's choice
+rather than a default. Acceptance of `implies` edges (§16.3) stays with the host or operator.
 
-**Decisions.** A decision accepts a feature set's suggested rules (all, or a named subset) or
-declines them. The host records it with the manifest `revision` in force when it was made
-(§17.1, the digest of §17.2; for a server that sends no `revision`, the host computes that
-digest itself), and SHOULD NOT put the question again for that revision. A changed ontology
-is a new question: when the host's diff (§17.5) shows the feature set's `tagOntology` changed,
-acceptance is invalidated as §17.5 requires and a decline lapses with it. A revision that
-changed only in other domains does not reopen it. Accepted rules SHOULD remain attributable
-to the record they came from and revocable through it.
+**Presenting suggestions.** Suggestions and rationales are claims of a server that may not be
+trusted. A host SHOULD present them attributed to the server and quoted, never as its own or
+the operator's instructions, and SHOULD tell the agent so: to use reasonable caution in
+accepting and, when in doubt, ask a human (an operator) or another agent for advice.
+Certifying or attesting servers, so that a host could extend trust to vetted servers'
+suggestions, is future work (§17.9).
+
+**Decisions.** A decision accepts a feature set's suggestions (all, or a subset named by
+position in the `suggestedTreatment` list, counting from 1, and by tag for per-tag ones) or
+declines them. It is keyed to the feature set's `tagOntology`. The host records with it the
+manifest `revision` in force (§17.1, the digest of §17.2; for a server that sends none, the
+host computes that digest itself), and SHOULD NOT put the question again for that revision;
+it MAY also key the decision by its own digest of the `tagOntology`. When the host's diff
+(§17.5) shows the `tagOntology` changed, acceptance is invalidated (§17.5) and a decline
+lapses with it. A revision that changed only in other domains does not reopen it. A lapsed
+decline is no §17.6 impact, since nothing in force changed; a host MAY deliver the reopened
+question with the receipt.
+
+**Accepted rules.** An accepted suggestion becomes a consumer rule (a per-tag one for tag `T`
+as `tagsAny: ["T"]`), in the server's order, list rules first. Each is scoped to the server
+that suggested it, so acceptance never reaches another server's events. Accepted rules MUST
+take effect for the events they match: the host places them ahead of any consumer rule that
+would take those events without deciding about them (§16.7), while consumer rules that
+decide them keep precedence. Accepted rules SHOULD remain attributable to the decision that
+took them and revocable through it.
 
 ### 16.6 Tags are never authority
 
@@ -2112,11 +2129,13 @@ Hosts SHOULD evaluate treatment as an ordered, first-match-wins rule list with `
 `tagsAll` / `tagsNone` matchers (globs allowed), composable with `source` / `channel`, over
 the closure-expanded tag set.
 
-**Undecided attention events.** An event is *undecided* when its treatment came only from the
-host default, or from a rule that matches it by neither its source nor its tags (no predicate
-on where it came from, such as `source` / `channel`, and no `tagsAny` / `tagsAll` matcher).
-An *attention tag* is `chat:addressed`, after closure (§16.3), or, where the draft RFC-014 is
-implemented, one of its `surface:turn`, `surface:alert` and `surface:invite` (RFC-014 §7). A
+**Undecided attention events.** A rule *decides* the events it takes when it names their
+source or channel, or names a tag or a namespace in a `tagsAny` / `tagsAll` pattern
+(`surface:*` names a namespace). A pattern that matches every tag, such as a bare `*`, names
+nothing, and nor does a source or channel of `*`. An event is *undecided* when its treatment
+came only from the host default or from a rule that decides nothing. An *attention tag* says
+something waits on the agent or needs it now: `chat:addressed`, after closure (§16.3), or,
+where the draft RFC-014 is implemented, `surface:turn` or `surface:alert` (RFC-014 §7). A
 host SHOULD NOT discard an undecided event carrying an attention tag (treat it so that it
 never reaches the agent) unless a decision on that server's treatment (§16.5) has been
 surfaced to an acceptor for its current declaration, answered or not.
@@ -2127,9 +2146,10 @@ often one server can cause a decision to be surfaced, at most once per manifest 
 within an overall per-server limit, so that tagging every event `surface:alert` buys a
 question, not inference.
 
-A rule with neither a source predicate nor a tag matcher, placed above the host default,
-makes every later server's events undecided: for a server its author did not know, it is the
-first rule any event meets. Hosts MAY warn about such rules.
+A rule that decides nothing, placed above the host default, makes every later server's
+events undecided: for a server its author did not know, it is the first rule any event meets.
+`{ "behavior": "skip" }` and `{ "tagsAny": ["*"], "behavior": "skip" }` are both such rules.
+Hosts MAY warn about them.
 
 ---
 
@@ -2241,7 +2261,7 @@ divergence reachable inside a set-valued array, which is the failure the ASCII r
 to prevent. Identifier positions are: capability member names at every depth, feature-set
 names, `uses` entries, `coreTags`, `tags` keys, `implies` entries, `keyed` keys and their
 `values` entries, and `suggestedTreatment` rule matchers. Free-text fields (`description`,
-`desc`) are not identifiers.
+`desc`, `rationale`) are not identifiers.
 
 Two structural pins, both consequences of "nothing else is stripped": the root `revision`
 member is stripped and **only** the root one — a nested member named `revision` is ordinary
@@ -2389,8 +2409,9 @@ On a fetched manifest the host **MUST**:
      tell → receipt → activate.
    - **Changed or now-invalid `uses`** revalidates fail-closed.
    - **A changed `tagOntology` invalidates prior acceptance** (§16.5) rather than inheriting
-     standing. Accepted suggestions and `implies` edges do not carry over a revision they
-     were not accepted against.
+     standing. Accepted suggestions and `implies` edges do not carry over to a tag ontology
+     they were not accepted against. A revision that changed only other domains leaves them
+     standing.
 4. **Emit one receipt** (§17.6). One per manifest change, not one per affected item.
 
 In-flight requests need no new rule: §5.4 already authorizes response contributions against
@@ -3451,10 +3472,14 @@ evidence from it rather than by taste.
 - Added the `chat:system` kind tag (RFC-001 rev 3) for notices from the platform or the place
   (joins, pins, weather), independent of addressing.
 - Decisions on suggested treatment (RFC-001 rev 4, §16.5, §16.7): the agent may accept
-  alongside the host and operator; decisions are recorded against the manifest revision and
+  alongside the host and operator, with suggestions presented as an untrusted server's
+  claims; accepted rules are scoped to their server and take effect ahead of rules that
+  decide nothing; decisions are keyed to the tag ontology, named by the manifest revision and
   not asked again for it; suggested rules MAY carry a `rationale`. An undecided event with an
-  attention tag SHOULD NOT be discarded without surfacing a decision, which never itself
-  applies a suggestion and is bounded per server.
+  attention tag (`chat:addressed`, RFC-014's `surface:turn` and `surface:alert`) SHOULD NOT be
+  discarded without surfacing a decision, which never itself applies a suggestion and is
+  bounded per server. §17.5 step 3 now says a revision that changed only other domains
+  leaves acceptance standing.
 
 **Manifest changes (§17)**
 - Added `mcpl/manifestChanged` (S→H Notification: opaque revision plus changed domains, **no

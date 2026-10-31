@@ -286,6 +286,10 @@ On a fetched manifest the host MUST:
    - **A changed `tagOntology` invalidates prior acceptance** (SPEC §16.5) rather than
      inheriting standing. Accepted suggestions and `implies` edges do not carry over a
      revision they were not accepted against.
+
+     > **Clarified 2026-10-30** (RFC-001 revision 4). "A revision" here means a revision
+     > whose `tagOntology` changed. A revision that changed only other domains leaves
+     > acceptance standing; SPEC §17.5 step 3 now says so.
 4. **Emit one receipt** (§7). One per manifest change, not one per affected item.
 
 In-flight requests need no new rule: SPEC §5.4 already authorizes response contributions

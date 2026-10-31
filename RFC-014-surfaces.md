@@ -3,7 +3,8 @@
 **Status:** Draft (revision 6)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a design worked out with antra
-**Date:** 2026-10-24 (revision 1); 2026-10-25 (revisions 2–6)
+**Date:** 2026-10-24 (revision 1); 2026-10-25 (revisions 2–6); 2026-10-30 (RFC §7's attention
+tags, with RFC-001 revision 4)
 **Depends on:** nothing for authority — except that RFC §8.6's surface hosts obtain
 credentials through the draft RFC-015 (delegated access, proposed in a companion PR), whose own
 grant governs that. This RFC adds no `uses` path and changes no grant;
@@ -14,7 +15,7 @@ toolsets, and one server→host notification carrying hint changes. How tools re
 left to the host. Amends SPEC §4 (message flow: `toolsets/open|close|list`, `tools/hints`),
 §5.1 and §5.2 (the `toolHints` advertisement, server and host), §9.2 (`push/event` params gain
 `hints`, `toolset`, `instance`), §9.4 (a push carrying `hints` is not retried), §16.1 (reserves
-the `surface:` tag namespace), §17.1 and §17.3 (a `toolsets` manifest domain, its derivation
+the `surface:` tag namespace), §16.7 (two of its tags are attention tags, RFC §7), §17.1 and §17.3 (a `toolsets` manifest domain, its derivation
 from the members `toolHints`, `toolsets` and `surface`), Appendix B, Changelog; and adds `_meta` members to MCP's
 `tools/list` result (`mcpl/rev`) and `tools/call` params (`mcpl/instance`) and result
 (`mcpl/hints`). Uses
@@ -492,14 +493,15 @@ Activity in a toolset reaches the agent as ordinary `push/event`s (§9). For rou
   `surface:turn` (waiting on you), `surface:alert` (needs attention now), `surface:done` (a
   game or job finished), `surface:invite` (an open is suggested), `surface:update` (ambient,
   latest-value). Hosts decide treatment; tags are never authority (§16.6).
-- **Attention tags** *(added 2026-10-30, with RFC-001 revision 4)*. `surface:turn`,
-  `surface:alert` and `surface:invite` are attention tags in the sense of RFC-001 §6 (§16.7),
-  as `chat:addressed` is: a host **SHOULD NOT** discard an undecided event carrying one unless
-  a decision on the server's treatment has been surfaced to an acceptor (RFC-001 §5.2,
-  §16.5). `surface:done` and `surface:update` are not: they report a state, and nothing waits
-  on the agent. Surfacing a decision never itself applies a suggestion, and how often a server
-  can cause one is bounded (RFC-001 §6), so a server that tags everything `surface:alert` buys
-  one question, not inference.
+- **Attention tags** *(added 2026-10-30, with RFC-001 revision 4)*. `surface:turn` and
+  `surface:alert` are attention tags in the sense of RFC-001 §6 (§16.7), as `chat:addressed`
+  is, so an undecided event carrying one is discarded only as RFC-001 §6 allows: once a
+  decision on the server's current declaration has been surfaced to an acceptor.
+  `surface:invite`, `surface:done` and `surface:update` are not attention tags, because
+  nothing waits on the agent and nothing needs it now. A server may still suggest `immediate`
+  for them (RFC-001 §5.2). Surfacing a decision never itself applies a suggestion, and how
+  often a server can cause one is bounded (RFC-001 §6), so a server that tags everything
+  `surface:alert` buys one question, not inference.
 - Latest-value state (progress, pose, health) uses RFC-006 plain coalescing with a key per
   instance. Activity uses RFC-006 deferred coalescing where the host supports it, so a burst
   arrives as one message describing the present.

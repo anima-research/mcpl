@@ -25,9 +25,9 @@ This RFC preserves the proposal and its review history. SPEC.md is authoritative
 > - **Accepted rules take effect** (§5.2). Each is scoped to the server that suggested it,
 >   and placed ahead of any consumer rule that would take that server's events without
 >   deciding about them; the consumer's rules that do decide them keep precedence.
-> - **Decisions are keyed to the tag ontology** (§5.2), and named by the manifest revision
->   (SPEC §17.1, §17.2). The same revision is not asked again; a changed ontology is a new
->   question, and a revision that changed only other domains is not. SPEC §17.5 step 3,
+> - **Decisions are keyed to the tag ontology** (§5.2), by the manifest revision (SPEC §17.1)
+>   or the host's own digest of the ontology. The same key is not asked again; a changed
+>   ontology is a new question, and a revision that changed only other domains is not. SPEC §17.5 step 3,
 >   which read as if any revision change ended acceptance, is edited to say the same.
 > - **Suggested rules carry a `rationale`** (§5.1): what the rule is for and what declining
 >   costs, written for whoever decides.
@@ -392,19 +392,21 @@ doubt ask a human (an operator) or another agent for advice.
 them, or a subset the acceptor names) or **declined**. A suggestion is named by its position
 in the `suggestedTreatment` list, counting from 1, or, for a per-tag suggestion, by its tag.
 The host records, per server and feature set, the decision, the suggestions it took, who
-decided, and the **manifest revision** in force when it was made. That revision is the
-`revision` member of SPEC §17.1, the canonical digest defined in SPEC §17.2 (RFC-003). For a
-server that sends no `revision`, the host computes the same digest over the manifest it
-holds, as §17.2 already permits.
+decided, and a **key** for the declaration it answered. The key is either the **manifest
+revision** in force when the decision was made (the `revision` member of SPEC §17.1, which is
+the canonical digest of SPEC §17.2, from RFC-003) or the host's own canonical digest of the
+feature set's `tagOntology`. A host MAY always use the ontology digest, which changes exactly
+when the question does, and uses it when the server sends no `revision`. A host that computes
+it with §17.2's algorithm falls back to a canonical hash of its own where §17.2 refuses
+(`identifier_charset`): the key only has to be stable for that host.
 
-- **Keyed to the tag ontology, named by the revision.** A host SHOULD NOT put the question
-  again for a revision it holds a decision for. A host MAY also key the decision by its own
-  digest of the feature set's `tagOntology`, which changes exactly when the question does.
+- **Keyed to the tag ontology.** A host SHOULD NOT put the question again for a key it holds
+  a decision for.
 - **A changed ontology is a new question.** When the host's diff of a fetched manifest
   (SPEC §17.5) shows the feature set's `tagOntology` changed, a prior decision no longer
   stands: acceptance is invalidated (SPEC §17.5) and a decline lapses with it. A revision
   that changed only in other domains does not reopen it, and SPEC §17.5 step 3 now says so.
-  The revision names the question; it never proves the ontology unchanged, which is the
+  A revision names the question but never proves the ontology unchanged; that is the
   diff's job (SPEC §17.1).
 - **Reporting.** An invalidated acceptance is SPEC §17.6's `ontology-acceptance-invalidated`.
   A lapsed decline is no change-receipt impact of its own, since nothing in force changed.
@@ -415,15 +417,19 @@ holds, as §17.2 already permits.
 
 **Accepted rules take effect** (revision 4). An accepted suggestion becomes a rule in the
 consumer's list (§6): a list rule as written, a per-tag suggestion for tag `T` as
-`{ "tagsAny": ["T"], "behavior": … }`, in the server's order (list rules first, then per-tag
-ones sorted by tag). Each is **scoped to the server that suggested it**: it matches only that
+`{ "tagsAny": ["T"], "behavior": … }`. They keep the server's order: the `suggestedTreatment`
+list's rules in their declared order, then the per-tag suggestions that no list rule already
+makes (one that is `tagsAny: ["T"]` alone, with the same behaviour), sorted by tag in UTF-8
+byte order, since a `tags` object has no order of its own (SPEC §17.2 sorts the same way). A
+server's feature sets come in name order.
+
+Each accepted rule is **scoped to the server that suggested it**: it matches only that
 server's events, whatever its tag matchers say, so acceptance never reaches another server's
 events. Accepted rules **MUST** take effect for the events they match. A host places them
 ahead of any consumer rule that would take those events without deciding about them (§6),
 such as a catch-all; the consumer's own rules that decide those events, by that server, its
-channels or its tags, keep precedence. Each accepted rule stays attributable to
-the decision that took it and revocable through it, without touching the consumer's own
-rules.
+channels or its tags, keep precedence. Each accepted rule stays attributable to the decision
+that took it and revocable through it, without touching the consumer's own rules.
 
 > **Why the agent, and why a record.** Revision 2 made acceptance explicit and named nobody
 > to do the accepting. Hosts implemented the refusal half (suggestions are never applied)
@@ -507,8 +513,8 @@ Surfacing a decision **MUST NOT** itself amount to applying a suggestion: the ev
 treatment it had, and no suggested rule applies to it or to later events until an acceptor
 accepts. How the question reaches the acceptor (an operator notice, the agent's next turn, a
 turn of its own) is the host's choice. A host SHOULD bound how often one server can cause a
-decision to be surfaced: at most once per manifest revision (§5.2), and within an overall
-per-server limit, since a server can mint revisions by editing its ontology. Under that bound,
+decision to be surfaced: at most once per declaration (§5.2's key), and within an overall
+per-server limit, since a server can mint new declarations by editing its ontology. Under that bound,
 a server that tags every event `surface:alert` buys one question, not inference.
 
 > **Example: the catch-all.** A rule that decides nothing, placed above the host default

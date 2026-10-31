@@ -273,10 +273,13 @@ Claims above about manifest shape are from files read, not inferred:
   `{description, uses}`: `SPEC.md:335-360` (§6.1). Note RFC-001 §5's
   `tagOntology` example at `RFC-001-event-tags.md:199-235` shows `featureSets`
   as an **array of `{name, …}`** instead. The vectors follow SPEC §6.1 and
-  RFC-003's own worked example, both of which are object-keyed.
+  RFC-003's own worked example, both of which are object-keyed. (RFC-001 has
+  since been corrected to the object form; the example is now at
+  `RFC-001-event-tags.md:267-309`.)
 - `tagOntology` fields (`coreTags`, `tags.*.{desc,facet,implies,suggestedTreatment,stability}`,
   `keyed.*.{desc,values,ordered}`, `suggestedTreatment`, `open`):
-  `RFC-001-event-tags.md:199-249`. RFC-001 revision 4 later added `rationale`, on
+  `RFC-001-event-tags.md:199-249`, now `RFC-001-event-tags.md:267-352` (§5, §5.1).
+  RFC-001 revision 4 later added `rationale` (`RFC-001-event-tags.md:338-352`), on
   `tags.*` and on each `suggestedTreatment` rule: free text, not an identifier position.
 - `rollback: true` as an extra feature-set member: `SPEC.md:602-621` (§8.1) —
   which is why the vectors include a feature set carrying a member outside
@@ -288,7 +291,9 @@ Claims above about manifest shape are from files read, not inferred:
   *content*, and a digest mismatch is a conformance defect and not grounds to
   reject: `RFC-003-manifest-changes.md:179-181` (§3.1) and `SPEC.md:466` (§6.6).
 
-All `SPEC.md` line numbers are against `origin/main` at `0618783`.
+All `SPEC.md` and `RFC-001-event-tags.md` line numbers are against `origin/main` at
+`0618783`, except where a line gives a current one ("now …"), which is against the
+RFC-001 revision 4 text.
 
 > **Incoming: RFC-003 is being merged into SPEC.md as §17.** A parallel branch
 > folds RFC-003 into the 0.5 spec, moving the digest definition to §17.2. The
@@ -391,8 +396,9 @@ which is the point of freezing them.
    *Chosen:* the reference implementation raises `non_finite_number`.
    Implementations should do likewise; this is noted rather than tested.
 
-10. **`featureSets` object vs array.** `RFC-001-event-tags.md:201` shows
-    `"featureSets": [{ "name": …}]`; `SPEC.md:339` and RFC-003's own worked
+10. **`featureSets` object vs array.** `RFC-001-event-tags.md:201` showed
+    `"featureSets": [{ "name": …}]` (corrected since; the object form is now at
+    `RFC-001-event-tags.md:269`); `SPEC.md:339` and RFC-003's own worked
     vector show an object keyed by name.
     *Chosen:* **object**, following SPEC §6.1 and RFC-003 §3.1. Flagged because
     the two documents disagree on the page and a Rust implementation reading

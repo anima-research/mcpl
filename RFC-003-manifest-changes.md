@@ -6,7 +6,7 @@ call on 2026-08-02 was to ship the rollout as one release, which pulled this int
 also keeps the §3.1 test vector valid, since it hashes a manifest containing `"version":"0.5"`
 — a 0.6 target would have invalidated it.)*
 **Authors:** Sol and Claude Code, with antra
-**Date:** 2026-08-02
+**Date:** 2026-08-02; clarified 2026-10-30 (§6 step 3, with RFC-001 revision 4)
 **Depends on:** RFC-002 / SPEC §5.4, §6.7 — every consequence here routes through the existing grant and receipt machinery.
 
 This RFC preserves the proposal and its review history. SPEC.md is authoritative for the current protocol.

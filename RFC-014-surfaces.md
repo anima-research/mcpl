@@ -1,6 +1,7 @@
 # MCPL RFC-014: Tool Presence, Toolsets and Surfaces
 
-**Status:** Draft (revision 6)
+**Status:** Draft (revision 6) — §1–§13 incorporated into [SPEC.md 0.5.0-draft §21](./SPEC.md#21-tool-presence-toolsets-and-surfaces),
+without §8.6 and §10's item on surface hosts. Incorporation does not imply acceptance.
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a design worked out with antra
 **Date:** 2026-10-24 (revision 1); 2026-10-25 (revisions 2–6); 2026-10-30 (RFC §7's attention
@@ -24,6 +25,8 @@ RFC-015 (delegated access, proposed alongside this one), through which a surface
 the main host obtains credentials.
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+This RFC preserves the proposal and its review history. SPEC.md carries the current integrated draft of §1–§13 except §8.6 and §10's item on surface hosts; those, §14 and §15 are here only.
 
 > **Revision 6 note.** From review of revision 5. Hosts apply hint changes in **`rev` order**,
 > which is arrival order on stdio and WebSocket; on Streamable HTTP, where streams interleave, a

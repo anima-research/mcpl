@@ -1,12 +1,42 @@
 # MCPL RFC-001: Event Tags
 
-**Status:** Accepted (revision 3) — incorporated into [SPEC.md 0.5.0-draft §16](./SPEC.md#16-event-tags).
+**Status:** Accepted (revision 4) — incorporated into [SPEC.md 0.5.0-draft §16](./SPEC.md#16-event-tags).
 **Targets:** MCPL Protocol Specification ≥ 0.5
 **Authors:** Antra (with Claude); revised by Claude Code and Sol
-**Date:** June 2026; revised 2026-08-02, 2026-10-26
+**Date:** June 2026; revised 2026-08-02, 2026-10-26, 2026-10-30
 **Depends on:** RFC-002 (capability grants) for the admission boundary — see §7.
 
 This RFC preserves the proposal and its review history. SPEC.md is authoritative for the current protocol.
+
+> **Revision 4 note.** Says who decides on a server's suggested treatment, and what a host
+> does before anyone has. §5.2 said suggestions are "surfaced to a host or operator" and gave
+> the decision no shape, so in practice nobody was asked: a host that connected a new server
+> treated its events by whatever rules it already had. Two agents stalled in a game of Go
+> because the server's `surface:turn` events ("waiting on you") fell to a catch-all rule
+> copied from a template written for a chat platform, and were skipped; the server had
+> declared a suggested rule for them, and nobody was asked about it. An audit of twelve
+> agents' policies against the servers they connect to found 31 of 39 agent/server pairs
+> where a `surface:turn` event is silently skipped, and 28 where a `chat:addressed` one is.
+> What changed:
+>
+> - **The agent can accept** (§5.2), alongside the host and the operator, unless the host's
+>   configuration does not let it edit its treatment rules. Hosts present suggestions as the
+>   claims of a server that may not be trusted, and tell the agent so.
+> - **Accepted rules take effect** (§5.2). Each is scoped to the server that suggested it,
+>   and placed ahead of any consumer rule that would take that server's events without
+>   deciding about them; the consumer's rules that do decide them keep precedence.
+> - **Decisions are keyed to the tag ontology** (§5.2), by the manifest revision (SPEC §17.1)
+>   or the host's own digest of the ontology. The same key is not asked again; a changed
+>   ontology is a new question, and a revision that changed only other domains is not. SPEC §17.5 step 3,
+>   which read as if any revision change ended acceptance, is edited to say the same.
+> - **Suggested rules carry a `rationale`** (§5.1): what the rule is for and what declining
+>   costs, written for whoever decides.
+> - **Undecided attention events are not discarded unasked** (§6). The attention tags are
+>   `chat:addressed`, `surface:turn` and `surface:alert`. A rule that names no source,
+>   channel, tag or namespace decides nothing, whether it is written bare or as
+>   `tagsAny: ["*"]`. Putting the question is not accepting a suggestion, and how often a
+>   server can cause it is bounded, so tagging everything `surface:alert` cannot purchase
+>   inference.
 
 > **Revision 3 note.** Adds one core tag, `chat:system` (§4, §4.1), for notices from the
 > platform or the place rather than messages anyone sent. The core vocabulary could say who
@@ -249,7 +279,8 @@ are inherited from §4, do not redescribe them — and describe only your own na
         "discord:role-mention": {
           "desc": "A role the agent holds was pinged — not the agent directly",
           "facet": "addressing", "implies": ["chat:ambient"],
-          "suggestedTreatment": "throttle"
+          "suggestedTreatment": "throttle",
+          "rationale": "A role you hold was pinged, usually along with many others; declining leaves these to your rules for ambient traffic."
         },
         "discord:everyone": { "desc": "@everyone/@here", "facet": "addressing",
                               "implies": ["chat:broadcast"] },
@@ -263,9 +294,12 @@ are inherited from §4, do not redescribe them — and describe only your own na
                      "ordered": true }
       },
       "suggestedTreatment": [
-        { "tagsAny": ["chat:addressed"], "behavior": "immediate" },
-        { "tagsAny": ["chat:deleted"],   "behavior": "mute" },
-        { "tagsAny": ["chat:ambient","chat:from-bot"], "behavior": "throttle" }
+        { "tagsAny": ["chat:addressed"], "behavior": "immediate",
+          "rationale": "Someone is speaking to you: a mention, a reply or a DM. Declining leaves them waiting until you look." },
+        { "tagsAny": ["chat:deleted"],   "behavior": "mute",
+          "rationale": "A deletion rarely needs an answer; declining leaves deletions to your other rules." },
+        { "tagsAny": ["chat:ambient","chat:from-bot"], "behavior": "throttle",
+          "rationale": "Overheard chatter and bot traffic, at a bounded rate; declining leaves them to your other rules." }
       ],
       "open": true
       }
@@ -291,19 +325,36 @@ are inherited from §4, do not redescribe them — and describe only your own na
 | `tags.<tag>.facet` | Group: `addressing` / `sender` / `kind` / `content` / `lifecycle` / `locus`. |
 | `tags.<tag>.implies` | Subsumption edges. **Advisory** — see §4.1. |
 | `tags.<tag>.suggestedTreatment` | Per-tag suggested behaviour. **Advisory** — see §5.2. |
+| `tags.<tag>.rationale` | Why the per-tag `suggestedTreatment` is suggested (revision 4) — see below. |
 | `tags.<tag>.stability` | `stable` (default) / `experimental` / `deprecated`. |
 | `keyed.<key>` | A `key=value` family with a suggested `values` set and optional local `ordered` flag. Ordering is a hint **within this namespace only** — never a cross-server scale. |
-| `suggestedTreatment` | Ordered suggested rules. **Advisory** — see §5.2. |
+| `suggestedTreatment` | Ordered suggested rules. **Advisory** — see §5.2. Each rule MAY carry a `rationale` (revision 4) — see below. |
 | `open` | `true` ⇒ the server may emit further tags in its namespace(s) beyond those described. |
 
 > Renamed from `defaultTreatment` in revision 1. The old name implied the rules were a
 > default the host would apply; they are not (§5.2). Hosts SHOULD accept `defaultTreatment`
 > as a deprecated alias.
 
+**`rationale`** (revision 4). An optional string on a suggested rule, or beside a per-tag
+`suggestedTreatment`, saying what the rule is for and what declining it costs. It is written
+for whoever decides (§5.2), which may be the agent itself, so it should say what happens to
+that reader's events rather than describe the server. A games server's rule for turns
+(`surface:turn` is RFC-014 §7's):
+
+```jsonc
+{ "tagsAny": ["surface:turn"], "behavior": "immediate",
+  "rationale": "An opponent or job is waiting on you; declining leaves games stalled until you look." }
+```
+
+A rationale is the server's words and confers nothing (§7). A host presents it as §5.2 says,
+and MAY truncate it. Like `desc`, it is free text, not an identifier position (SPEC §17.2).
+It is part of the `tagOntology`, so rewording it is a new question under §5.2: the acceptor
+read the old text.
+
 ### 5.2 Suggested treatment is an onboarding hint, not policy
 
 A producer's `suggestedTreatment` (and per-tag `suggestedTreatment`) **MUST NOT** be applied
-automatically. It is inspectable configuration, surfaced to a host or operator, applied only
+automatically. It is inspectable configuration, surfaced to an acceptor (below), applied only
 on **explicit acceptance**.
 
 Absent acceptance the precedence chain is: **consumer rules → host default.** There is no
@@ -320,7 +371,85 @@ producer tier.
 > conceded these are suggestions. Revision 2 makes acceptance explicit rather than implicit.
 
 Accepted suggestions SHOULD remain attributable — a host that has accepted a producer's
-rules should be able to show which rules came from where, and revoke them.
+rules should be able to show which rules came from where, and revoke them. Revision 4 ties
+this to the decision record below.
+
+**Acceptors** (revision 4). The host, an operator, or the **agent** (the model the host
+serves) may accept or decline a server's suggestions. The agent is free to accept unless the
+host's configuration does not let it edit its treatment rules. A host MAY restrict further
+what the agent may accept, for example by requiring an operator's approval for `immediate`
+on tags that are not attention tags (§6); that is a host's choice, not a default. Acceptance
+of producer `implies` edges (§4.1) is unchanged by this revision: it stays with the host or
+operator.
+
+**Presenting suggestions** (revision 4). Suggestions and their rationales are claims made by
+a server that may not be trusted. A host SHOULD present them as such: attributed to the
+server and quoted, never as the host's or the operator's instructions. A host that puts them
+to the agent SHOULD tell it so: it should use reasonable caution in accepting, and when in
+doubt ask a human (an operator) or another agent for advice.
+
+**Decisions** (revision 4). A decision on a feature set's suggestions is **accepted** (all of
+them, or a subset the acceptor names) or **declined**. A suggestion is named by its position
+in the `suggestedTreatment` list, counting from 1, or, for a per-tag suggestion, by its tag.
+The host records, per server and feature set, the decision, the suggestions it took, who
+decided, and a **key** for the declaration it answered. The key is either the **manifest
+revision** in force when the decision was made (the `revision` member of SPEC §17.1, which is
+the canonical digest of SPEC §17.2, from RFC-003) or the host's own canonical digest of the
+feature set's `tagOntology`. A host MAY always use the ontology digest, which changes exactly
+when the question does, and uses it when the server sends no `revision`. A host that computes
+it with §17.2's algorithm falls back to a canonical hash of its own where §17.2 refuses
+(`identifier_charset`): the key only has to be stable for that host.
+
+- **Keyed to the tag ontology.** A host SHOULD NOT put the question again for a key it holds
+  a decision for.
+- **A changed ontology is a new question.** When the host's diff of a fetched manifest
+  (SPEC §17.5) shows the feature set's `tagOntology` changed, a prior decision no longer
+  stands: acceptance is invalidated (SPEC §17.5) and a decline lapses with it. A revision
+  that changed only in other domains does not reopen it, and SPEC §17.5 step 3 now says so.
+  A revision names the question but never proves the ontology unchanged; that is the
+  diff's job (SPEC §17.1).
+- **Reporting.** An invalidated acceptance is SPEC §17.6's `ontology-acceptance-invalidated`.
+  A lapsed decline is no change-receipt impact of its own, since nothing in force changed.
+  Either way, the reopened question reaches an acceptor as §6 describes, and a
+  host MAY deliver it with the receipt.
+- An acceptor may revisit its decision at any time; a decline does not prevent a later
+  acceptance.
+
+**Accepted rules take effect** (revision 4). An accepted suggestion becomes a rule in the
+consumer's list (§6): a list rule as written, a per-tag suggestion for tag `T` as
+`{ "tagsAny": ["T"], "behavior": … }`. They keep the server's order: the `suggestedTreatment`
+list's rules in their declared order, then the per-tag suggestions that no list rule already
+makes (one that is `tagsAny: ["T"]` alone, with the same behaviour), sorted by tag in UTF-8
+byte order, since a `tags` object has no order of its own (SPEC §17.2 sorts the same way). A
+server's feature sets come in name order.
+
+Each accepted rule is **scoped to the server that suggested it**: it matches only that
+server's events, whatever its tag matchers say, so acceptance never reaches another server's
+events. Accepted rules **MUST** take effect for the events they match. A host places them
+ahead of any consumer rule that would take those events without deciding about them (§6),
+such as a catch-all; the consumer's own rules that decide those events, by that server, its
+channels or its tags, keep precedence. Each accepted rule stays attributable to the decision
+that took it and revocable through it, without touching the consumer's own rules.
+
+> **Why the agent, and why a record.** Revision 2 made acceptance explicit and named nobody
+> to do the accepting. Hosts implemented the refusal half (suggestions are never applied)
+> and not the asking half, so a new server's events met rules written before it existed,
+> often a catch-all that skipped them (§6). The agent is the party whose attention the rules
+> spend, and is often the one connecting the server, with no operator present. A rationale
+> can be written to persuade, so what persuasion can buy is bounded by scope: an accepted
+> rule treats only the suggesting server's own events, can be traced to the decision that
+> took it, and can be revoked. That is no more than the agent could grant by writing a rule
+> for that server itself, where its host lets it. Keying the decision to the declaration
+> keeps asking cheap: once per ontology rather than on every connect, and a server that
+> changes what it suggests is asked again instead of inheriting a yes given to something
+> else.
+>
+> A placement rule is needed because the failure being fixed is a catch-all. Appended below
+> the catch-all, an accepted rule never matches, and the acceptance changes nothing.
+
+**Not yet: vetted servers.** Certifying or attesting servers, so that a host could extend
+trust to a vetted server's suggestions, is future work. It needs an identity story MCPL does
+not yet have (SPEC §17.9).
 
 ### 5.3 Discovery
 
@@ -345,7 +474,8 @@ idioms:
   (e.g. `robotics:*`), composable with `source`/`scope`/`channel`.
 - **Core closure expansion (§4.1)** applied before matching. Producer edges only if accepted.
 - **Precedence:** consumer rules → host global default. Accepted producer suggestions are
-  merged into the consumer's own rule list at acceptance time, not consulted at match time.
+  merged into the consumer's own rule list at acceptance time, not consulted at match time,
+  at the place §5.2 gives them (revision 4).
 
 ```jsonc
 // consumer policy (portable across platforms)
@@ -359,6 +489,43 @@ idioms:
 
 Recommended behaviour vocabulary: `immediate`, `mute`, `{ debounce: ms }`,
 `{ throttle: { perMs } }`, `{ sample: { every } }`.
+
+**Undecided attention events** (revision 4). A rule **decides** the events it takes when it
+names their source or channel (a `source` or `channel` predicate), or names a tag or a
+namespace in a `tagsAny` or `tagsAll` pattern: `surface:turn`, or `surface:*`, whose author
+chose that namespace. A pattern that matches every tag, such as a bare `*` or `*:*`, names
+nothing, and nor does a source or channel of `*`; `tagsNone` names only what a rule leaves
+out. An event is **undecided** when its treatment came only from the host default, or from a
+rule that decides nothing.
+
+An **attention tag** says that something waits on the agent or needs it now:
+`chat:addressed` (after closure, §4.1, so every mention, reply and DM), and RFC-014 §7's
+`surface:turn` and `surface:alert`. `surface:invite` is not one. A server may still suggest
+`immediate` for invites; an undecided invite just does not trigger what follows.
+
+A host SHOULD NOT discard an undecided event that carries an attention tag (treat it so that
+it never reaches the agent) unless a decision on that server's treatment has been surfaced to
+an acceptor (§5.2) for its current declaration, answered or not. What is surfaced is the
+server's suggested treatment with its rationales (§5.1) if it declared any, and otherwise the
+fact that its events of this kind are being discarded, so that someone can write a rule.
+
+Surfacing a decision **MUST NOT** itself amount to applying a suggestion: the event keeps the
+treatment it had, and no suggested rule applies to it or to later events until an acceptor
+accepts. How the question reaches the acceptor (an operator notice, the agent's next turn, a
+turn of its own) is the host's choice. A host SHOULD bound how often one server can cause a
+decision to be surfaced: at most once per declaration (§5.2's key), and within an overall
+per-server limit, since a server can mint new declarations by editing its ontology. Under that bound,
+a server that tags every event `surface:alert` buys one question, not inference.
+
+> **Example: the catch-all.** A rule that decides nothing, placed above the host default
+> (say `{ "behavior": "skip" }` closing a list written for one chat platform), matches
+> everything that reaches it. `{ "tagsAny": ["*"], "behavior": "skip" }` is the same rule
+> spelled differently. For the servers its author knew, earlier rules caught what mattered.
+> For every server connected later it is the first rule anything meets, so all of that
+> server's events are undecided, attention tags included: the Go turns of the revision 4
+> note met exactly this rule. Accepting that server's suggestions places its rules above the
+> catch-all (§5.2). Hosts MAY warn about such a rule, in either spelling, when it is written
+> or when a server connects whose attention events it would take.
 
 ## 7. Tags are never authority
 
@@ -389,10 +556,12 @@ message is testimony, not authorization.
 - No change to `featureSet` semantics, `eventId` idempotency, or response shapes.
 - `defaultTreatment` is accepted as a deprecated alias for `suggestedTreatment`, with the
   revised semantics of §5.2 — it is not applied automatically even under the old name.
+- `rationale` (§5.1, revision 4) is optional; a host that ignores it presents suggestions
+  without it.
 
 ## 9. Implementation status (informative)
 
-Current as of 2026-08-02; see AUDIT-001 §5. The revision 3 rollout note below the tables is as of 2026-10-26.
+Current as of 2026-08-02; see AUDIT-001 §5. The revision 3 and revision 4 rollout notes below the tables are as of 2026-10-26 and 2026-10-30.
 
 **Shipped:**
 
@@ -418,6 +587,13 @@ Current as of 2026-08-02; see AUDIT-001 §5. The revision 3 rollout note below t
 eidoverse-worlds#280), agent-framework (kept out of speech routing, agent-framework#830) and
 mcpl-core-ts (`CHAT_TAGS.system`, #27). discord-mcpl does not yet emit it for Discord's
 system messages (joins, pins, thread creation, boosts).
+
+**Revision 4 rollout** (2026-10-30): games-mcpl declares suggested rules with `rationale`
+(anima-research/games-mcpl#5, in review). agent-framework implements the host side
+(anima-research/agent-framework#957, in review), which is the missing acceptance path of the
+`defaultTreatment` gap above. It offers a server's suggestions to the agent once per digest
+of its declared ontologies, and writes accepted rules as `suggested:<server>:<n>`, scoped to
+the server and placed ahead of the first catch-all.
 
 **Correction to revision 1.** §9.2 of the original stated that portal-mcpl carried a
 *copied* `mcpl-core` dependency while discord/x/heartbeat were symlinked. **The arrangement

@@ -1,19 +1,20 @@
 # MCPL RFC-016: Server Manuals
 
-**Status:** Draft (revision 3)
+**Status:** Draft (revision 4)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a question asked by antra ("maybe we should spec manuals and
 examples into the MCPL protocol proper?"), after a survey of how servers explain themselves
 today.
-**Date:** 2026-11-09 (revision 1); 2026-11-10 (revisions 2–3, from review: MCP `instructions` no
+**Date:** 2026-11-09 (revision 1); 2026-11-10 (revisions 2–4, from review: MCP `instructions` no
 longer required of hosts, summary display bounded, `applied` disposition, SPEC amendment list
 completed with a new §20, page caches per connection, vectors aligned with the normative text)
 **Depends on:** MCP resources (`resources/list`, `resources/read`,
 `notifications/resources/updated`), used unchanged. Amends SPEC §5.1's example, §17.1, §17.3 and
 §17.6 (a `manual` manifest domain), and Appendix B.3 and B.4; adds a §20 (RFC §12). Shares its
 document with the draft RFC-009 (endpoint discovery, PR #22): a server that publishes a discovery
-guide publishes its manual's index there (RFC §7). Follows the draft RFC-010 (deprecate context injection, PR #15) in keeping
-server text out of the context unless the agent asks for it. Adds no capability path and changes
+guide publishes its manual's index there (RFC §7). Follows the draft RFC-010 (deprecate context
+injection, PR #15) in keeping manual pages out of the context unless the agent asks for them or
+the operator configures it. Adds no capability path and changes
 no grant: RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do.
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
@@ -36,12 +37,12 @@ recognize:
 This RFC defines a **manual**: markdown pages served as ordinary MCP resources, one of them the
 **index**, named by a `manual` member of the MCPL manifest. Pages reach the model only when the
 agent asks for them, or when its operator has configured the host to include one. Worked
-examples are pages too. When the server also has an RFC-009
-discovery guide, the guide **is** the index: one document, read before connecting and after.
+examples are pages too. When the server also has an RFC-009 discovery guide, the guide **is** the
+index: one document, read before connecting and after.
 
 | Piece | Where it lives | In context all the time? |
 |---|---|---|
-| `manual.summary` | the manifest | yes: one line, shown with the server's tools |
+| `manual.summary` | the manifest | when present: one line, shown with the server's tools |
 | the index | an MCP resource named by `manual.index` | no: read when the agent asks |
 | topic and example pages | MCP resources linked from the index | no: read when the agent asks |
 | the discovery guide | RFC-009 `rel="help"` and the record's `guide` | before connecting; the same document as the index |
@@ -124,9 +125,11 @@ as absent. A host shows at most the summary's first line, cut to 200 characters;
 does not invalidate the member.
 
 **Its own manifest domain.** `manual` forms a domain of its own, amending §17.1 as RFC-014 does
-for `toolsets`. A change to the member (a new index URI, a new summary) is announced by
-`mcpl/manifestChanged` naming `manual`. It carries no grant consequence: the impact is §17.6's
-`surface-changed`, disposition `applied` (the host refreshes the summary it shows).
+for `toolsets`. A server that announces changes (§17.10) names `manual` in
+`mcpl/manifestChanged` when the member changes (a new index URI, a new summary). It carries no
+grant consequence: the impact is §17.6's `surface-changed`, disposition `applied` (the host
+refreshes the summary it shows), or `informational` when only `manual.tool` changed, since that
+takes effect at the next connection (RFC §8).
 
 Changes to a page's **content** are not manifest changes. They are resource updates (RFC §6.4).
 A server that edits its pages does not change its revision, and the text a host keeps in context
@@ -212,8 +215,8 @@ lane.
 ### 6.4 Changes
 
 When a page the agent has read changes (`notifications/resources/updated`, for a host that
-subscribed), the host **MAY** tell the agent once that it changed. It does not re-send the page
-unasked (RFC §6.2). A host that wants freshness re-reads on its own schedule.
+subscribed), the host **MAY** tell the agent once that it changed, naming the page. It does not
+re-send the page, or pass on the server's new description of it, unasked (RFC §6.2). A host that wants freshness re-reads on its own schedule.
 
 ### 6.5 MCP `instructions`
 
@@ -247,7 +250,8 @@ A server with no HTTP presence uses any URI scheme it serves as resources
 - A host that provides RFC §6.1's read path **MAY** leave that tool out of the agent's tool list,
   since the manual is reachable through it. Hiding a tool changes the tool list, so the host decides
   when the connection starts, not mid-session; a later change to `manual.tool` takes effect at
-  the next connection.
+  the next connection. If the manual is removed or its index stops being readable, the host
+  restores the tool it hid.
 - A plain MCP host sees the pages as resources and ignores the `manual` member. The server
   works unchanged (§3.2).
 
@@ -258,9 +262,10 @@ A server with no HTTP presence uses any URI scheme it serves as resources
 - **Manual text is server testimony:** data for the model to weigh, never authority. A page
   saying the agent "may" do something grants nothing; as §13.4 puts it, the control is the grant
   (§5.4), not the instruction.
-- **The pull rule** (RFC §6.2) keeps pages from becoming an ungranted context hook. The summary
-  is the one piece shown unasked: like a tool description it is server text in every request,
-  which is why a host shows at most one line of 200 characters.
+- **The pull rule** (RFC §6.2) keeps pages from becoming an ungranted context hook. Of the
+  manual, only the summary is shown unasked: like a tool description it is server text in every
+  request, which is why a host shows at most one line of 200 characters. Operator-configured
+  pages are the operator's choice, and MCP `instructions` are outside this RFC (RFC §6.5).
 - **Size:** RFC §5.1's page limit is advice to servers. A host that needs a bound on what one
   read puts into context sets its own cap (RFC §6.3).
 - **Tailored pages** may carry the connecting identity's details and limits. A host **MUST NOT**
@@ -295,6 +300,8 @@ enable it per agent.
 - **§5.1:** the example manifest shows a `manual` member.
 - **§17.1:** a further domain, `manual`, holding the `manual` member; `capabilities` excludes it.
   (RFC-014 adds `toolsets` the same way; the two amendments are independent.)
+- **§17.2:** the `manual` member and its member names are not capability identifiers; the digest
+  does not check them as identifiers, as for other non-capability text.
 - **§17.3, Appendix B.3's `domains` enum and B.4's `ChangeDomain`:** add `manual`.
 - **§17.6:** `surface-changed` also covers a change to the `manual` member, with disposition
   `applied`.
@@ -311,17 +318,18 @@ enable it per agent.
 | 1 | Server declares `manual.index` | not an `mcpl:` URI; the server advertises MCP `resources`; `resources/list` includes that URI with `mimeType` `text/markdown` |
 | 2 | `resources/read` on the index | `text/markdown` content |
 | 3 | `manual.index` is an `mcpl:` URI, in any letter case | host treats the member as absent; server otherwise unaffected |
-| 4 | `manual.index` cannot be read | the agent's read fails visibly (an error, or a result saying the index is unavailable); tools and grants unaffected |
+| 4 | Host provides RFC §6.1's read path; `manual.index` cannot be read | the agent's read fails visibly (an error, or a result saying the index is unavailable); tools and grants unaffected |
 | 5 | `summary` longer than 200 characters, or several lines | host shows at most its first line, cut to 200 characters; the member stays valid |
-| 6 | Server changes `summary`; host fetches the manifest | `mcpl/manifestChanged` names `manual`; one `surface-changed` receipt, `applied`; grant unchanged |
+| 6 | Server that announces changes changes `summary`; host fetches the manifest | `mcpl/manifestChanged` names `manual`; one `surface-changed` receipt, `applied`; grant unchanged |
 | 7 | Server edits a page's content | revision unchanged; `notifications/resources/updated` for subscribers |
-| 8 | Agent has not asked for a page, and no operator configuration includes one | no page content in the assembled context (inspect the host's request); a page the agent read is not re-sent after it changes |
-| 9 | Agent reads a page | content returned; a link to a sibling page reads as a resource |
+| 8 | Agent has not asked for a page, and no operator configuration includes one | no page content in the assembled context (inspect the host's request) |
+| 9 | Host provides RFC §6.1's read path; agent reads a page | content returned; a link to a sibling page reads as a resource |
 | 10 | RFC-009 server | the record's `guide` equals `manual.index`, an `https:` URI; links between pages are `https:` URIs; `GET` with `Accept: text/markdown` returns the same text as `resources/read` for an anonymous reader |
 | 11 | Unknown fields in `manual` | ignored |
-| 12 | Plain MCP host | pages listed as ordinary resources; server works |
-| 13 | Two connections, with different identities or limits, read the same page URI | each gets the page as served on its own connection, never the other's cached copy |
+| 12 | Plain MCP host | the index listed as an ordinary resource; server works |
+| 13 | Two connections, by the same identity or different ones, read the same page URI | each gets the page as served on its own connection, never the other's cached copy |
 | 14 | A page links to a URI that is not one of the server's pages | the host does not fetch it on its own |
+| 15 | Agent reads a page; the server changes it and notifies | the new content is not placed in context until the agent asks again |
 
 ---
 
@@ -345,7 +353,7 @@ Addition to Appendix B.3:
   "type": "object",
   "required": ["index"],
   "properties": {
-    "index":   { "type": "string", "format": "uri", "pattern": "^(?![mM][cC][pP][lL]:)" },
+    "index":   { "type": "string", "format": "uri", "pattern": "^(?![mM][cC][pP][lL]:)[A-Za-z][A-Za-z0-9+.-]*:" },
     "summary": { "type": "string", "description": "one line; hosts show at most 200 characters" },
     "tool":    { "type": "string" }
   }

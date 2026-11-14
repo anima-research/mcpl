@@ -1,0 +1,1110 @@
+{
+  "profile": "rfc-007-section-13",
+  "cases": [
+    {
+      "id": "empty",
+      "params": {},
+      "valid": true
+    },
+    {
+      "id": "clear",
+      "params": {
+        "rules": null
+      },
+      "valid": true
+    },
+    {
+      "id": "pause",
+      "params": {
+        "rules": []
+      },
+      "valid": true
+    },
+    {
+      "id": "meta",
+      "params": {
+        "rules": [],
+        "_meta": {
+          "progressToken": "x"
+        }
+      },
+      "valid": true
+    },
+    {
+      "id": "input-true",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": true
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "input-false",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "input-[]",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": []
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "input-[\"a\",\"target.window_id\"]",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": [
+              "a",
+              "target.window_id"
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "tool-length-0-",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "tool": ""
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "tool-length-1-*",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "tool": "*"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "tool-length-5-a?[",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "tool": "a?[]\\"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "tool-length-256-🙂🙂🙂",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "tool": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "tool-length-256-xxx",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "tool": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverTool-length-0-",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverTool": ""
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverTool-length-1-*",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverTool": "*"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverTool-length-5-a?[",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverTool": "a?[]\\"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverTool-length-256-🙂🙂🙂",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverTool": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverTool-length-256-xxx",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverTool": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverId-length-0-",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverId": ""
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverId-length-1-*",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverId": "*"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverId-length-5-a?[",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverId": "a?[]\\"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverId-length-256-🙂🙂🙂",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverId": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "serverId-length-256-xxx",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "conversationId-length-0-",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "conversationId": ""
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "conversationId-length-1-*",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "conversationId": "*"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "conversationId-length-5-a?[",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "conversationId": "a?[]\\"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "conversationId-length-256-🙂🙂🙂",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "conversationId": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "conversationId-length-256-xxx",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "conversationId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-comms",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "comms"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-memory",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "memory"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-notes",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "notes"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-files",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "files"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-shell",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "shell"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-web",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "web"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-computer",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "computer"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-media",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "media"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-body",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "body"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "class-control",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "control"
+            },
+            "report": false
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "null",
+      "params": null,
+      "valid": false
+    },
+    {
+      "id": "array",
+      "params": [],
+      "valid": false
+    },
+    {
+      "id": "scalar",
+      "params": "x",
+      "valid": false
+    },
+    {
+      "id": "typo",
+      "params": {
+        "ruless": []
+      },
+      "valid": false
+    },
+    {
+      "id": "meta-null",
+      "params": {
+        "_meta": null
+      },
+      "valid": false
+    },
+    {
+      "id": "meta-array",
+      "params": {
+        "_meta": []
+      },
+      "valid": false
+    },
+    {
+      "id": "meta-scalar",
+      "params": {
+        "_meta": "x"
+      },
+      "valid": false
+    },
+    {
+      "id": "rules-object",
+      "params": {
+        "rules": {}
+      },
+      "valid": false
+    },
+    {
+      "id": "rule-null",
+      "params": {
+        "rules": [
+          null
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "rule-array",
+      "params": {
+        "rules": [
+          []
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "missing-match",
+      "params": {
+        "rules": [
+          {}
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "match-null",
+      "params": {
+        "rules": [
+          {
+            "match": null
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "unknown-match",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "module": "x"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "class-unknown",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "class": "quantum"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "report-string",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "report": "no"
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "report-null",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "report": null
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "unknown-rule",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "reportt": false
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "input-null",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": null
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "input-scalar",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": 3
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "empty-path",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": [
+              ""
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "number-path",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": [
+              3
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "object-path",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": [
+              {}
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "tool-nonstring",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "tool": 12
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "tool-overlength",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "tool": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "serverTool-nonstring",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverTool": 12
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "serverTool-overlength",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverTool": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "serverId-nonstring",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverId": 12
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "serverId-overlength",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "serverId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "conversationId-nonstring",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "conversationId": 12
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "conversationId-overlength",
+      "params": {
+        "rules": [
+          {
+            "match": {
+              "conversationId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "path-length-256",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": [
+              "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂"
+            ]
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "path-length-257",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": [
+              "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂"
+            ]
+          }
+        ]
+      },
+      "valid": false
+    },
+    {
+      "id": "64-rules",
+      "params": {
+        "rules": [
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          },
+          {
+            "match": {}
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "id": "64-paths",
+      "params": {
+        "rules": [
+          {
+            "match": {},
+            "input": [
+              "field0",
+              "field1",
+              "field2",
+              "field3",
+              "field4",
+              "field5",
+              "field6",
+              "field7",
+              "field8",
+              "field9",
+              "field10",
+              "field11",
+              "field12",
+              "field13",
+              "field14",
+              "field15",
+              "field16",
+              "field17",
+              "field18",
+              "field19",
+              "field20",
+              "field21",
+              "field22",
+              "field23",
+              "field24",
+              "field25",
+              "field26",
+              "field27",
+              "field28",
+              "field29",
+              "field30",
+              "field31",
+              "field32",
+              "field33",
+              "field34",
+              "field35",
+              "field36",
+              "field37",
+              "field38",
+              "field39",
+              "field40",
+              "field41",
+              "field42",
+              "field43",
+              "field44",
+              "field45",
+              "field46",
+              "field47",
+              "field48",
+              "field49",
+              "field50",
+              "field51",
+              "field52",
+              "field53",
+              "field54",
+              "field55",
+              "field56",
+              "field57",
+              "field58",
+              "field59",
+              "field60",
+              "field61",
+              "field62",
+              "field63"
+            ]
+          }
+        ]
+      },
+      "valid": true
+    }
+  ]
+}

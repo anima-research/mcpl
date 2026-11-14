@@ -1030,6 +1030,39 @@ vectors (43–45, 54, and the RFC §13 schema) also run against a strict parser.
 PR #199 implements this revision's host side and tests most of these vectors in its own
 suite, but those tests are not the frozen set.
 
+### Run the frozen vectors
+
+The portable scenarios are in `conformance/tool-lifecycle-vectors.json`. The runner checks all 54 numbered cases, including conditional approval cases 22 and 23. The supplied adapter imports a separate Agent Framework checkout. It uses a temporary Chronicle store, scripted model responses, and synthetic MCPL tools over real stdio connections.
+
+Run against a clean checkout with its dependencies installed:
+
+```sh
+git clone https://github.com/anima-research/agent-framework /tmp/agent-framework-rfc007
+git -C /tmp/agent-framework-rfc007 checkout 03c31d9b4224f3eb4195a6a1b1126c47b5fb39bc
+(cd /tmp/agent-framework-rfc007 && bun install --no-save)
+bun run conformance/check-tool-lifecycle.mjs --host /tmp/agent-framework-rfc007 --report /tmp/rfc007-host.json
+bun run conformance/check-tools-observe.mjs --report /tmp/rfc007-strict.json
+bun run conformance/check-tools-observe.mjs --host /tmp/agent-framework-rfc007 --report /tmp/rfc007-parser.json
+```
+
+At that Host revision, the behavioral run passes 52 cases and reports 22/23 as **not applicable**: the Host has no approval gate. The strict schema run passes 72 schema cases and the admission-wrapper cases 43–45 and 54. The final command exits **1** and reports nine Host/schema mismatches: explicit null params, three invalid `_meta` shapes, and five valid 256-code-point astral-character patterns or paths that the Host measures as UTF-16 code units. These are observed discrepancies, not accepted exceptions.
+
+The report names the Host revision, tracked-tree dirty status, runtime, and installed dependency versions. The reference run used Bun 1.4.2, Chronicle 0.4.0, Context Manager 0.11.0, and Membrane 0.5.86. Host dependencies are resolved by its checkout; preserve the reported versions when comparing runs.
+
+### Evidence and adapter contract
+
+`check-tool-lifecycle.mjs` accepts `--adapter PATH` for another Host. Its module exports `loadHost(root)`, returning `info` and `observe(vector)`. The supplied adapter and runner define the observation format. Each vector supplies tools, observer policies, ordered actions, and expected per-call phases and fields. `$fixture` expands a 200-KiB argument object or a request exceeding the Host's declared rule limit. Adapter actions supply stimuli and observations; assertions stay in the portable runner. `--only 20,21` selects cases and labels the result as partial. The selection must contain distinct case numbers 1–54; empty, malformed, duplicate, and unknown selections fail before the Host adapter loads. Tool prefixes such as `x--run` and provider IDs such as `x` are fixture identities, not RFC naming rules. Another adapter must configure or map its Host names and stable aliases to these fixture identities in returned observations; retain the raw identities alongside normalized evidence when they differ.
+
+The Framework adapter exercises real registration, class ingestion, model-call dispatch, results, stream cancellation, filter admission, and notification delivery. Each executed call has a provider execution witness. A request/response barrier on each observer's ordered connection settles notifications before absence is checked. Held calls test parallel dispatch, transport failure, interruption, and changes between opening and terminal. Synthetic provider calls match the tool name and complete arguments within the current call round, so parallel dispatch order is unrestricted. Repeated identical calls in one round receive equivalent synthetic treatment; fixtures with indistinguishable requests and conflicting treatments are rejected because MCP supplies no model-call ID to distinguish them. Late results in interruption cases traverse the Host's result handler before the final barrier. Case 53 uses an ephemeral subagent with its own context.
+
+Initial grants and feature-set disabling come from the Host's policy exchange. Case 11 checks the emitted disabled set and a structured `disabledFeatures` observation containing the server, feature name, and `invalid_uses` reason. The Framework adapter obtains that reason from its diagnostic and preserves the source text; the portable assertion does not require a particular log spelling. Mid-call operator changes use the real `computeGrant` and `establishGrant` methods; these cases test lifecycle effects, not policy-change negotiation. Diagnostic recommendations and provider-ID reuse are reported separately from required behavior. The adapter maps its diagnostic wording to the semantic codes `inputs-without-observe` and `inputs-unnarrowed`; raw diagnostics remain in the report. The approval scenarios remain available to adapters with an actual approval gate; the Framework adapter reports their inapplicability instead of inventing a gate. Case 23 marks the requested call with `expectExecution: false`: the checker requires zero provider execution and result witnesses, plus the pending/aborted events. When the Host emits the optional `durationMs`, case 22 requires `timings[callKey]` observations on the Host execution clock: `pendingAtMs`, `startedAtMs`, `terminalAtMs`, and `resolutionMs`. The clock must distinguish the requested approval wait. The checker compares `durationMs` to terminal minus started within that resolution, allowing execution longer than the approval wait. These observations must come from Host instrumentation or a clock injected into the actual Host, rather than timestamps inferred from the expected duration. The report records whether duration was emitted; omission passes without claiming timing evidence.
+
+`tools-observe.schema.json` freezes RFC §13's params schema, with the RFC-008 `ToolClass` enum under `$defs`. `tools-observe-parser.mjs` interprets only this schema's keyword subset and rejects unsupported keywords. It counts Unicode code points for string bounds. `check-tools-observe.mjs` separates schema validity, an admission wrapper with explicit grants and 64-rule/64-path limits, and the optional actual Host parser comparison. Omitted transport params normalize to an empty object in the strict wrapper; explicit JSON null remains an invalid schema instance. The stateless parser companion checks request admission, not filter persistence. Host filter preservation is tested through the actual connection and subsequent calls in the behavioral run.
+
+Run `bun test conformance/tool-lifecycle-assertions.test.mjs conformance/tool-lifecycle-runner.test.mjs` to check the checker and fixture itself. The runner tests exercise reversed parallel calls over actual stdio, repeated same-tool calls, and targeted-selection validation. Its synthetic observation records cover approval refusal, a tool execution longer than its approval wait, incorrect duration accounting, missing timing evidence, and malformed boolean fields. These self-tests establish assertion behavior, not Host conformance.
+
+The RFC remains **Draft**. These artifacts expose reproducible evidence and discrepancies for maintainer review; the runner does not decide protocol acceptance.
+
 ## 15. Implementation notes (non-normative)
 
 - **Hosts with an internal event stream** already have most of the data. agent-framework's

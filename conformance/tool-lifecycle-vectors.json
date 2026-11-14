@@ -1,0 +1,4201 @@
+{
+  "profile": "rfc-007-revision-3",
+  "vectors": [
+    {
+      "rfcVector": 1,
+      "id": "rfc007-01",
+      "title": "Observe only",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ]
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 2,
+      "id": "rfc007-02",
+      "title": "Both, no filter",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 3,
+      "id": "rfc007-03",
+      "title": "Both, requested",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {
+              "a": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 4,
+      "id": "rfc007-04",
+      "title": "Inputs narrowed by name",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "tools": [
+                  "y--*"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 5,
+      "id": "rfc007-05",
+      "title": "Inputs narrowed by class",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "computer"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 6,
+      "id": "rfc007-06",
+      "title": "Observe narrowed",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ],
+            "toolLifecycle": {
+              "observe": {
+                "tools": [
+                  "y--*"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    },
+    {
+      "rfcVector": 7,
+      "id": "rfc007-07",
+      "title": "Observe narrowed by conversation",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ],
+            "toolLifecycle": {
+              "observe": {
+                "conversations": [
+                  "conv_1"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "other",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_2"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 8,
+      "id": "rfc007-08",
+      "title": "Inputs without observe",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      },
+      "diagnostic": "inputs-without-observe"
+    },
+    {
+      "rfcVector": 9,
+      "id": "rfc007-09",
+      "title": "Inputs unnarrowed",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.*"
+            ]
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "computer"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "computer"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      },
+      "diagnostic": "inputs-unnarrowed"
+    },
+    {
+      "rfcVector": 10,
+      "id": "rfc007-10",
+      "title": "Bare parent",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle"
+            ]
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    },
+    {
+      "rfcVector": 11,
+      "id": "rfc007-11",
+      "title": "Unknown leaf",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {},
+          "featureSets": {
+            "bad": {
+              "description": "Unknown leaf",
+              "uses": [
+                "toolLifecycle.results"
+              ]
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      },
+      "disabledFeature": {
+        "name": "bad",
+        "reason": "invalid_uses"
+      }
+    },
+    {
+      "rfcVector": 12,
+      "id": "rfc007-12",
+      "title": "Comms never",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "tools": [
+                  "chat--*"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "chat--send",
+          "classes": [
+            "comms"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "chat--send",
+              "input": {
+                "to": "friend",
+                "text": "private"
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "chat--send",
+            "conversationId": "conv_1",
+            "class": [
+              "comms"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 13,
+      "id": "rfc007-13",
+      "title": "Multi-class comms",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "files"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "files",
+            "comms"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "files",
+              "comms"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 14,
+      "id": "rfc007-14",
+      "title": "Unclassed never",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "tools": [
+                  "x--*"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": []
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 15,
+      "id": "rfc007-15",
+      "title": "Own tools",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ]
+          }
+        },
+        {
+          "id": "s",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ]
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "s--act",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "s--act",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "s--act",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ],
+        "s": []
+      },
+      "providerCalls": [
+        {
+          "server": "s",
+          "tool": "act"
+        }
+      ]
+    },
+    {
+      "rfcVector": 16,
+      "id": "rfc007-16",
+      "title": "Host built-in",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "host--act",
+          "classes": [
+            "body"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "host--act",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "host--act",
+            "conversationId": "conv_1",
+            "class": [
+              "body"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "host": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 17,
+      "id": "rfc007-17",
+      "title": "Parallel",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        },
+        {
+          "name": "x--other",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "conversation": "conv_1",
+          "background": true,
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "hold": true
+            },
+            {
+              "key": "b",
+              "tool": "x--other",
+              "input": {
+                "b": 2
+              },
+              "hold": true
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "keys": [
+            "b",
+            "a"
+          ]
+        },
+        {
+          "op": "wait"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          },
+          {
+            "key": "b",
+            "tool": "x--other",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      },
+      "parallel": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "rfcVector": 18,
+      "id": "rfc007-18",
+      "title": "Host-unique ids",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "modelId": "call_0"
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "x--run",
+              "input": {
+                "b": 2
+              },
+              "modelId": "call_0"
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          },
+          {
+            "key": "b",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      },
+      "distinctIds": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "rfcVector": 19,
+      "id": "rfc007-19",
+      "title": "Error result",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "isError": true
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "isError": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 20,
+      "id": "rfc007-20",
+      "title": "Server gone",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "hold": true
+            }
+          ],
+          "conversation": "conv_1",
+          "background": true
+        },
+        {
+          "op": "disconnect",
+          "server": "x"
+        },
+        {
+          "op": "wait"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "failed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 21,
+      "id": "rfc007-21",
+      "title": "Interrupted",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "hold": true
+            }
+          ],
+          "conversation": "conv_1",
+          "background": true
+        },
+        {
+          "op": "interrupt",
+          "conversation": "conv_1"
+        },
+        {
+          "op": "wait"
+        },
+        {
+          "op": "release",
+          "keys": [
+            "a"
+          ]
+        },
+        {
+          "op": "settle"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "aborted"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 22,
+      "id": "rfc007-22",
+      "title": "Pending, approved",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "conversation": "conv_1",
+          "background": true,
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "approval": true
+            }
+          ]
+        },
+        {
+          "op": "approve",
+          "key": "a",
+          "waitMs": 1000
+        },
+        {
+          "op": "wait"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "pending",
+              "started",
+              "completed"
+            ],
+            "input": {
+              "a": 1
+            },
+            "durationExcludesApproval": true
+          }
+        ]
+      },
+      "requires": "approvalGate"
+    },
+    {
+      "rfcVector": 23,
+      "id": "rfc007-23",
+      "title": "Pending, refused",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "conversation": "conv_1",
+          "background": true,
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "approval": true,
+              "expectExecution": false
+            }
+          ]
+        },
+        {
+          "op": "refuse",
+          "key": "a"
+        },
+        {
+          "op": "wait"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "pending",
+              "aborted"
+            ]
+          }
+        ]
+      },
+      "requires": "approvalGate"
+    },
+    {
+      "rfcVector": 24,
+      "id": "rfc007-24",
+      "title": "No duplicate terminals",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "hold": true
+            }
+          ],
+          "conversation": "conv_1",
+          "background": true
+        },
+        {
+          "op": "interrupt",
+          "conversation": "conv_1"
+        },
+        {
+          "op": "wait"
+        },
+        {
+          "op": "release",
+          "keys": [
+            "a"
+          ]
+        },
+        {
+          "op": "settle"
+        },
+        {
+          "op": "interrupt",
+          "conversation": "conv_1",
+          "mayBeIdle": true
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "aborted"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 25,
+      "id": "rfc007-25",
+      "title": "Bound",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "$fixture": "object-utf8-bytes",
+                "bytes": 204800
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "bounded": true,
+            "inputAltered": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 26,
+      "id": "rfc007-26",
+      "title": "No outcome leakage",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "resultText": "RESULT-ONLY-SECRET-RFC007"
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {
+              "a": 1
+            }
+          }
+        ]
+      },
+      "forbiddenText": "RESULT-ONLY-SECRET-RFC007"
+    },
+    {
+      "rfcVector": 27,
+      "id": "rfc007-27",
+      "title": "No content fields",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {
+              "a": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 28,
+      "id": "rfc007-28",
+      "title": "Tool filter",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        },
+        {
+          "name": "y--go",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "tool": "y--*"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "y--go",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "b",
+            "tool": "y--go",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 29,
+      "id": "rfc007-29",
+      "title": "Class filter",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        },
+        {
+          "name": "y--go",
+          "classes": [
+            "web"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "class": "shell"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "y--go",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 30,
+      "id": "rfc007-30",
+      "title": "Conversation filter",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "conversationId": "conv_1"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_2"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 31,
+      "id": "rfc007-31",
+      "title": "Suppress",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        },
+        {
+          "name": "chat--send",
+          "classes": [
+            "comms"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "class": "comms"
+                },
+                "report": false
+              },
+              {
+                "match": {}
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "chat--send",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 32,
+      "id": "rfc007-32",
+      "title": "First match wins",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "tool": "x--*"
+                },
+                "input": [
+                  "a"
+                ]
+              },
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1,
+                "b": 2
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {
+              "a": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 33,
+      "id": "rfc007-33",
+      "title": "Nested path",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": [
+                  "target.window_id"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "target": {
+                  "window_id": 3,
+                  "kind": "w"
+                },
+                "x": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {
+              "target": {
+                "window_id": 3
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 34,
+      "id": "rfc007-34",
+      "title": "Missing path",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": [
+                  "z"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {}
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 35,
+      "id": "rfc007-35",
+      "title": "Filter cannot widen",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "tools": [
+                  "y--*"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "tool": "x--*"
+                },
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 36,
+      "id": "rfc007-36",
+      "title": "Requested without grant",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ]
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 37,
+      "id": "rfc007-37",
+      "title": "Not requested",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {}
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 38,
+      "id": "rfc007-38",
+      "title": "Clear",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "observe",
+          "params": {
+            "rules": null
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "observe",
+          "params": {}
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          },
+          {
+            "key": "b",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 39,
+      "id": "rfc007-39",
+      "title": "Pause",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": []
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      },
+      "grantUnchanged": true
+    },
+    {
+      "rfcVector": 40,
+      "id": "rfc007-40",
+      "title": "Pairing across a filter change",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "hold": true
+            }
+          ],
+          "conversation": "conv_1",
+          "background": true
+        },
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "tool": "y--*"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "release",
+          "keys": [
+            "a"
+          ]
+        },
+        {
+          "op": "wait"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 41,
+      "id": "rfc007-41",
+      "title": "Server-named rule, host tool",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "host--act",
+          "classes": [
+            "body"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "serverTool": "*"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "host--act",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    },
+    {
+      "rfcVector": 42,
+      "id": "rfc007-42",
+      "title": "Class rule, unclassed tool",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": []
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "class": "shell"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    },
+    {
+      "rfcVector": 43,
+      "id": "rfc007-43",
+      "title": "Gating",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {}
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          },
+          "expectCode": -32002
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    },
+    {
+      "rfcVector": 44,
+      "id": "rfc007-44",
+      "title": "Malformed",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": []
+          }
+        },
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "module": "x"
+                }
+              }
+            ]
+          },
+          "expectCode": -32602
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "invalid0",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {
+                  "class": "quantum"
+                }
+              }
+            ]
+          },
+          "expectCode": -32602
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "invalid1",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "report": "no"
+              }
+            ]
+          },
+          "expectCode": -32602
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "invalid2",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    },
+    {
+      "rfcVector": 45,
+      "id": "rfc007-45",
+      "title": "Limits",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": []
+          }
+        },
+        {
+          "op": "observe",
+          "params": {
+            "$fixture": "rules-over-limit"
+          },
+          "expectCode": -32602,
+          "expectLimit": true
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    },
+    {
+      "rfcVector": 46,
+      "id": "rfc007-46",
+      "title": "Revocation discards",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "grant",
+          "policy": {
+            "enabledCapabilities": [
+              "tools"
+            ]
+          }
+        },
+        {
+          "op": "grant",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 47,
+      "id": "rfc007-47",
+      "title": "Observe revoked mid-call",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "hold": true
+            }
+          ],
+          "conversation": "conv_1",
+          "background": true
+        },
+        {
+          "op": "grant",
+          "policy": {
+            "enabledCapabilities": [
+              "tools"
+            ]
+          }
+        },
+        {
+          "op": "release",
+          "keys": [
+            "a"
+          ]
+        },
+        {
+          "op": "wait"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 48,
+      "id": "rfc007-48",
+      "title": "Inputs revoked mid-call",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "hold": true
+            }
+          ],
+          "conversation": "conv_1",
+          "background": true
+        },
+        {
+          "op": "grant",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ]
+          }
+        },
+        {
+          "op": "release",
+          "keys": [
+            "a"
+          ]
+        },
+        {
+          "op": "wait"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {
+              "a": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 49,
+      "id": "rfc007-49",
+      "title": "Deny by default",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {}
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          },
+          "expectCode": -32002
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      },
+      "grant": {
+        "include": [],
+        "exclude": [
+          "toolLifecycle.observe",
+          "toolLifecycle.inputs"
+        ]
+      }
+    },
+    {
+      "rfcVector": 50,
+      "id": "rfc007-50",
+      "title": "Explicit grant",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ]
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      },
+      "grant": {
+        "include": [
+          "toolLifecycle.observe"
+        ],
+        "exclude": [
+          "toolLifecycle.inputs"
+        ]
+      }
+    },
+    {
+      "rfcVector": 51,
+      "id": "rfc007-51",
+      "title": "Selected default",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": "default"
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "computer"
+          ]
+        },
+        {
+          "name": "x--recall",
+          "classes": [
+            "memory"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "x--recall",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "computer"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "input": {
+              "a": 1
+            }
+          },
+          {
+            "key": "b",
+            "tool": "x--recall",
+            "conversationId": "conv_1",
+            "class": [
+              "memory"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ],
+            "inputWithheld": true
+          }
+        ]
+      }
+    },
+    {
+      "rfcVector": 52,
+      "id": "rfc007-52",
+      "title": "Provider ids",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              },
+              "modelId": "toolu_01ABCDEFGHIJKLMNOPQRSTUV"
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "x--run",
+              "input": {
+                "b": 2
+              },
+              "modelId": "toolu_01ABCDEFGHIJKLMNOPQRSTUV"
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          },
+          {
+            "key": "b",
+            "tool": "x--run",
+            "conversationId": "conv_1",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ]
+      },
+      "requires": "providerIdReuse",
+      "distinctIds": [
+        "a",
+        "b"
+      ],
+      "recommendedReuse": {
+        "key": "a",
+        "modelId": "toolu_01ABCDEFGHIJKLMNOPQRSTUV"
+      }
+    },
+    {
+      "rfcVector": 53,
+      "id": "rfc007-53",
+      "title": "Subagent attribution",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ]
+          }
+        },
+        {
+          "id": "parent",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe"
+            ],
+            "toolLifecycle": {
+              "observe": {
+                "conversations": [
+                  "conv_1"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "child"
+        }
+      ],
+      "expect": {
+        "obs": [
+          {
+            "key": "a",
+            "tool": "x--run",
+            "conversationId": "child",
+            "class": [
+              "shell"
+            ],
+            "phases": [
+              "started",
+              "completed"
+            ]
+          }
+        ],
+        "parent": []
+      },
+      "subagent": {
+        "name": "child",
+        "parent": "conv_1"
+      }
+    },
+    {
+      "rfcVector": 54,
+      "id": "rfc007-54",
+      "title": "Misspelled rules",
+      "observers": [
+        {
+          "id": "obs",
+          "policy": {
+            "enabledCapabilities": [
+              "tools",
+              "toolLifecycle.observe",
+              "toolLifecycle.inputs"
+            ],
+            "toolLifecycle": {
+              "inputs": {
+                "classes": [
+                  "shell"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "x--run",
+          "classes": [
+            "shell"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "op": "observe",
+          "params": {
+            "rules": []
+          }
+        },
+        {
+          "op": "observe",
+          "params": {
+            "ruless": [
+              {
+                "match": {},
+                "input": true
+              }
+            ]
+          },
+          "expectCode": -32602
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "a",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        },
+        {
+          "op": "observe",
+          "params": {
+            "rules": [],
+            "_meta": {
+              "probe": true
+            }
+          }
+        },
+        {
+          "op": "call",
+          "calls": [
+            {
+              "key": "b",
+              "tool": "x--run",
+              "input": {
+                "a": 1
+              }
+            }
+          ],
+          "conversation": "conv_1"
+        }
+      ],
+      "expect": {
+        "obs": []
+      }
+    }
+  ]
+}

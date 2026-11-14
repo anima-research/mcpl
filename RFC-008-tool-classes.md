@@ -1,6 +1,7 @@
 # MCPL RFC-008: Tool Classes
 
-**Status:** Draft (revision 2). Draft→Accepted is gated on [RFC §10's executable-vector
+**Status:** Draft (revision 2) — incorporated into [SPEC.md 0.5.0-draft §13.6](./SPEC.md#136-tool-classes).
+Incorporation does not imply acceptance: Draft→Accepted remains gated on [RFC §10's executable-vector
 criterion](#10-conformance-vectors).
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra
@@ -9,6 +10,8 @@ criterion](#10-conformance-vectors).
 RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do. It defines a
 **hint** that hosts may use as an input to policy. Amends SPEC §13 (new §13.6), Appendix B.4
 (enum), Changelog. Used by RFC-007.
+
+This RFC preserves the proposal and its review history. SPEC.md carries the current integrated draft, including the pending acceptance criterion.
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
 

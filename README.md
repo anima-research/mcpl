@@ -14,6 +14,9 @@ MCPL is a backward-compatible extension to the [Model Context Protocol (MCP)](ht
 - **WebSocket Transport** — Persistent bidirectional connections with the same capability negotiation as other transports
 - **Endpoint URIs** — `mcpl://` locators resolve to secure WebSocket endpoints
 - **Bulk Content References** — Bounded references to large payloads, with host-controlled fetching and context inclusion
+- **Tool Classes** — A coarse class per tool, a hint hosts can key policy on
+- **Event Coalescing** — Servers can replace or withdraw their own unread events for a subject, or have the host ask for the content when a model is about to see it; what a model has seen is never rewritten
+- **Tool Presence and Toolsets** — Hints about which tools belong in a model's stable tool list, which are available now, and which toolsets are open
 
 ## Specification
 
@@ -34,6 +37,9 @@ integrated text; RFC files preserve proposal and review history.
 | [003: Manifest Changes](./RFC-003-manifest-changes.md) | Accepted; incorporated | [§17](./SPEC.md#17-server-manifest-changes) |
 | [004: Endpoint URIs](./RFC-004-mcpl-uri-scheme.md) | Accepted; incorporated | [§18](./SPEC.md#18-endpoint-uris) |
 | [005: Bulk Content References](./RFC-005-bulk-content-references.md) | Draft; incorporated, acceptance pending executable vectors | [§19](./SPEC.md#19-bulk-content-references) |
+| [006: Event Coalescing](./RFC-006-event-coalescing.md) | Draft; incorporated | [§20](./SPEC.md#20-event-coalescing) |
+| [008: Tool Classes](./RFC-008-tool-classes.md) | Draft; incorporated, acceptance pending executable vectors | [§13.6](./SPEC.md#136-tool-classes) |
+| [014: Tool Presence, Toolsets and Surfaces](./RFC-014-surfaces.md) | Draft; §1–§13 incorporated, without §8.6 and §10's item on surface hosts | [§21](./SPEC.md#21-tool-presence-toolsets-and-surfaces) |
 
 RFC-005's incorporation into the draft does not waive its [acceptance criterion](./RFC-005-bulk-content-references.md#11-conformance-vectors):
 freeze executable vectors under `conformance/` and run them against a strict schema/parser

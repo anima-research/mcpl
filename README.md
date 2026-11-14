@@ -34,6 +34,7 @@ integrated text; RFC files preserve proposal and review history.
 | [003: Manifest Changes](./RFC-003-manifest-changes.md) | Accepted; incorporated | [§17](./SPEC.md#17-server-manifest-changes) |
 | [004: Endpoint URIs](./RFC-004-mcpl-uri-scheme.md) | Accepted; incorporated | [§18](./SPEC.md#18-endpoint-uris) |
 | [005: Bulk Content References](./RFC-005-bulk-content-references.md) | Draft; incorporated, acceptance pending executable vectors | [§19](./SPEC.md#19-bulk-content-references) |
+| [009: Endpoint Discovery from a Service Address](./RFC-009-endpoint-discovery.md) | Draft; first implementation in Anima Docs; acceptance pending executable vectors | — (layers on [§18](./SPEC.md#18-endpoint-uris)) |
 
 RFC-005's incorporation into the draft does not waive its [acceptance criterion](./RFC-005-bulk-content-references.md#11-conformance-vectors):
 freeze executable vectors under `conformance/` and run them against a strict schema/parser

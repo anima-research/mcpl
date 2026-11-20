@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RFC-007 revision 3 §13 ToolsObserveParams",
+  "type": "object",
+  "properties": {
+    "_meta": {
+      "type": "object"
+    },
+    "rules": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "match"
+            ],
+            "properties": {
+              "match": {
+                "type": "object",
+                "properties": {
+                  "tool": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "serverTool": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "serverId": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "conversationId": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "class": {
+                    "$ref": "#/$defs/ToolClass"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "report": {
+                "type": "boolean",
+                "default": true
+              },
+              "input": {
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ToolClass": {
+      "enum": [
+        "comms",
+        "memory",
+        "notes",
+        "files",
+        "shell",
+        "web",
+        "computer",
+        "media",
+        "body",
+        "control"
+      ]
+    }
+  }
+}

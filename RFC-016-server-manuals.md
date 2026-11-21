@@ -7,10 +7,11 @@ examples into the MCPL protocol proper?"), after a survey of how servers explain
 today.
 **Date:** 2026-11-09 (revision 1); 2026-11-10 (revisions 2–4, from review: MCP `instructions` no
 longer required of hosts, summary display bounded, `applied` disposition, SPEC amendment list
-completed with a new §20, page caches per connection, vectors aligned with the normative text)
+completed with a new §20, page caches per connection, vectors aligned with the normative text);
+2026-11-20 (its new SPEC section is no longer numbered here: §20 and §21 are taken)
 **Depends on:** MCP resources (`resources/list`, `resources/read`,
 `notifications/resources/updated`), used unchanged. Amends SPEC §5.1's example, §17.1, §17.3 and
-§17.6 (a `manual` manifest domain), and Appendix B.3 and B.4; adds a §20 (RFC §12). Shares its
+§17.6 (a `manual` manifest domain), and Appendix B.3 and B.4; adds a new section (RFC §12). Shares its
 document with the draft RFC-009 (endpoint discovery, PR #22): a server that publishes a discovery
 guide publishes its manual's index there (RFC §7). Follows the draft RFC-010 (deprecate context
 injection, PR #15) in keeping manual pages out of the context unless the agent asks for them or
@@ -305,7 +306,7 @@ enable it per agent.
 - **§17.3, Appendix B.3's `domains` enum and B.4's `ChangeDomain`:** add `manual`.
 - **§17.6:** `surface-changed` also covers a change to the `manual` member, with disposition
   `applied`.
-- **§20 (new), Server Manuals:** RFC §4–§9 as normative text.
+- **A new section, Server Manuals:** RFC §4–§9 as normative text.
 - **Appendix B.3:** the schema of RFC §15.
 - **Changelog:** an entry.
 

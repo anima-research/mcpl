@@ -4574,7 +4574,7 @@ Rules:
 - A tool in a toolset is visible only while that toolset (or instance) is open **and** the
   server says it is visible. Two controllers, one rule.
 - To a host that advertised `toolHints`, `tools/list` **MUST** list every tool, visible or not.
-  (To a host that did not, a server may tailor its list: §21.6.3, §11.) Calling an invisible tool — or a tool of a declared toolset that is not
+  (To a host that did not, a server may tailor its list: §21.6.3, §21.11.) Calling an invisible tool — or a tool of a declared toolset that is not
   open — returns an ordinary tool error that says why. (For an undeclared toolset the server
   does not know what is open; the host gates those calls, §21.5.4.)
 - In `tools/list`, `mcpl/visible` on a toolset's tool means "visible in at least one open
@@ -5088,8 +5088,8 @@ interface ToolsetDecl {
 35. A proposed instance name matching the grammar is not refused for its form; one that does not
     match is refused, never renamed.
 36. A host without `toolHints` gets no `tools/hints`, no `hints` push member and no hint `_meta`;
-    a toolset without instances is usable there without opening it, and any compat tools of RFC
-    §11 are static.
+    a toolset without instances is usable there without opening it, and any compat tools of
+    §21.11 are static.
 37. Over Streamable HTTP, a change that arrives before a lower `rev` is held, then applied in
     order once the lower one arrives.
 38. A `toolsets/list` with nothing visible carries `mcpl/hints` with an empty `tools`, and the

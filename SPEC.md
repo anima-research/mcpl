@@ -2722,7 +2722,7 @@ silent change of meaning rather than an error.
 | Form | Example | Why rejected |
 |---|---|---|
 | No `mcpl://` at the start | `mcpl:/h/x`, `mcpl:h/x` | The grammar of §18.1 begins `mcpl://`, compared without regard to case (§18.7 vector 5). Without both slashes the input names no authority, and the parser of §18.2 makes the first path segment the host. |
-| Backslash, control character or space | `mcpl:/\h/x`, `mcpl://h/a\..\b` | The parser of §18.2 reads `\` as `/`, deletes tabs and newlines wherever they stand, and trims controls and spaces from both ends. The checks in this table would then be made on a string the parser does not see. Control characters are U+0000–U+001F and U+007F; a space is U+0020. |
+| Backslash, control character or space | `mcpl:/\h/x`, `mcpl://h/a\..\b` | The parser of §18.2 reads `\` as `/`, deletes tabs and newlines wherever they stand, and trims controls and spaces from both ends. The checks in this table would then be made on a string the parser does not see. Control characters here are U+0000–U+001F, and a space is U+0020. |
 | Fragment | `mcpl://h/x#frag` | No defined meaning. Ignoring one discards something the author believed significant. Reserved for a future revision. |
 | Userinfo | `mcpl://u:p@h/x` | RFC 3986 §3.2.1 deprecates the production; parsers and loggers handle it inconsistently enough that behaviour cannot be specified portably. A **syntax** rule, not a credential one — see §18.3. |
 | Empty authority | `mcpl:///x` | **Silently retargets.** See below. |

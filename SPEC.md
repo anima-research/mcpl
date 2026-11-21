@@ -2721,6 +2721,8 @@ silent change of meaning rather than an error.
 
 | Form | Example | Why rejected |
 |---|---|---|
+| No `mcpl://` at the start | `mcpl:/h/x`, `mcpl:h/x` | The grammar of §18.1 begins `mcpl://`, compared without regard to case (§18.7 vector 5). Without both slashes the input names no authority, and the parser of §18.2 makes the first path segment the host. |
+| Backslash, control character or space | `mcpl:/\h/x`, `mcpl://h/a\..\b` | The parser of §18.2 reads `\` as `/`, deletes tabs and newlines wherever they stand, and trims controls and spaces from both ends. The checks in this table would then be made on a string the parser does not see. Control characters are U+0000–U+001F and U+007F; a space is U+0020. |
 | Fragment | `mcpl://h/x#frag` | No defined meaning. Ignoring one discards something the author believed significant. Reserved for a future revision. |
 | Userinfo | `mcpl://u:p@h/x` | RFC 3986 §3.2.1 deprecates the production; parsers and loggers handle it inconsistently enough that behaviour cannot be specified portably. A **syntax** rule, not a credential one — see §18.3. |
 | Empty authority | `mcpl:///x` | **Silently retargets.** See below. |
@@ -2730,7 +2732,15 @@ silent change of meaning rather than an error.
 under §18.2 the scheme is substituted and the result is parsed as `wss:///evil` — and a
 WHATWG URL parser reinterprets the first path segment as the **host**, yielding
 `wss://evil/`. A URI that names no host would dial one. Reject at the string level, before
-substitution; the parser will not raise it for you.
+substitution; the parser will not raise it for you. The authority is the text between
+`mcpl://` and the next `/` or `?`, or the end of the input, so `mcpl:////evil` has an empty one
+too.
+
+**The first two rows are what make the others hold.** The other checks read the input as
+text, and the parser of §18.2 reads it after rewriting it. `mcpl:/\evil/x` has no `//` to find
+an authority after, and resolves to `wss://evil/x`. `mcpl://h/a\..\b` has no path segment equal
+to `..`, and resolves to `wss://h/b`; so does `mcpl://h/a/.` followed by a tab and `./b`.
+Rejecting what the parser would rewrite keeps the two readings the same.
 
 #### 18.1.2 Compatibility
 
@@ -2939,10 +2949,20 @@ and `ünicode.example` becomes `%C3%BCnicode.example` instead of `xn--nicode-2ya
 | 18 | `mcpl://h/a/%2e%2e/b` | dot segment, percent-encoded |
 | 19 | `mcpl://h/a/./b` | dot segment (single) |
 | 20 | `mcpl://h:99999/x` | port out of range |
+| 21 | `mcpl:/h/x` | no `mcpl://` at the start — would otherwise dial host `h` |
+| 22 | `mcpl:h/x` | no `mcpl://` at the start — would otherwise dial host `h` |
+| 23 | `mcpl:/\h/x` | no `mcpl://` at the start, and a backslash — would otherwise dial host `h` |
+| 24 | `mcpl:\\h/x` | no `mcpl://` at the start, and a backslash — would otherwise dial host `h` |
+| 25 | `mcpl://h/a\..\b` | backslash — would otherwise resolve to `wss://h/b` |
+| 26 | `mcpl://h/a/.` U+0009 `./b` | control character — would otherwise resolve to `wss://h/b` |
+| 27 | `MCPL:///x` | empty authority, whatever the case of the scheme |
+| 28 | `mcpl:////x` | empty authority — would otherwise dial host `x` |
+| 29 | `mcpl://h/x` U+0020 | space — the parser would trim it |
 
-Vectors 14 and 18 are the two that a string-level pre-check catches and a parser does not:
-`mcpl:///x` parses happily as a non-special URI with an empty host, and `%2e%2e` collapses
-silently into a shorter path.
+Vector 26's input has a tab between the two dots, and vector 29's ends in a space.
+
+Only vector 20 is caught by the parser of §18.2. Every other input here resolves to
+something when the checks of §18.1.1 are skipped, so each of those vectors rests on them.
 
 ### 18.8 Out of scope
 
@@ -5298,6 +5318,15 @@ The hint, toolset and change types, the `_meta` keys on MCP tools, `tools/list` 
 ---
 
 ## Changelog
+
+### §18.1.1's rejected forms completed (November 2026), within 0.5.0-draft
+
+§18.1.1 listed four forms to reject before parsing. Other malformed inputs passed that list,
+and the parser of §18.2 then resolved them to a host or a path the input did not appear to
+name (anima-research/mcpl#43). Two rows are added: an input that does not start with
+`mcpl://`, and one that holds a backslash, a control character or a space. The authority is
+said to be the text up to the next `/` or `?`. §18.7.2 gains vectors 21 to 29, and its closing
+paragraph says that only vector 20 is caught by the parser.
 
 ### Draft RFCs merged (October 2026), within 0.5.0-draft
 

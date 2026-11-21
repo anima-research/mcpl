@@ -4479,10 +4479,9 @@ particular scheduler data structure. Audit vector 37 remains illustrative under 
 
 > **Status within the draft.** Merged from RFC-014 revision 6 (Draft); this section carries
 > Draft strength within the 0.5.0-draft. §21.1–§21.13 carry RFC-014 §1–§13 under the same
-> numbers, without RFC-014 §8.6 (surface hosts outside the main host, which obtain credentials
-> through the draft RFC-015) and without §10's item on those surface hosts. RFC-014 §14
-> (open questions) and §15 (implementation status) stay in the RFC. By RFC-014 §13's heading,
-> its vectors (§21.13) are to be frozen before acceptance.
+> numbers, without RFC-014 §8.6 (surface hosts outside the main host) and without §10's item
+> on those surface hosts. RFC-014 §14 (open questions) and §15 (implementation status) stay in
+> the RFC. By RFC-014 §13's heading, its vectors (§21.13) are to be frozen before acceptance.
 
 ### 21.1 Summary
 
@@ -4744,9 +4743,10 @@ open, is an ordinary tool error naming the open instances.
 
 #### 21.5.6 One principal, several connections
 
-The **principal** of a connection is the identity the host acts as on it, as RFC-015 §4.4
-defines it: one per connection, chosen by the host's policy (§18.8 keeps identity models out
-of scope). A server that cannot tell principals apart treats each connection as its own.
+The **principal** of a connection is the identity the host acts as on it. A host acts as
+exactly one principal on a connection for the connection's lifetime, and chooses it by its own
+policy (§18.8 keeps identity models out of scope). A server that cannot tell principals
+apart treats each connection as its own.
 Toolsets belong to the principal, not to a connection: a second connection of the same
 principal sees the same open toolsets (through `toolsets/list`, then hint changes). An open,
 close or visibility change made through one connection reaches the others as ordinary hint
@@ -5341,10 +5341,10 @@ their entries with the section and nothing more.
   and `instance` members of `push/event`, the `mcpl/rev`, `mcpl/instance` and `mcpl/hints`
   `_meta` members of `tools/list` and `tools/call`, the `toolHints` advertisement, the
   `toolsets` manifest domain and the reserved `surface:` tag namespace.
-  §21.1–§21.13 carry RFC-014 §1–§13 under the same numbers. Its §8.6 (surface hosts outside the main host, which obtain the
-  agent's credentials through the draft RFC-015) and §10's item on them are not merged;
+  §21.1–§21.13 carry RFC-014 §1–§13 under the same numbers. Its §8.6 (surface hosts outside the
+  main host) and §10's item on them are not merged;
   its §14 (open questions), §15 (implementation status) and revision notes stay in the RFC.
-  §21.5.6 keeps RFC-014's definition of a principal by reference to RFC-015 §4.4. RFC section
+  §21.5.6 carries RFC-014 §5.6's definition of a principal, as amended on 2026-11-20. RFC section
   references are renumbered, and references to RFC-006 and RFC-008 point to §20 and §13.6.
   §21.7 also carries the attention-tags bullet RFC-014 §7 gained on 2026-10-30, with RFC-001
   revision 4: its references to RFC-001 §5.2 and §6 read §16.5 and §16.7, and its dated note

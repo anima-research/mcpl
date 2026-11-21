@@ -1,6 +1,7 @@
 # MCPL RFC-006: Event Coalescing
 
-**Status:** Draft (revision 8)
+**Status:** Draft (revision 8) — incorporated into [SPEC.md 0.5.0-draft §20](./SPEC.md#20-event-coalescing).
+Incorporation does not imply acceptance.
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra; revised after review
 **Date:** 2026-09-21 (revisions 1, 2); 2026-09-22 (revision 3); 2026-09-23 (revision 4); 2026-09-30 (revisions 5, 6, 7); 2026-10-06 (revision 8)
@@ -10,6 +11,8 @@ a connected server may do, and this RFC adds no `uses` path (§10). Amends SPEC 
 (`channels/incoming` message and per-message result). Interacts with §10.6 (hook
 timeouts), §10.7 (loop prevention), §13.2 (audit), §13.3 (hook failure policy), §14.5
 (channel scoping), §16 (tags), Appendix A (error codes).
+
+This RFC preserves the proposal and its review history. SPEC.md carries the current integrated draft.
 
 > **Revision 8 note.** An inference whose only causes are deferred batches that
 > materialize nothing no longer runs. Revision 7 appended nothing for an empty render but let

@@ -1,6 +1,7 @@
 # MCPL RFC-014: Tool Presence, Toolsets and Surfaces
 
-**Status:** Draft (revision 6)
+**Status:** Draft (revision 6) — §1–§13 incorporated into [SPEC.md 0.5.0-draft §21](./SPEC.md#21-tool-presence-toolsets-and-surfaces),
+without §8.6 and §10's item on surface hosts. Incorporation does not imply acceptance.
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a design worked out with antra
 **Date:** 2026-10-24 (revision 1); 2026-10-25 (revisions 2–6); 2026-10-30 (RFC §7's attention
@@ -20,6 +21,8 @@ from the members `toolHints`, `toolsets` and `surface`), Appendix B, Changelog; 
 RFC-006 (coalescing) and RFC-008 (the `mcpl/` `_meta` prefix).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+This RFC preserves the proposal and its review history. SPEC.md carries the current integrated draft of §1–§13 except §8.6 and §10's item on surface hosts; those, §14 and §15 are here only.
 
 > **2026-11-20 note.** RFC-015 (delegated access) is withdrawn, and this RFC no longer rests
 > on it. RFC §5.6 now says what a principal is in its own words; before, it took RFC-015

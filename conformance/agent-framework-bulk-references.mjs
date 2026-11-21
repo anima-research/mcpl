@@ -37,14 +37,14 @@ export async function createAdapter(root) {
   };
   const viaTool = (input, fetcher) => new Promise((done, reject) => {
     const timer = setTimeout(() => reject(new Error('fetch_reference dispatch did not return')), 10000);
-    AgentFramework.prototype.dispatchFetchReferenceToolCall.call({
+    AgentFramework.prototype.dispatchFetchReferenceToolCall.call(Object.assign(Object.create(AgentFramework.prototype), {
       emitTrace() {},
       pushEvent(event) { clearTimeout(timer); done(event.result); },
       getReferenceFetcher() {
         if (!fetcher) throw new Error('this lookup has no fetcher');
         return fetcher;
       },
-    }, 'fixture', { name: 'fetch_reference', id: 'lookup', input });
+    }), 'fixture', { name: 'fetch_reference', id: 'lookup', input });
   });
   return {
     identity: { implementation: 'Agent Framework', revision, dependencies,

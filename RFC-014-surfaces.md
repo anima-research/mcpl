@@ -5,10 +5,8 @@ without §8.6 and §10's item on surface hosts. Incorporation does not imply acc
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a design worked out with antra
 **Date:** 2026-10-24 (revision 1); 2026-10-25 (revisions 2–6); 2026-10-30 (RFC §7's attention
-tags, with RFC-001 revision 4)
-**Depends on:** nothing for authority — except that RFC §8.6's surface hosts obtain
-credentials through the draft RFC-015 (delegated access, proposed in a companion PR), whose own
-grant governs that. This RFC adds no `uses` path and changes no grant;
+tags, with RFC-001 revision 4); 2026-11-20 (RFC §5.6, §8.6 and §10, with RFC-015's withdrawal)
+**Depends on:** nothing for authority. This RFC adds no `uses` path and changes no grant;
 RFC-002 / SPEC §5.4 remains the sole source of what a connected server may do. It adds
 **hints** about tools — whether a tool belongs in a model's stable tool list, whether it is
 available right now, which toolset it belongs to — two host→server methods to open and close
@@ -20,13 +18,17 @@ the `surface:` tag namespace), §16.7 (two of its tags are attention tags, RFC �
 from the members `toolHints`, `toolsets` and `surface`), Appendix B, Changelog; and adds `_meta` members to MCP's
 `tools/list` result (`mcpl/rev`) and `tools/call` params (`mcpl/instance`) and result
 (`mcpl/hints`). Uses
-RFC-006 (coalescing) and RFC-008 (the `mcpl/` `_meta` prefix). Interacts with the draft
-RFC-015 (delegated access, proposed alongside this one), through which a surface host outside
-the main host obtains credentials.
+RFC-006 (coalescing) and RFC-008 (the `mcpl/` `_meta` prefix).
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
 
 This RFC preserves the proposal and its review history. SPEC.md carries the current integrated draft of §1–§13 except §8.6 and §10's item on surface hosts; those, §14 and §15 are here only.
+
+> **2026-11-20 note.** RFC-015 (delegated access) is withdrawn, and this RFC no longer rests
+> on it. RFC §5.6 now says what a principal is in its own words; before, it took RFC-015
+> §4.4's definition. The meaning is unchanged. A surface host outside the main host now holds
+> its own credentials, as any host does; before, it obtained them from the host in front of it
+> through RFC-015 (RFC §8.6, §10). No method, hint or vector changes.
 
 > **Revision 6 note.** From review of revision 5. Hosts apply hint changes in **`rev` order**,
 > which is arrival order on stdio and WebSocket; on Streamable HTTP, where streams interleave, a
@@ -355,9 +357,10 @@ open, is an ordinary tool error naming the open instances.
 
 ### 5.6 One principal, several connections
 
-The **principal** of a connection is the identity the host acts as on it, as RFC-015 §4.4
-defines it: one per connection, chosen by the host's policy (SPEC §18.8 keeps identity models out
-of scope). A server that cannot tell principals apart treats each connection as its own.
+The **principal** of a connection is the identity the host acts as on it. A host acts as
+exactly one principal on a connection for the connection's lifetime, and chooses it by its own
+policy (SPEC §18.8 keeps identity models out of scope). A server that cannot tell principals
+apart treats each connection as its own.
 Toolsets belong to the principal, not to a connection: a second connection of the same
 principal sees the same open toolsets (through `toolsets/list`, then hint changes). An open,
 close or visibility change made through one connection reaches the others as ordinary hint
@@ -580,7 +583,8 @@ keeps its header small. Server-declared toolsets and host-made ones coexist.
 A host that cannot present dynamic tools (a plain MCP client) can gain the capability from a
 **surface host**: an MCPL server that is itself a host for the servers behind it, exposes the
 meta-tools as its own static tools, and renders dynamic tools as events. It connects to those
-servers as the agent, so it obtains the agent's credentials from its own host through RFC-015.
+servers as the agent, with credentials it holds itself, as any host does (SPEC §18.3). This RFC
+defines no way for it to obtain them from the client in front of it.
 
 ---
 
@@ -607,9 +611,9 @@ servers as the agent, so it obtains the agent's credentials from its own host th
   `content` of open and close results. All of it is the server's words, at the trust tier of a
   tool description or tool result; hosts attribute it to the server and never present it as
   their own or the operator's.
-- **Surface hosts** (RFC §8.6) act as the agent at every server behind them. Through RFC-015
-  they can hold the agent's credentials, which needs that RFC's grant, denied by default; a host
-  grants it to a surface host only as it would to any server it trusts to act as the agent.
+- **Surface hosts** (RFC §8.6) act as the agent at every server behind them, and hold the
+  credentials to do so. An operator gives a surface host those credentials only as it would to
+  any software it trusts to act as the agent.
 - **Projection** (RFC §8.4) must not let a server's tool shadow a host's or another server's.
 - **Suggestions** to open are shown to the agent, not acted on silently, by default: a server
   should not be able to put tools in front of a model by asking.
@@ -751,8 +755,8 @@ interface ToolsetDecl {
 - **Server:** games-mcpl — one non-instance toolset (`game`), static catalogue and results
   tools, visibility following the game (playing, dead, level complete); unchanged for hosts
   without `toolHints`.
-- **SDK:** `ToolsetServer` in mcpl-core-ts — the server side of this RFC (and RFC-015's
-  `access/token`), with tests for the vectors that apply to a server.
+- **SDK:** `ToolsetServer` in mcpl-core-ts — the server side of this RFC, with tests for the
+  vectors that apply to a server.
 - **Go** as a second toolset of games-mcpl, with named instances and games between agents.
 
 Revision 1 was implemented as a standalone server with per-service adapters; revision 2

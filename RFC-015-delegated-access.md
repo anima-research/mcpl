@@ -1,18 +1,28 @@
 # MCPL RFC-015: Delegated Access
 
-**Status:** Draft (revision 6)
+**Status:** Withdrawn (2026-11-20); was Draft (revision 6)
 **Targets:** MCPL Protocol Specification 0.5
 **Authors:** Claude Code, from a scope proposed by antra
-**Date:** 2026-10-25 (revisions 1–6)
+**Date:** 2026-10-25 (revisions 1–6); 2026-11-20 (withdrawn)
 **Depends on:** RFC-002 / SPEC §5.4 for authority. Adds one capability path (`access.token`),
 one method (`access/token`, Server → Host, Request), one advertisement member on each side
 (`access`), and one error code (`-32040`). Amends SPEC §4 (message flow and method overview),
 §5.1–§5.2 (advertisement), §5.4 (one path no wildcard grants), §6.2 (`uses` vocabulary), §6.5
 (a server-initiated request without `featureSet`), §13.1 (trust model), §13.2 (its audit),
-§18.3 (credentials), §19.6.1 (its closing paragraph), Appendix A, Appendix B, Changelog. Used by the draft RFC-014
-(tool presence, toolsets and surfaces; proposed alongside this one).
+§18.3 (credentials), §19.6.1 (its closing paragraph), Appendix A, Appendix B, Changelog. The draft RFC-014
+(tool presence, toolsets and surfaces; proposed alongside this one) named it for surface hosts
+until this RFC was withdrawn.
 
 Section references (§) are to the SPEC; references to this document are written "RFC §".
+
+> **Withdrawn (2026-11-20).** This RFC is not part of MCPL and is no longer proposed for it.
+> Its use case was a server that mounts other services and acts as the agent toward them, as
+> the surface server of RFC-014 revision 1 did. RFC-014 revision 2 moved that presentation
+> into the host, which dials each server itself with its own credential (SPEC §18.3), and no
+> server today needs to act as the agent toward another service. So MCPL defines none of
+> what this RFC adds: the method `access/token`, the capability path `access.token`, the
+> `access` advertisement member, and the error code `-32040`. The text below is kept as the
+> record of the proposal and its review.
 
 > **Revision 6 note.** From review of revision 5. The error table no longer contradicts the
 > ignore-unknown rule; `timeoutMs` starts at 5000 so every bound can be met, and a hop that cannot
